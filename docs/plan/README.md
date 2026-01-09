@@ -1,18 +1,19 @@
-# Cloumask
+# Cloumask Development Plan
 
-> *From cloud to canvas — Local-first agentic CV data processing*
+> **Status:** 🔴 Not Started
+> **Last Updated:** January 2026
 
-Cloumask is a conversational AI desktop application for computer vision data processing. It replaces complex CLI tools, fragmented scripts, and cloud-dependent platforms with natural language commands like:
+*From cloud to canvas — Local-first agentic CV data processing*
+
+---
+
+## Vision
+
+Cloumask replaces complex CLI tools, fragmented scripts, and cloud-dependent platforms with a conversational AI interface that understands natural language commands like:
 
 > "Take my dashcam footage in /data/drive_001, anonymize all faces and plates, then label vehicles and pedestrians, export to YOLO format"
 
-## Key Features
-
-- **Conversational-first UX** — Chat with your data pipeline, not config files
-- **Human-in-the-loop execution** — Checkpoints, live previews, course correction
-- **Local & private** — All processing on your machine, no cloud dependency
-- **Unified 2D + 3D** — Images, videos, AND point clouds in one tool
-- **Modern CV models** — SAM3, YOLO11, Florence-2, GroundingDINO running locally
+---
 
 ## Architecture
 
@@ -61,87 +62,80 @@ Cloumask is a conversational AI desktop application for computer vision data pro
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-## Tech Stack
+---
 
-| Layer | Technology |
-|-------|------------|
-| Desktop Shell | Tauri 2.0 (Rust) |
-| Frontend | Svelte 5 + shadcn/ui + Tailwind |
-| 3D Visualization | Three.js |
-| Agent Framework | LangGraph |
-| Local LLM | Ollama (Qwen3-14B) |
-| CV Models | SAM3, YOLO11, SCRFD, PV-RCNN++ |
-| Point Cloud | pasture (Rust), Open3D (Python) |
+## Module Status
 
-## Supported Data
+| Module | Status | Priority | Spec |
+|--------|--------|----------|------|
+| **Foundation** | 🔴 Not Started | P0 | [SPEC](./01-foundation/SPEC.md) |
+| **Agent System** | 🔴 Not Started | P0 | [SPEC](./02-agent-system/SPEC.md) |
+| **CV Models** | 🔴 Not Started | P0 | [SPEC](./03-cv-models/SPEC.md) |
+| **Frontend UI** | 🔴 Not Started | P1 | [SPEC](./04-frontend-ui/SPEC.md) |
+| **Point Cloud** | 🔴 Not Started | P1 | [SPEC](./05-point-cloud/SPEC.md) |
+| **Data Pipeline** | 🔴 Not Started | P1 | [SPEC](./06-data-pipeline/SPEC.md) |
 
-### Formats
+---
 
-| Type | Formats |
-|------|---------|
-| Images | JPEG, PNG, WebP, TIFF |
-| Video | MP4, AVI, MKV |
-| Point Cloud | PCD, PLY, LAS/LAZ, E57, ROS bags |
-| Labels | YOLO, COCO, KITTI, Pascal VOC, nuScenes |
+## Development Phases
 
-### CV Capabilities
+### Phase 1: Foundation
+- [ ] Initialize Tauri 2.0 + Svelte 5 project
+- [ ] Set up Python sidecar with FastAPI
+- [ ] Configure PyInstaller bundling
+- [ ] Basic IPC: Frontend ↔ Rust ↔ Python
+- [ ] Verify Ollama + Qwen3-14B
 
-| Task | Primary Model | Notes |
-|------|---------------|-------|
-| Segmentation | SAM3 | Text prompts, 4M+ concepts |
-| Detection | YOLO11m | 2.4ms inference |
-| Open-Vocab | YOLO-World | 50+ FPS, text prompts |
-| Faces | SCRFD-10G | 95%+ accuracy |
-| 3D Detection | PV-RCNN++ | 84% 3D AP on KITTI |
+### Phase 2: Agent Brain MVP
+- [ ] Set up LangGraph state machine
+- [ ] Implement tool calling with Ollama
+- [ ] Create initial tools: `scan_directory`, `anonymize`, `export`
+- [ ] Chat UI with streaming responses
 
-## Development Status
+### Phase 3: Core CV Features
+- [ ] Face detection + anonymization (SCRFD)
+- [ ] Object detection (YOLO11)
+- [ ] Segmentation (SAM3)
+- [ ] Checkpoint system
+- [ ] Review queue
 
-See [docs/plan/](docs/plan/) for detailed implementation plans.
+### Phase 4: Point Cloud Support
+- [ ] Point cloud I/O (pasture + Open3D)
+- [ ] 3D viewer (Three.js)
+- [ ] 3D object detection (PV-RCNN++)
+- [ ] 2D-3D fusion
 
-| Module | Status |
-|--------|--------|
-| Foundation | 🔴 Not Started |
-| Agent System | 🔴 Not Started |
-| CV Models | 🔴 Not Started |
-| Frontend UI | 🔴 Not Started |
-| Point Cloud | 🔴 Not Started |
-| Data Pipeline | 🔴 Not Started |
+### Phase 5: Polish & Distribution
+- [ ] Cross-platform builds
+- [ ] Installer packaging
+- [ ] Documentation
 
-## Requirements
+---
 
-### Minimum Hardware
-- GPU: NVIDIA RTX 3070 (8GB VRAM)
-- RAM: 32GB
-- Storage: 50GB
+## Model Selection (January 2026)
 
-### Recommended Hardware
-- GPU: NVIDIA RTX 4090 (24GB VRAM)
-- RAM: 64GB
-- Storage: 500GB SSD
+| Task | Primary | Fallback | Notes |
+|------|---------|----------|-------|
+| Detection | YOLO11m | YOLO26, RF-DETR | 2.4ms inference |
+| Segmentation | SAM3 | SAM2 | Text prompts, 4M+ concepts |
+| Open-Vocab | YOLO-World | GroundingDINO | 50+ FPS |
+| Faces | SCRFD-10G | YuNet | 95%+ accuracy |
+| 3D Detection | PV-RCNN++ | CenterPoint, BEVFusion | 84% 3D AP |
+| Local LLM | Qwen3-14B | Llama 4, Qwen3-8B | Best tool calling |
 
-## Development
+---
 
-```bash
-# Start development
-cargo tauri dev                           # Full app with hot reload
-npm run dev                               # Frontend only
-cd backend && uvicorn api.main:app --reload --port 8765  # Python sidecar
+## Quick Links
 
-# Testing
-cd src-tauri && cargo test               # Rust tests
-cd backend && pytest tests/ -v           # Python tests
-npm run test                             # Frontend tests
+- [Project Description](../../PROJECT_DESCRIPTION.md) - Full specification
+- [CLAUDE.md](../../CLAUDE.md) - Claude Code guidance
+- [.claude/](../../.claude/) - Claude Code configuration
 
-# Build
-cargo tauri build                        # Production build
-```
+---
 
-## Documentation
+## How to Update This Plan
 
-- [Project Description](PROJECT_DESCRIPTION.md) — Full specification
-- [Development Plan](docs/plan/) — Implementation roadmap
-- [CLAUDE.md](CLAUDE.md) — Claude Code guidance
-
-## License
-
-TBD (Apache 2.0 or MIT)
+1. Update module status in the table above
+2. Check off completed tasks in phase sections
+3. Add notes to individual SPEC.md files
+4. Create sub-specs in module folders as features are implemented
