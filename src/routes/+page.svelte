@@ -3,11 +3,23 @@
 
   let name = $state("");
   let greetMsg = $state("");
+  let error = $state<string | null>(null);
+  let isLoading = $state(false);
 
   async function greet(event: Event) {
     event.preventDefault();
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    greetMsg = await invoke("greet", { name });
+    error = null;
+    isLoading = true;
+
+    try {
+      greetMsg = await invoke<string>("greet", { name });
+    } catch (e) {
+      console.error("Failed to greet:", e);
+      greetMsg = "";
+      error = typeof e === "string" ? e : "Failed to communicate with backend";
+    } finally {
+      isLoading = false;
+    }
   }
 </script>
 
@@ -28,10 +40,24 @@
   <p>Click on the Tauri, Vite, and SvelteKit logos to learn more.</p>
 
   <form class="row" onsubmit={greet}>
-    <input id="greet-input" placeholder="Enter a name..." bind:value={name} />
-    <button type="submit">Greet</button>
+    <input
+      id="greet-input"
+      placeholder="Enter a name..."
+      bind:value={name}
+      disabled={isLoading}
+    />
+    <button type="submit" disabled={isLoading}>
+      {isLoading ? "Greeting..." : "Greet"}
+    </button>
   </form>
-  <p>{greetMsg}</p>
+
+  {#if error}
+    <p class="error" role="alert">{error}</p>
+  {/if}
+
+  {#if greetMsg}
+    <p>{greetMsg}</p>
+  {/if}
 </main>
 
 <style>
@@ -133,6 +159,15 @@ button {
   margin-right: 5px;
 }
 
+.error {
+  color: #dc2626;
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  padding: 0.5em 1em;
+  border-radius: 4px;
+  margin-top: 1em;
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
     color: #f6f6f6;
@@ -150,6 +185,12 @@ button {
   }
   button:active {
     background-color: #0f0f0f69;
+  }
+
+  .error {
+    color: #fca5a5;
+    background-color: #450a0a;
+    border-color: #7f1d1d;
   }
 }
 
