@@ -1,134 +1,310 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
-/* Cloumask Design System - Theme Configuration */
+/* Custom dark mode variant for shadcn compatibility */
+@custom-variant dark (&:is(.dark *));
+
+/* ============================================
+   CLOUMASK DESIGN SYSTEM - Theme Configuration
+   ============================================ */
+
+/* Cloumask brand colors (preserved) */
 @theme {
-  /* Brand colors */
-  --color-forest: #166534;
-  --color-forest-light: #22c55e;
-  --color-forest-dark: #0c3b1f;
-  --color-cream: #faf7f0;
-  --color-cream-secondary: #f5f1e8;
-  --color-cream-tertiary: #ebe6db;
+	/* Brand colors */
+	--color-forest: #166534;
+	--color-forest-light: #22c55e;
+	--color-forest-dark: #0c3b1f;
+	--color-cream: #faf7f0;
+	--color-cream-secondary: #f5f1e8;
+	--color-cream-tertiary: #ebe6db;
 
-  /* Semantic colors */
-  --color-bg-primary: #faf7f0;
-  --color-bg-secondary: #f5f1e8;
-  --color-bg-tertiary: #ebe6db;
-  --color-border: #c4d7c9;
-  --color-text-primary: #0c3b1f;
-  --color-text-secondary: #2d5a3d;
-  --color-text-muted: #5c7a66;
+	/* Legacy semantic colors (preserved for backward compatibility) */
+	--color-bg-primary: #faf7f0;
+	--color-bg-secondary: #f5f1e8;
+	--color-bg-tertiary: #ebe6db;
+	--color-text-primary: #0c3b1f;
+	--color-text-secondary: #2d5a3d;
+	--color-text-muted: #5c7a66;
 
-  /* Accent colors */
-  --color-accent-primary: #166534;
-  --color-accent-success: #22c55e;
-  --color-accent-warning: #f59e0b;
-  --color-accent-error: #ef4444;
+	/* Legacy accent colors */
+	--color-accent-primary: #166534;
+	--color-accent-success: #22c55e;
+	--color-accent-warning: #f59e0b;
+	--color-accent-error: #ef4444;
 
-  /* Typography */
-  --font-sans: 'Inter', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+	/* Typography */
+	--font-sans: "Inter", system-ui, sans-serif;
+	--font-mono: "JetBrains Mono", "Fira Code", monospace;
 }
 
-/* Base styles */
+/* ============================================
+   SHADCN-SVELTE CSS VARIABLES
+   Mapped to Cloumask Design System
+   ============================================ */
+
+:root {
+	/* Base radius for components */
+	--radius: 0.5rem;
+
+	/* Background & Foreground - Cream theme */
+	--background: #faf7f0;
+	--foreground: #0c3b1f;
+
+	/* Card - Slightly darker cream */
+	--card: #f5f1e8;
+	--card-foreground: #0c3b1f;
+
+	/* Popover - Same as card */
+	--popover: #f5f1e8;
+	--popover-foreground: #0c3b1f;
+
+	/* Primary - Forest Green (brand) */
+	--primary: #166534;
+	--primary-foreground: #faf7f0;
+
+	/* Secondary - Light cream with forest text */
+	--secondary: #ebe6db;
+	--secondary-foreground: #166534;
+
+	/* Muted - Subdued cream tones */
+	--muted: #ebe6db;
+	--muted-foreground: #5c7a66;
+
+	/* Accent - Forest light for highlights */
+	--accent: #dcfce7;
+	--accent-foreground: #166534;
+
+	/* Destructive - Error red */
+	--destructive: #ef4444;
+	--destructive-foreground: #faf7f0;
+
+	/* Border & Input */
+	--border: #c4d7c9;
+	--input: #c4d7c9;
+
+	/* Ring - Focus indicator (forest green) */
+	--ring: #166534;
+
+	/* Sidebar (optional, for future use) */
+	--sidebar: #f5f1e8;
+	--sidebar-foreground: #0c3b1f;
+	--sidebar-primary: #166534;
+	--sidebar-primary-foreground: #faf7f0;
+	--sidebar-accent: #ebe6db;
+	--sidebar-accent-foreground: #166534;
+	--sidebar-border: #c4d7c9;
+	--sidebar-ring: #22c55e;
+
+	/* Chart colors (optional) */
+	--chart-1: #166534;
+	--chart-2: #22c55e;
+	--chart-3: #f59e0b;
+	--chart-4: #3b82f6;
+	--chart-5: #8b5cf6;
+}
+
+/* Dark mode overrides (forest-based dark theme) */
+.dark {
+	--background: #0c3b1f;
+	--foreground: #faf7f0;
+
+	--card: #14532d;
+	--card-foreground: #faf7f0;
+
+	--popover: #14532d;
+	--popover-foreground: #faf7f0;
+
+	--primary: #22c55e;
+	--primary-foreground: #0c3b1f;
+
+	--secondary: #166534;
+	--secondary-foreground: #faf7f0;
+
+	--muted: #14532d;
+	--muted-foreground: #86efac;
+
+	--accent: #166534;
+	--accent-foreground: #faf7f0;
+
+	--destructive: #dc2626;
+	--destructive-foreground: #faf7f0;
+
+	--border: #166534;
+	--input: #166534;
+
+	--ring: #22c55e;
+
+	--sidebar: #14532d;
+	--sidebar-foreground: #faf7f0;
+	--sidebar-primary: #22c55e;
+	--sidebar-primary-foreground: #0c3b1f;
+	--sidebar-accent: #166534;
+	--sidebar-accent-foreground: #faf7f0;
+	--sidebar-border: #166534;
+	--sidebar-ring: #22c55e;
+}
+
+/* ============================================
+   TAILWIND V4 THEME INLINE MAPPINGS
+   Maps CSS variables to Tailwind utilities
+   ============================================ */
+
+@theme inline {
+	/* Radius mappings for rounded-* utilities */
+	--radius-sm: calc(var(--radius) - 4px);
+	--radius-md: calc(var(--radius) - 2px);
+	--radius-lg: var(--radius);
+	--radius-xl: calc(var(--radius) + 4px);
+
+	/* Color mappings - these create bg-*, text-*, border-* utilities */
+	--color-background: var(--background);
+	--color-foreground: var(--foreground);
+	--color-card: var(--card);
+	--color-card-foreground: var(--card-foreground);
+	--color-popover: var(--popover);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-primary: var(--primary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-secondary: var(--secondary);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-muted: var(--muted);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-accent: var(--accent);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-destructive: var(--destructive);
+	--color-destructive-foreground: var(--destructive-foreground);
+	--color-border: var(--border);
+	--color-input: var(--input);
+	--color-ring: var(--ring);
+
+	/* Sidebar color mappings */
+	--color-sidebar: var(--sidebar);
+	--color-sidebar-foreground: var(--sidebar-foreground);
+	--color-sidebar-primary: var(--sidebar-primary);
+	--color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+	--color-sidebar-accent: var(--sidebar-accent);
+	--color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+	--color-sidebar-border: var(--sidebar-border);
+	--color-sidebar-ring: var(--sidebar-ring);
+
+	/* Chart color mappings */
+	--color-chart-1: var(--chart-1);
+	--color-chart-2: var(--chart-2);
+	--color-chart-3: var(--chart-3);
+	--color-chart-4: var(--chart-4);
+	--color-chart-5: var(--chart-5);
+}
+
+/* ============================================
+   BASE STYLES
+   ============================================ */
+
 @layer base {
-  html {
-    background-color: var(--color-bg-primary);
-    color: var(--color-text-primary);
-  }
+	* {
+		@apply border-border outline-ring/50;
+	}
 
-  body {
-    font-family: var(--font-sans);
-    font-size: 16px;
-    line-height: 1.5;
-    font-weight: 400;
-    font-synthesis: none;
-    text-rendering: optimizeLegibility;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-    min-height: 100vh;
-    margin: 0;
-    padding: 0;
-  }
+	html {
+		background-color: var(--background);
+		color: var(--foreground);
+	}
 
-  /* Custom scrollbar styling */
-  ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-  }
+	body {
+		@apply bg-background text-foreground;
+		font-family: var(--font-sans);
+		font-size: 16px;
+		line-height: 1.5;
+		font-weight: 400;
+		font-synthesis: none;
+		text-rendering: optimizeLegibility;
+		-webkit-font-smoothing: antialiased;
+		-moz-osx-font-smoothing: grayscale;
+		min-height: 100vh;
+		margin: 0;
+		padding: 0;
+	}
 
-  ::-webkit-scrollbar-track {
-    background: var(--color-bg-secondary);
-  }
+	/* Custom scrollbar styling */
+	::-webkit-scrollbar {
+		width: 8px;
+		height: 8px;
+	}
 
-  ::-webkit-scrollbar-thumb {
-    background: var(--color-border);
-    border-radius: 4px;
-  }
+	::-webkit-scrollbar-track {
+		background: var(--muted);
+	}
 
-  ::-webkit-scrollbar-thumb:hover {
-    background: var(--color-text-muted);
-  }
+	::-webkit-scrollbar-thumb {
+		background: var(--border);
+		border-radius: 4px;
+	}
 
-  /* Selection styling */
-  ::selection {
-    background-color: var(--color-forest);
-    color: var(--color-cream);
-  }
+	::-webkit-scrollbar-thumb:hover {
+		background: var(--muted-foreground);
+	}
+
+	/* Selection styling */
+	::selection {
+		background-color: var(--primary);
+		color: var(--primary-foreground);
+	}
 }
 
-/* Component utilities */
+/* ============================================
+   COMPONENT UTILITIES (Legacy - preserved)
+   ============================================ */
+
 @utility card {
-  background-color: var(--color-cream-secondary);
-  border: 1px solid var(--color-border);
-  border-radius: 0.5rem;
+	background-color: var(--card);
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
 }
 
 @utility btn-primary {
-  background-color: var(--color-forest);
-  color: var(--color-cream);
-  padding: 0.5rem 1rem;
-  border-radius: 0.375rem;
-  font-weight: 500;
-  transition: background-color 0.2s;
-  &:hover {
-    background-color: var(--color-forest-dark);
-  }
+	background-color: var(--primary);
+	color: var(--primary-foreground);
+	padding: 0.5rem 1rem;
+	border-radius: calc(var(--radius) - 2px);
+	font-weight: 500;
+	transition: background-color 0.2s;
+	&:hover {
+		background-color: var(--color-forest-dark);
+	}
 }
 
 @utility btn-secondary {
-  background-color: var(--color-cream-secondary);
-  color: var(--color-forest);
-  border: 1px solid var(--color-forest);
-  padding: 0.5rem 1rem;
-  border-radius: 0.375rem;
-  font-weight: 500;
-  transition: background-color 0.2s;
-  &:hover {
-    background-color: var(--color-cream-tertiary);
-  }
+	background-color: var(--secondary);
+	color: var(--secondary-foreground);
+	border: 1px solid var(--primary);
+	padding: 0.5rem 1rem;
+	border-radius: calc(var(--radius) - 2px);
+	font-weight: 500;
+	transition: background-color 0.2s;
+	&:hover {
+		background-color: var(--muted);
+	}
 }
 
 @utility input-base {
-  background-color: var(--color-cream);
-  border: 1px solid var(--color-border);
-  border-radius: 0.375rem;
-  padding: 0.5rem 0.75rem;
-  color: var(--color-text-primary);
-  &::placeholder {
-    color: var(--color-text-muted);
-  }
-  &:focus {
-    outline: none;
-    box-shadow: 0 0 0 2px var(--color-forest);
-    border-color: var(--color-forest);
-  }
+	background-color: var(--background);
+	border: 1px solid var(--input);
+	border-radius: calc(var(--radius) - 2px);
+	padding: 0.5rem 0.75rem;
+	color: var(--foreground);
+	&::placeholder {
+		color: var(--muted-foreground);
+	}
+	&:focus {
+		outline: none;
+		box-shadow: 0 0 0 2px var(--ring);
+		border-color: var(--ring);
+	}
 }
 
 @utility code {
-  font-family: var(--font-mono);
-  font-size: 0.875rem;
-  background-color: var(--color-cream-tertiary);
-  padding: 0.125rem 0.375rem;
-  border-radius: 0.25rem;
+	font-family: var(--font-mono);
+	font-size: 0.875rem;
+	background-color: var(--muted);
+	padding: 0.125rem 0.375rem;
+	border-radius: 0.25rem;
 }
