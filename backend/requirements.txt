@@ -1,0 +1,23 @@
+# Cloumask Backend - Runtime Dependencies
+# Python 3.11+ required
+
+# Web framework
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+starlette==0.41.3
+
+# SSE for streaming responses
+sse-starlette==2.1.3
+
+# Data validation
+pydantic==2.10.3
+pydantic-settings==2.6.1
+
+# HTTP client (for Ollama, external APIs)
+httpx==0.28.1
+
+# Async support
+anyio==4.7.0
+
+# Type hints backports (if needed)
+typing-extensions==4.12.2
