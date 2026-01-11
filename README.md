@@ -61,6 +61,42 @@ Cloumask is a conversational AI desktop application for computer vision data pro
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+## Quick Start
+
+### Prerequisites
+
+- **Node.js 20+** and npm
+- **Rust 1.75+** with cargo
+- **Python 3.11+**
+- [Ollama](https://ollama.ai) (optional, for LLM features)
+
+### Setup
+
+```bash
+# Install frontend dependencies
+npm install
+
+# Install Python sidecar dependencies
+cd backend && pip install -r requirements.txt && cd ..
+
+# Start development (launches Tauri + Python sidecar)
+cargo tauri dev
+```
+
+### Verify Installation
+
+- Open app → Status dashboard shows all systems green
+- Python sidecar health: http://localhost:8765/health
+- API docs: http://localhost:8765/docs
+
+## Current Features (v0.1.0)
+
+- Tauri 2.0 desktop shell with Svelte 5 frontend
+- Python FastAPI sidecar with auto-start/stop lifecycle
+- Real-time health monitoring dashboard
+- Ollama LLM integration (status, models, generation)
+- Type-safe IPC across all layers (Frontend ↔ Rust ↔ Python)
+
 ## Tech Stack
 
 | Layer | Technology |
@@ -100,7 +136,7 @@ See [docs/plan/](docs/plan/) for detailed implementation plans.
 
 | Module | Status |
 |--------|--------|
-| Foundation | 🔴 Not Started |
+| Foundation | 🟢 Complete |
 | Agent System | 🔴 Not Started |
 | CV Models | 🔴 Not Started |
 | Frontend UI | 🔴 Not Started |
@@ -125,12 +161,12 @@ See [docs/plan/](docs/plan/) for detailed implementation plans.
 # Start development
 cargo tauri dev                           # Full app with hot reload
 npm run dev                               # Frontend only
-cd backend && uvicorn api.main:app --reload --port 8765  # Python sidecar
+cd backend && python -m uvicorn backend.api.main:app --reload --port 8765  # Python sidecar
 
 # Testing
-cd src-tauri && cargo test               # Rust tests
-cd backend && pytest tests/ -v           # Python tests
-npm run test                             # Frontend tests
+cd src-tauri && cargo test               # Rust tests (8 tests)
+cd backend && PYTHONPATH=src pytest tests/ -v  # Python tests (22 tests)
+npm run check                            # Frontend type checking
 
 # Build
 cargo tauri build                        # Production build
