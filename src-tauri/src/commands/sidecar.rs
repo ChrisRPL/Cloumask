@@ -1,12 +1,16 @@
 //! Sidecar-related Tauri commands.
 //!
-//! These commands allow the frontend to query and control the Python sidecar.
+//! These commands allow the frontend to query and control the Python sidecar,
+//! including health checks and generic HTTP requests to sidecar endpoints.
 
 use serde::Serialize;
 use tauri::State;
 
 use crate::sidecar::SidecarError;
 use crate::state::AppState;
+
+// Re-export response types for use in other modules
+pub use crate::sidecar::{HealthResponse, ReadyResponse};
 
 /// Status information for the Python sidecar process.
 #[derive(Debug, Clone, Serialize)]
@@ -91,4 +95,82 @@ pub fn restart_sidecar(state: State<'_, AppState>) -> Result<(), String> {
     });
 
     Ok(())
+}
+
+// ============================================================================
+// Health Check Commands
+// ============================================================================
+
+/// Check the health of the Python sidecar.
+///
+/// Calls the /health endpoint and returns the full health response.
+#[tauri::command]
+pub async fn check_health(state: State<'_, AppState>) -> Result<HealthResponse, String> {
+    state
+        .sidecar
+        .health_check_async()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Check the readiness of the Python sidecar.
+///
+/// Calls the /ready endpoint and returns the readiness response.
+#[tauri::command]
+pub async fn check_ready(state: State<'_, AppState>) -> Result<ReadyResponse, String> {
+    state
+        .sidecar
+        .ready_check_async()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+// ============================================================================
+// Generic Sidecar HTTP Commands (for debugging/development)
+// ============================================================================
+
+/// Generic GET request to the sidecar.
+///
+/// Allows calling any sidecar endpoint from the frontend.
+/// Returns the raw JSON response as a Value.
+#[tauri::command]
+pub async fn call_sidecar_get(
+    state: State<'_, AppState>,
+    endpoint: String,
+) -> Result<serde_json::Value, String> {
+    // Validate endpoint starts with /
+    let endpoint = if endpoint.starts_with('/') {
+        endpoint
+    } else {
+        format!("/{}", endpoint)
+    };
+
+    state
+        .sidecar
+        .get_async::<serde_json::Value>(&endpoint)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Generic POST request to the sidecar.
+///
+/// Allows calling any sidecar endpoint with a JSON body.
+/// Returns the raw JSON response as a Value.
+#[tauri::command]
+pub async fn call_sidecar_post(
+    state: State<'_, AppState>,
+    endpoint: String,
+    body: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let endpoint = if endpoint.starts_with('/') {
+        endpoint
+    } else {
+        format!("/{}", endpoint)
+    };
+
+    state
+        .sidecar
+        .post_async::<serde_json::Value, serde_json::Value>(&endpoint, &body)
+        .await
+        .map_err(|e| e.to_string())
 }
