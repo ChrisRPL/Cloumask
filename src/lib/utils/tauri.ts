@@ -1,0 +1,199 @@
+/**
+ * Tauri IPC utilities with type-safe command invocation.
+ *
+ * Uses the existing types from commands.ts and maps to actual Rust command names.
+ * Keep in sync with src-tauri/src/commands/*.rs
+ */
+
+import { invoke } from '@tauri-apps/api/core';
+import type {
+	CommandName,
+	CommandReturnTypes,
+	CommandArgs,
+	AppInfo,
+	HealthResponse,
+	ReadyResponse,
+	SidecarStatus,
+	OllamaStatus,
+	OllamaModelsResponse,
+	IPCError,
+} from '$lib/types/commands';
+
+// ============================================================================
+// Type-Safe Invoke Wrapper
+// ============================================================================
+
+/**
+ * Type-safe wrapper around Tauri invoke.
+ * Uses CommandReturnTypes and CommandArgs for compile-time safety.
+ * Converts errors to user-friendly IPCError objects.
+ */
+async function invokeCommand<K extends CommandName>(
+	command: K,
+	args?: CommandArgs[K]
+): Promise<CommandReturnTypes[K]> {
+	try {
+		return await invoke<CommandReturnTypes[K]>(command, args);
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		throw {
+			command,
+			message: `Command '${command}' failed`,
+			details: message,
+		} as IPCError;
+	}
+}
+
+// ============================================================================
+// System Commands
+// ============================================================================
+
+/** Test IPC connectivity with a simple ping. Returns "pong". */
+export async function ping(): Promise<string> {
+	return invokeCommand('ping');
+}
+
+/** Echo a message back (for testing). */
+export async function echo(message: string): Promise<string> {
+	return invokeCommand('echo', { message });
+}
+
+/** Get application information. */
+export async function getAppInfo(): Promise<AppInfo> {
+	return invokeCommand('get_app_info');
+}
+
+// ============================================================================
+// Sidecar Commands
+// ============================================================================
+
+/**
+ * Get the current status of the Python sidecar.
+ * NOTE: Rust command is 'sidecar_status', not 'get_sidecar_status'
+ */
+export async function getSidecarStatus(): Promise<SidecarStatus> {
+	return invokeCommand('sidecar_status');
+}
+
+/** Start the Python sidecar if not running. Non-blocking. */
+export async function startSidecar(): Promise<void> {
+	return invokeCommand('start_sidecar');
+}
+
+/** Stop the Python sidecar. */
+export async function stopSidecar(): Promise<void> {
+	return invokeCommand('stop_sidecar');
+}
+
+/** Restart the Python sidecar. Non-blocking. */
+export async function restartSidecar(): Promise<void> {
+	return invokeCommand('restart_sidecar');
+}
+
+// ============================================================================
+// Health Check Commands
+// ============================================================================
+
+/** Check the health of the Python sidecar. */
+export async function checkHealth(): Promise<HealthResponse> {
+	return invokeCommand('check_health');
+}
+
+/** Check the readiness of the Python sidecar. */
+export async function checkReady(): Promise<ReadyResponse> {
+	return invokeCommand('check_ready');
+}
+
+// ============================================================================
+// Ollama Commands
+// ============================================================================
+
+/** Get the status of Ollama LLM service. */
+export async function getOllamaStatus(): Promise<OllamaStatus> {
+	return invokeCommand('get_ollama_status');
+}
+
+/** List available Ollama models. */
+export async function listOllamaModels(): Promise<OllamaModelsResponse> {
+	return invokeCommand('list_ollama_models');
+}
+
+// ============================================================================
+// Generic Sidecar HTTP Commands
+// ============================================================================
+
+/** Call a generic sidecar GET endpoint. */
+export async function callSidecarGet<T = unknown>(endpoint: string): Promise<T> {
+	return invokeCommand('call_sidecar_get', { endpoint }) as Promise<T>;
+}
+
+/** Call a generic sidecar POST endpoint. */
+export async function callSidecarPost<T = unknown>(endpoint: string, body: unknown): Promise<T> {
+	return invokeCommand('call_sidecar_post', { endpoint, body }) as Promise<T>;
+}
+
+// ============================================================================
+// Utility Functions
+// ============================================================================
+
+/**
+ * Check if we're running inside Tauri.
+ * Useful for SSR compatibility and testing.
+ */
+export function isTauri(): boolean {
+	return typeof window !== 'undefined' && '__TAURI__' in window;
+}
+
+/**
+ * Wait for a condition with timeout.
+ * @param condition - Async function that returns true when condition is met
+ * @param options - timeout (ms) and polling interval (ms)
+ * @returns true if condition met, false if timeout
+ */
+export async function waitFor(
+	condition: () => Promise<boolean>,
+	options: { timeout?: number; interval?: number } = {}
+): Promise<boolean> {
+	const { timeout = 10000, interval = 500 } = options;
+	const start = Date.now();
+
+	while (Date.now() - start < timeout) {
+		try {
+			if (await condition()) {
+				return true;
+			}
+		} catch {
+			// Condition threw, keep waiting
+		}
+		await new Promise((resolve) => setTimeout(resolve, interval));
+	}
+
+	return false;
+}
+
+/**
+ * Wait for the sidecar to become healthy.
+ * Polls checkHealth() until status === 'healthy' or timeout.
+ */
+export async function waitForSidecar(timeout = 10000): Promise<boolean> {
+	return waitFor(
+		async () => {
+			const health = await checkHealth();
+			return health.status === 'healthy';
+		},
+		{ timeout }
+	);
+}
+
+/**
+ * Wait for the sidecar to be ready (all checks passing).
+ */
+export async function waitForSidecarReady(timeout = 10000): Promise<boolean> {
+	return waitFor(
+		async () => {
+			const ready = await checkReady();
+			return ready.ready;
+		},
+		{ timeout }
+	);
+}
