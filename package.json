@@ -9,7 +9,15 @@
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-    "tauri": "tauri"
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
+    "backend:dev": "cd backend && source .venv/bin/activate && uvicorn backend.api.main:app --reload --port 8765",
+    "backend:install": "cd backend && python3 -m venv .venv && source .venv/bin/activate && pip install -e .",
+    "test": "vitest",
+    "test:e2e": "playwright test"
   },
   "license": "MIT",
   "dependencies": {
