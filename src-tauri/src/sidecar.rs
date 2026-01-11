@@ -1,12 +1,17 @@
-//! Python sidecar process management.
+//! Python sidecar process management and HTTP communication.
 //!
 //! Handles spawning, monitoring, and terminating the Python FastAPI backend.
 //! The sidecar runs uvicorn serving `backend.api.main:app` on port 8765.
+//!
+//! Provides both blocking and async HTTP methods for communicating with the sidecar.
 
+use std::collections::HashMap;
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+use reqwest::Client;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 /// Errors that can occur during sidecar operations.
@@ -23,6 +28,15 @@ pub enum SidecarError {
 
     #[error("Sidecar health check failed after {0} seconds")]
     HealthCheckTimeout(u64),
+
+    #[error("HTTP request failed: {0}")]
+    HttpError(String),
+
+    #[error("Failed to deserialize response: {0}")]
+    DeserializationError(String),
+
+    #[error("Sidecar returned error status: {status} - {message}")]
+    SidecarResponseError { status: u16, message: String },
 }
 
 /// Configuration for the sidecar process.
@@ -38,6 +52,17 @@ pub struct SidecarConfig {
     pub backend_src_path: String,
     /// Timeout for health check in seconds.
     pub health_check_timeout_secs: u64,
+    /// Maximum number of retry attempts for failed requests.
+    #[allow(dead_code)]
+    pub retry_attempts: u32,
+    /// Initial delay between retries in milliseconds.
+    #[allow(dead_code)]
+    pub retry_delay_ms: u64,
+    /// Maximum delay between retries in milliseconds (for exponential backoff cap).
+    #[allow(dead_code)]
+    pub retry_max_delay_ms: u64,
+    /// Request timeout in seconds.
+    pub request_timeout_secs: u64,
 }
 
 impl Default for SidecarConfig {
@@ -48,24 +73,70 @@ impl Default for SidecarConfig {
             python_path: "python3".to_string(),
             backend_src_path: "backend/src".to_string(),
             health_check_timeout_secs: 30,
+            retry_attempts: 3,
+            retry_delay_ms: 100,
+            retry_max_delay_ms: 2000,
+            request_timeout_secs: 30,
         }
     }
 }
 
-/// Manages the Python sidecar process lifecycle.
+// ============================================================================
+// Response Types
+// ============================================================================
+
+/// Health check response from Python sidecar.
+///
+/// Returned by the `/health` endpoint.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HealthResponse {
+    /// Current health status: "healthy", "degraded", or "unhealthy".
+    pub status: String,
+    /// Backend version.
+    pub version: String,
+    /// ISO 8601 timestamp.
+    pub timestamp: String,
+    /// Status of individual components.
+    pub components: HashMap<String, String>,
+}
+
+/// Readiness check response from Python sidecar.
+///
+/// Returned by the `/ready` endpoint.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReadyResponse {
+    /// Whether the sidecar is ready to accept requests.
+    pub ready: bool,
+    /// Individual readiness checks.
+    pub checks: HashMap<String, bool>,
+}
+
+// ============================================================================
+// Sidecar Manager
+// ============================================================================
+
+/// Manages the Python sidecar process lifecycle and HTTP communication.
 pub struct SidecarManager {
     /// The running child process, if any.
     process: Mutex<Option<Child>>,
     /// Configuration for the sidecar.
     config: SidecarConfig,
+    /// Async HTTP client for sidecar communication.
+    client: Client,
 }
 
 impl SidecarManager {
     /// Create a new sidecar manager with the given configuration.
     pub fn new(config: SidecarConfig) -> Self {
+        let client = Client::builder()
+            .timeout(Duration::from_secs(config.request_timeout_secs))
+            .build()
+            .expect("Failed to create HTTP client");
+
         Self {
             process: Mutex::new(None),
             config,
+            client,
         }
     }
 
@@ -250,6 +321,156 @@ impl SidecarManager {
             std::thread::sleep(check_interval);
         }
     }
+
+    // ========================================================================
+    // Async HTTP Methods
+    // ========================================================================
+
+    /// Perform an async GET request to the sidecar.
+    ///
+    /// Returns the deserialized response of type `T`.
+    pub async fn get_async<T>(&self, endpoint: &str) -> Result<T, SidecarError>
+    where
+        T: serde::de::DeserializeOwned,
+    {
+        let url = format!("{}{}", self.base_url(), endpoint);
+
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| SidecarError::HttpError(e.to_string()))?;
+
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let message = response.text().await.unwrap_or_default();
+            return Err(SidecarError::SidecarResponseError { status, message });
+        }
+
+        response
+            .json::<T>()
+            .await
+            .map_err(|e| SidecarError::DeserializationError(e.to_string()))
+    }
+
+    /// Perform an async POST request to the sidecar with JSON body.
+    ///
+    /// Returns the deserialized response of type `T`.
+    pub async fn post_async<T, B>(&self, endpoint: &str, body: &B) -> Result<T, SidecarError>
+    where
+        T: serde::de::DeserializeOwned,
+        B: serde::Serialize,
+    {
+        let url = format!("{}{}", self.base_url(), endpoint);
+
+        let response = self
+            .client
+            .post(&url)
+            .json(body)
+            .send()
+            .await
+            .map_err(|e| SidecarError::HttpError(e.to_string()))?;
+
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let message = response.text().await.unwrap_or_default();
+            return Err(SidecarError::SidecarResponseError { status, message });
+        }
+
+        response
+            .json::<T>()
+            .await
+            .map_err(|e| SidecarError::DeserializationError(e.to_string()))
+    }
+
+    /// Perform a request with exponential backoff retry.
+    ///
+    /// The `operation` closure is called repeatedly until it succeeds or
+    /// the maximum number of retries is reached.
+    #[allow(dead_code)]
+    pub async fn request_with_retry<T, F, Fut>(&self, operation: F) -> Result<T, SidecarError>
+    where
+        F: Fn() -> Fut,
+        Fut: std::future::Future<Output = Result<T, SidecarError>>,
+    {
+        let mut delay = Duration::from_millis(self.config.retry_delay_ms);
+        let max_delay = Duration::from_millis(self.config.retry_max_delay_ms);
+        let mut last_error = None;
+
+        for attempt in 0..=self.config.retry_attempts {
+            match operation().await {
+                Ok(result) => return Ok(result),
+                Err(e) => {
+                    log::debug!("Request attempt {} failed: {}", attempt + 1, e);
+                    last_error = Some(e);
+
+                    if attempt < self.config.retry_attempts {
+                        tokio::time::sleep(delay).await;
+                        delay = std::cmp::min(delay * 2, max_delay);
+                    }
+                }
+            }
+        }
+
+        Err(last_error.unwrap_or(SidecarError::HttpError(
+            "Unknown error after retries".to_string(),
+        )))
+    }
+
+    /// Async health check - calls /health endpoint.
+    ///
+    /// Returns the full health response from the sidecar.
+    pub async fn health_check_async(&self) -> Result<HealthResponse, SidecarError> {
+        self.get_async::<HealthResponse>("/health").await
+    }
+
+    /// Async readiness check - calls /ready endpoint.
+    ///
+    /// Returns the readiness response from the sidecar.
+    pub async fn ready_check_async(&self) -> Result<ReadyResponse, SidecarError> {
+        self.get_async::<ReadyResponse>("/ready").await
+    }
+
+    /// Wait for the sidecar to become ready by polling /health endpoint (async version).
+    ///
+    /// This is the async version of `wait_for_healthy()`.
+    #[allow(dead_code)]
+    pub async fn wait_for_ready_async(&self) -> Result<HealthResponse, SidecarError> {
+        let start = Instant::now();
+        let timeout = Duration::from_secs(self.config.health_check_timeout_secs);
+        let check_interval = Duration::from_millis(500);
+
+        log::info!("Waiting for sidecar to become healthy (async)...");
+
+        loop {
+            if start.elapsed() > timeout {
+                return Err(SidecarError::HealthCheckTimeout(
+                    self.config.health_check_timeout_secs,
+                ));
+            }
+
+            // Check if process is still running
+            if !self.is_running() {
+                return Err(SidecarError::NotRunning);
+            }
+
+            match self.health_check_async().await {
+                Ok(health) if health.status == "healthy" => {
+                    log::info!("Sidecar is healthy and ready (async)");
+                    return Ok(health);
+                }
+                Ok(health) => {
+                    log::debug!("Sidecar status: {} (waiting for healthy)", health.status);
+                }
+                Err(e) => {
+                    log::debug!("Health check failed (retrying): {}", e);
+                }
+            }
+
+            tokio::time::sleep(check_interval).await;
+        }
+    }
 }
 
 impl Drop for SidecarManager {
@@ -292,5 +513,66 @@ mod tests {
     fn test_not_running_initially() {
         let manager = SidecarManager::with_defaults();
         assert!(!manager.is_running());
+    }
+
+    #[test]
+    fn test_config_with_retry_defaults() {
+        let config = SidecarConfig::default();
+        assert_eq!(config.retry_attempts, 3);
+        assert_eq!(config.retry_delay_ms, 100);
+        assert_eq!(config.retry_max_delay_ms, 2000);
+        assert_eq!(config.request_timeout_secs, 30);
+    }
+
+    #[test]
+    fn test_health_response_deserialize() {
+        let json = r#"{
+            "status": "healthy",
+            "version": "0.1.0",
+            "timestamp": "2025-01-11T12:00:00Z",
+            "components": {"api": "healthy", "agent": "not_loaded"}
+        }"#;
+
+        let response: HealthResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(response.status, "healthy");
+        assert_eq!(response.version, "0.1.0");
+        assert_eq!(
+            response.components.get("api"),
+            Some(&"healthy".to_string())
+        );
+        assert_eq!(
+            response.components.get("agent"),
+            Some(&"not_loaded".to_string())
+        );
+    }
+
+    #[test]
+    fn test_ready_response_deserialize() {
+        let json = r#"{
+            "ready": true,
+            "checks": {"api_running": true, "routes_loaded": true}
+        }"#;
+
+        let response: ReadyResponse = serde_json::from_str(json).unwrap();
+        assert!(response.ready);
+        assert_eq!(response.checks.get("api_running"), Some(&true));
+        assert_eq!(response.checks.get("routes_loaded"), Some(&true));
+    }
+
+    #[test]
+    fn test_health_response_serialize() {
+        let mut components = HashMap::new();
+        components.insert("api".to_string(), "healthy".to_string());
+
+        let response = HealthResponse {
+            status: "healthy".to_string(),
+            version: "0.1.0".to_string(),
+            timestamp: "2025-01-11T12:00:00Z".to_string(),
+            components,
+        };
+
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("\"status\":\"healthy\""));
+        assert!(json.contains("\"version\":\"0.1.0\""));
     }
 }

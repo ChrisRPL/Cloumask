@@ -111,11 +111,17 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             greet,
-            // Sidecar commands
+            // Sidecar lifecycle commands
             commands::sidecar_status,
             commands::start_sidecar,
             commands::stop_sidecar,
             commands::restart_sidecar,
+            // Health check commands
+            commands::check_health,
+            commands::check_ready,
+            // Generic sidecar HTTP commands
+            commands::call_sidecar_get,
+            commands::call_sidecar_post,
             // System commands
             commands::get_app_info,
             commands::ping,

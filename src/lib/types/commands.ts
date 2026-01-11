@@ -23,6 +23,36 @@ export interface SidecarStatus {
 }
 
 // ============================================================================
+// Health Check Types
+// ============================================================================
+
+/**
+ * Health check response from Python sidecar.
+ * Returned by `check_health` command.
+ */
+export interface HealthResponse {
+	/** Current health status: "healthy", "degraded", or "unhealthy". */
+	status: 'healthy' | 'degraded' | 'unhealthy';
+	/** Backend version. */
+	version: string;
+	/** ISO 8601 timestamp. */
+	timestamp: string;
+	/** Status of individual components. */
+	components: Record<string, string>;
+}
+
+/**
+ * Readiness check response from Python sidecar.
+ * Returned by `check_ready` command.
+ */
+export interface ReadyResponse {
+	/** Whether the sidecar is ready to accept requests. */
+	ready: boolean;
+	/** Individual readiness checks. */
+	checks: Record<string, boolean>;
+}
+
+// ============================================================================
 // System Commands
 // ============================================================================
 
@@ -51,11 +81,17 @@ export interface AppInfo {
  * Type-safe command names for Tauri invoke.
  */
 export type CommandName =
-	// Sidecar commands
+	// Sidecar lifecycle commands
 	| 'sidecar_status'
 	| 'start_sidecar'
 	| 'stop_sidecar'
 	| 'restart_sidecar'
+	// Health check commands
+	| 'check_health'
+	| 'check_ready'
+	// Generic sidecar HTTP commands
+	| 'call_sidecar_get'
+	| 'call_sidecar_post'
 	// System commands
 	| 'get_app_info'
 	| 'ping'
@@ -67,10 +103,18 @@ export type CommandName =
  * Map command names to their return types.
  */
 export interface CommandReturnTypes {
+	// Sidecar lifecycle
 	sidecar_status: SidecarStatus;
 	start_sidecar: void;
 	stop_sidecar: void;
 	restart_sidecar: void;
+	// Health check
+	check_health: HealthResponse;
+	check_ready: ReadyResponse;
+	// Generic sidecar HTTP
+	call_sidecar_get: unknown;
+	call_sidecar_post: unknown;
+	// System
 	get_app_info: AppInfo;
 	ping: string;
 	echo: string;
@@ -81,10 +125,18 @@ export interface CommandReturnTypes {
  * Map command names to their argument types.
  */
 export interface CommandArgs {
+	// Sidecar lifecycle
 	sidecar_status: Record<string, never>;
 	start_sidecar: Record<string, never>;
 	stop_sidecar: Record<string, never>;
 	restart_sidecar: Record<string, never>;
+	// Health check
+	check_health: Record<string, never>;
+	check_ready: Record<string, never>;
+	// Generic sidecar HTTP
+	call_sidecar_get: { endpoint: string };
+	call_sidecar_post: { endpoint: string; body: unknown };
+	// System
 	get_app_info: Record<string, never>;
 	ping: Record<string, never>;
 	echo: { message: string };
