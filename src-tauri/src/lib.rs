@@ -131,6 +131,9 @@ pub fn run() {
             // Generic sidecar HTTP commands
             commands::call_sidecar_get,
             commands::call_sidecar_post,
+            // Ollama commands
+            commands::get_ollama_status,
+            commands::list_ollama_models,
             // System commands
             commands::get_app_info,
             commands::ping,
