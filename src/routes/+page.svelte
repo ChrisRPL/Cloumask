@@ -8,15 +8,26 @@
 		getSidecarStatus,
 		checkHealth,
 		restartSidecar,
+		getOllamaStatus,
+		listOllamaModels,
 		isTauri,
 	} from '$lib/utils/tauri';
 	import { open } from '@tauri-apps/plugin-shell';
-	import type { AppInfo, HealthResponse, SidecarStatus, HealthStatus } from '$lib/types';
+	import type {
+		AppInfo,
+		HealthResponse,
+		SidecarStatus,
+		OllamaStatus,
+		OllamaModelsResponse,
+		HealthStatus,
+	} from '$lib/types';
 
 	// State with Svelte 5 runes
 	let appInfo = $state<AppInfo | null>(null);
 	let sidecarStatus = $state<SidecarStatus | null>(null);
 	let healthResponse = $state<HealthResponse | null>(null);
+	let ollamaStatus = $state<OllamaStatus | null>(null);
+	let ollamaModels = $state<OllamaModelsResponse | null>(null);
 	let error = $state<string | null>(null);
 	let loading = $state(true);
 
@@ -33,6 +44,12 @@
 		if (!sidecarStatus?.running) return 'unhealthy';
 		if (!healthResponse) return 'not_loaded';
 		return healthResponse.status;
+	});
+
+	const ollamaHealthStatus = $derived.by<HealthStatus>(() => {
+		if (loading) return 'loading';
+		if (!ollamaStatus) return 'not_loaded';
+		return ollamaStatus.available ? 'healthy' : 'unhealthy';
 	});
 
 	// Badge variant mapping
@@ -61,11 +78,14 @@
 		error = null;
 
 		try {
-			const [appResult, sidecarResult, healthResult] = await Promise.allSettled([
-				getAppInfo(),
-				getSidecarStatus(),
-				checkHealth(),
-			]);
+			const [appResult, sidecarResult, healthResult, ollamaResult, modelsResult] =
+				await Promise.allSettled([
+					getAppInfo(),
+					getSidecarStatus(),
+					checkHealth(),
+					getOllamaStatus(),
+					listOllamaModels(),
+				]);
 
 			if (appResult.status === 'fulfilled') {
 				appInfo = appResult.value;
@@ -80,6 +100,14 @@
 			} else {
 				// Health check failed but sidecar might still be starting
 				error = sidecarStatus?.running ? 'Sidecar is starting...' : 'Python sidecar not running';
+			}
+
+			if (ollamaResult.status === 'fulfilled') {
+				ollamaStatus = ollamaResult.value;
+			}
+
+			if (modelsResult.status === 'fulfilled') {
+				ollamaModels = modelsResult.value;
 			}
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Unknown error';
@@ -173,6 +201,14 @@
 					</Badge>
 				</div>
 
+				<!-- Ollama Status -->
+				<div class="flex items-center justify-between">
+					<span class="text-muted-foreground">Ollama LLM</span>
+					<Badge variant={getBadgeVariant(ollamaHealthStatus)}>
+						{ollamaStatus?.available ? 'Connected' : ollamaHealthStatus}
+					</Badge>
+				</div>
+
 				<Separator />
 
 				<!-- Sidecar Details -->
@@ -192,6 +228,13 @@
 					</div>
 				{/if}
 
+				<!-- Ollama Error -->
+				{#if ollamaStatus && !ollamaStatus.available && ollamaStatus.error}
+					<div class="p-3 rounded-md bg-muted/50 border border-muted-foreground/20">
+						<p class="text-sm text-muted-foreground">Ollama: {ollamaStatus.error}</p>
+					</div>
+				{/if}
+
 				<!-- Error Display -->
 				{#if error}
 					<div class="p-3 rounded-md bg-destructive/10 border border-destructive/20">
@@ -201,6 +244,26 @@
 			{/if}
 		</Card.Content>
 	</Card.Root>
+
+	<!-- Ollama Models Card -->
+	{#if ollamaModels && ollamaModels.models.length > 0}
+		<Card.Root class="w-full max-w-md">
+			<Card.Header>
+				<Card.Title>Ollama Models</Card.Title>
+				<Card.Description>Default: {ollamaModels.default_model}</Card.Description>
+			</Card.Header>
+			<Card.Content>
+				<div class="space-y-2">
+					{#each ollamaModels.models as model}
+						<div class="flex justify-between text-sm">
+							<span class="font-mono text-foreground">{model.name}</span>
+							<span class="text-muted-foreground">{model.size}</span>
+						</div>
+					{/each}
+				</div>
+			</Card.Content>
+		</Card.Root>
+	{/if}
 
 	<!-- App Info Card -->
 	{#if appInfo}

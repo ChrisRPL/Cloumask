@@ -14,6 +14,8 @@ import type {
 	HealthResponse,
 	ReadyResponse,
 	SidecarStatus,
+	OllamaStatus,
+	OllamaModelsResponse,
 	IPCError,
 } from '$lib/types/commands';
 
@@ -100,6 +102,20 @@ export async function checkHealth(): Promise<HealthResponse> {
 /** Check the readiness of the Python sidecar. */
 export async function checkReady(): Promise<ReadyResponse> {
 	return invokeCommand('check_ready');
+}
+
+// ============================================================================
+// Ollama Commands
+// ============================================================================
+
+/** Get the status of Ollama LLM service. */
+export async function getOllamaStatus(): Promise<OllamaStatus> {
+	return invokeCommand('get_ollama_status');
+}
+
+/** List available Ollama models. */
+export async function listOllamaModels(): Promise<OllamaModelsResponse> {
+	return invokeCommand('list_ollama_models');
 }
 
 // ============================================================================
