@@ -111,9 +111,15 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             greet,
+            // Sidecar commands
             commands::sidecar_status,
-            commands::sidecar_base_url,
+            commands::start_sidecar,
+            commands::stop_sidecar,
             commands::restart_sidecar,
+            // System commands
+            commands::get_app_info,
+            commands::ping,
+            commands::echo,
         ])
         .run(tauri::generate_context!())
         .unwrap_or_else(|e| {
