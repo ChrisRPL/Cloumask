@@ -10,6 +10,7 @@
 		restartSidecar,
 		isTauri,
 	} from '$lib/utils/tauri';
+	import { open } from '@tauri-apps/plugin-shell';
 	import type { AppInfo, HealthResponse, SidecarStatus, HealthStatus } from '$lib/types';
 
 	// State with Svelte 5 runes
@@ -228,7 +229,7 @@
 	{#if isInTauri}
 		<div class="flex gap-4">
 			<Button onclick={handleRestartSidecar} disabled={loading}>Restart Sidecar</Button>
-			<Button variant="secondary" onclick={() => window.open('http://localhost:8765/docs', '_blank')}
+			<Button variant="secondary" onclick={() => open('http://localhost:8765/docs')}
 				>API Docs</Button
 			>
 		</div>
