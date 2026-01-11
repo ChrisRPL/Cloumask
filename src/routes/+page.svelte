@@ -1,119 +1,237 @@
 <script lang="ts">
-	import { Button } from "$lib/components/ui/button";
-	import * as Card from "$lib/components/ui/card";
-	import { Input } from "$lib/components/ui/input";
-	import { Badge } from "$lib/components/ui/badge";
-	import { Separator } from "$lib/components/ui/separator";
+	import { Button } from '$lib/components/ui/button';
+	import * as Card from '$lib/components/ui/card';
+	import { Badge } from '$lib/components/ui/badge';
+	import { Separator } from '$lib/components/ui/separator';
+	import {
+		getAppInfo,
+		getSidecarStatus,
+		checkHealth,
+		restartSidecar,
+		isTauri,
+	} from '$lib/utils/tauri';
+	import { open } from '@tauri-apps/plugin-shell';
+	import type { AppInfo, HealthResponse, SidecarStatus, HealthStatus } from '$lib/types';
 
-	let greeting = $state("Welcome to Cloumask");
+	// State with Svelte 5 runes
+	let appInfo = $state<AppInfo | null>(null);
+	let sidecarStatus = $state<SidecarStatus | null>(null);
+	let healthResponse = $state<HealthResponse | null>(null);
+	let error = $state<string | null>(null);
+	let loading = $state(true);
+
+	// Initialize once - isTauri() result never changes during runtime
+	const isInTauri = isTauri();
+
+	// Derived status computations
+	const frontendStatus: HealthStatus = 'healthy';
+
+	const rustStatus = $derived<HealthStatus>(appInfo ? 'healthy' : loading ? 'loading' : 'unhealthy');
+
+	const pythonStatus = $derived.by<HealthStatus>(() => {
+		if (loading) return 'loading';
+		if (!sidecarStatus?.running) return 'unhealthy';
+		if (!healthResponse) return 'not_loaded';
+		return healthResponse.status;
+	});
+
+	// Badge variant mapping
+	function getBadgeVariant(
+		status: HealthStatus
+	): 'default' | 'secondary' | 'destructive' | 'outline' {
+		switch (status) {
+			case 'healthy':
+				return 'default';
+			case 'loading':
+				return 'secondary';
+			case 'degraded':
+				return 'outline';
+			case 'unhealthy':
+			case 'not_loaded':
+			default:
+				return 'destructive';
+		}
+	}
+
+	// Refresh all status
+	async function refreshStatus() {
+		if (!isInTauri) return;
+
+		loading = true;
+		error = null;
+
+		try {
+			const [appResult, sidecarResult, healthResult] = await Promise.allSettled([
+				getAppInfo(),
+				getSidecarStatus(),
+				checkHealth(),
+			]);
+
+			if (appResult.status === 'fulfilled') {
+				appInfo = appResult.value;
+			}
+
+			if (sidecarResult.status === 'fulfilled') {
+				sidecarStatus = sidecarResult.value;
+			}
+
+			if (healthResult.status === 'fulfilled') {
+				healthResponse = healthResult.value;
+			} else {
+				// Health check failed but sidecar might still be starting
+				error = sidecarStatus?.running ? 'Sidecar is starting...' : 'Python sidecar not running';
+			}
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Unknown error';
+		} finally {
+			loading = false;
+		}
+	}
+
+	// Restart sidecar handler
+	async function handleRestartSidecar() {
+		loading = true;
+		error = null;
+
+		try {
+			await restartSidecar();
+			// Wait for sidecar to restart, then refresh
+			await new Promise((resolve) => setTimeout(resolve, 2000));
+			await refreshStatus();
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Failed to restart sidecar';
+			loading = false;
+		}
+	}
+
+	// Initialize on mount and setup auto-refresh
+	$effect(() => {
+		if (isInTauri) {
+			refreshStatus();
+
+			// Auto-refresh every 30 seconds
+			const interval = setInterval(refreshStatus, 30000);
+
+			return () => clearInterval(interval);
+		} else {
+			loading = false;
+		}
+	});
 </script>
 
-<main class="flex flex-col items-center justify-center min-h-screen p-8">
-	<div class="text-center max-w-2xl">
-		<!-- Logo wordmark -->
-		<img
-			src="/assets/icon_large.png"
-			alt="Cloumask"
-			class="h-16 mx-auto mb-8 object-contain"
-		/>
-
-		<h1 class="text-4xl font-bold text-foreground mb-4">{greeting}</h1>
-		<p class="text-xl text-muted-foreground mb-2">
-			Local-first AI for computer vision data processing
-		</p>
-		<p class="text-muted-foreground font-mono text-sm mb-8">
-			<span class="code">From cloud to canvas</span>
-		</p>
-
-		<!-- shadcn Button variants -->
-		<div class="flex gap-4 justify-center mb-12 flex-wrap">
-			<Button>Get Started</Button>
-			<Button variant="secondary">Learn More</Button>
-			<Button variant="outline">Documentation</Button>
-			<Button variant="ghost">Settings</Button>
+<main class="flex flex-col items-center justify-center min-h-screen p-8 gap-8">
+	<!-- Header -->
+	<div class="text-center">
+		<img src="/assets/icon_large.png" alt="Cloumask" class="h-16 mx-auto mb-4 object-contain" />
+		<h1 class="text-4xl font-bold text-foreground mb-2">Cloumask</h1>
+		<p class="text-muted-foreground">Local-first AI for computer vision data processing</p>
+		<div class="flex gap-2 justify-center mt-4">
+			<Badge variant="secondary">Tauri 2.0</Badge>
+			<Badge variant="secondary">Svelte 5</Badge>
+			<Badge variant="secondary">Python</Badge>
 		</div>
+	</div>
 
-		<!-- Design system showcase with shadcn Card -->
-		<Card.Root class="text-left">
+	<!-- System Status Card -->
+	<Card.Root class="w-full max-w-md">
+		<Card.Header>
+			<Card.Title class="flex items-center justify-between">
+				System Status
+				<Button variant="ghost" size="sm" onclick={refreshStatus} disabled={loading}>
+					{loading ? 'Checking...' : 'Refresh'}
+				</Button>
+			</Card.Title>
+			<Card.Description>Foundation module verification</Card.Description>
+		</Card.Header>
+		<Card.Content class="space-y-4">
+			{#if !isInTauri}
+				<p class="text-muted-foreground text-sm">
+					Running outside Tauri - IPC commands unavailable.
+				</p>
+			{:else}
+				<!-- Frontend Status -->
+				<div class="flex items-center justify-between">
+					<span class="text-muted-foreground">Frontend (Svelte 5)</span>
+					<Badge variant={getBadgeVariant(frontendStatus)}>
+						{frontendStatus}
+					</Badge>
+				</div>
+
+				<!-- Rust Status -->
+				<div class="flex items-center justify-between">
+					<span class="text-muted-foreground">Rust Core (Tauri)</span>
+					<Badge variant={getBadgeVariant(rustStatus)}>
+						{rustStatus}
+					</Badge>
+				</div>
+
+				<!-- Python Status -->
+				<div class="flex items-center justify-between">
+					<span class="text-muted-foreground">Python Sidecar</span>
+					<Badge variant={getBadgeVariant(pythonStatus)}>
+						{pythonStatus}
+					</Badge>
+				</div>
+
+				<Separator />
+
+				<!-- Sidecar Details -->
+				{#if sidecarStatus}
+					<div class="text-sm text-muted-foreground space-y-1 font-mono">
+						<p>Process: {sidecarStatus.running ? 'Running' : 'Stopped'}</p>
+						<p>URL: {sidecarStatus.url}</p>
+						<p>Port: {sidecarStatus.port}</p>
+					</div>
+				{/if}
+
+				<!-- Health Details -->
+				{#if healthResponse}
+					<div class="text-sm text-muted-foreground space-y-1 font-mono">
+						<p>Version: {healthResponse.version}</p>
+						<p>Last check: {new Date(healthResponse.timestamp).toLocaleTimeString()}</p>
+					</div>
+				{/if}
+
+				<!-- Error Display -->
+				{#if error}
+					<div class="p-3 rounded-md bg-destructive/10 border border-destructive/20">
+						<p class="text-sm text-destructive">{error}</p>
+					</div>
+				{/if}
+			{/if}
+		</Card.Content>
+	</Card.Root>
+
+	<!-- App Info Card -->
+	{#if appInfo}
+		<Card.Root class="w-full max-w-md">
 			<Card.Header>
-				<Card.Title>Design System Preview</Card.Title>
-				<Card.Description>
-					shadcn-svelte components with Cloumask theme
-				</Card.Description>
+				<Card.Title>Application Info</Card.Title>
 			</Card.Header>
-			<Card.Content class="space-y-6">
-				<!-- Badge examples -->
-				<div>
-					<p class="text-sm text-muted-foreground mb-2">Badges</p>
-					<div class="flex gap-2 flex-wrap">
-						<Badge>Default</Badge>
-						<Badge variant="secondary">Secondary</Badge>
-						<Badge variant="outline">Outline</Badge>
-						<Badge variant="destructive">Destructive</Badge>
-					</div>
-				</div>
-
-				<Separator />
-
-				<!-- Colors -->
-				<div>
-					<p class="text-sm text-muted-foreground mb-2">Brand Colors</p>
-					<div class="flex gap-2">
-						<div
-							class="size-10 rounded-md bg-primary"
-							title="Primary (Forest)"
-						></div>
-						<div
-							class="size-10 rounded-md bg-background border border-border"
-							title="Background (Cream)"
-						></div>
-						<div
-							class="size-10 rounded-md bg-forest-light"
-							title="Forest Light"
-						></div>
-						<div
-							class="size-10 rounded-md bg-destructive"
-							title="Destructive"
-						></div>
-					</div>
-				</div>
-
-				<Separator />
-
-				<!-- Typography -->
-				<div>
-					<p class="text-sm text-muted-foreground mb-2">Typography</p>
-					<p class="font-sans text-foreground">Inter - UI Text (sans-serif)</p>
-					<p class="font-mono text-muted-foreground">
-						JetBrains Mono - Code (monospace)
-					</p>
-				</div>
-
-				<Separator />
-
-				<!-- Input example with shadcn -->
-				<div>
-					<p class="text-sm text-muted-foreground mb-2">Input</p>
-					<Input
-						type="text"
-						placeholder="Type something..."
-						class="max-w-sm"
-					/>
-				</div>
-
-				<Separator />
-
-				<!-- Button sizes -->
-				<div>
-					<p class="text-sm text-muted-foreground mb-2">Button Sizes</p>
-					<div class="flex gap-2 items-center flex-wrap">
-						<Button size="sm">Small</Button>
-						<Button size="default">Default</Button>
-						<Button size="lg">Large</Button>
-						<Button size="icon">+</Button>
-					</div>
+			<Card.Content class="space-y-2 text-sm">
+				<div class="grid grid-cols-2 gap-2 font-mono">
+					<span class="text-muted-foreground">Name</span>
+					<span class="text-foreground">{appInfo.name}</span>
+					<span class="text-muted-foreground">Version</span>
+					<span class="text-foreground">{appInfo.version}</span>
+					<span class="text-muted-foreground">Platform</span>
+					<span class="text-foreground">{appInfo.platform}</span>
+					<span class="text-muted-foreground">Arch</span>
+					<span class="text-foreground">{appInfo.arch}</span>
+					<span class="text-muted-foreground">Mode</span>
+					<span class="text-foreground">{appInfo.debug ? 'Development' : 'Production'}</span>
 				</div>
 			</Card.Content>
 		</Card.Root>
-	</div>
+	{/if}
+
+	<!-- Actions -->
+	{#if isInTauri}
+		<div class="flex gap-4">
+			<Button onclick={handleRestartSidecar} disabled={loading}>Restart Sidecar</Button>
+			<Button variant="secondary" onclick={() => open('http://localhost:8765/docs')}
+				>API Docs</Button
+			>
+		</div>
+	{/if}
 </main>
