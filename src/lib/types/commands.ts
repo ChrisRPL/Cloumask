@@ -142,3 +142,30 @@ export interface CommandArgs {
 	echo: { message: string };
 	greet: { name: string };
 }
+
+// ============================================================================
+// Extended Types for UI
+// ============================================================================
+
+/**
+ * Health status values including UI states.
+ */
+export type HealthStatus = 'healthy' | 'degraded' | 'unhealthy' | 'not_loaded' | 'loading';
+
+/**
+ * Combined system status for UI display.
+ */
+export interface SystemStatus {
+	frontend: HealthStatus;
+	rust: HealthStatus;
+	python: HealthStatus;
+}
+
+/**
+ * Structured IPC error for user-friendly display.
+ */
+export interface IPCError {
+	command: CommandName;
+	message: string;
+	details?: string;
+}
