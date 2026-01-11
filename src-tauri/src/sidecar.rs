@@ -193,8 +193,7 @@ impl SidecarManager {
         format!("http://{}:{}", self.config.host, self.config.port)
     }
 
-    /// Get the sidecar's port.
-    #[cfg(test)]
+    /// Get the sidecar's configured port.
     pub fn port(&self) -> u16 {
         self.config.port
     }
