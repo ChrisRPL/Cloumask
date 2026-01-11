@@ -1,5 +1,5 @@
 """API route handlers."""
 
-from backend.api.routes import health
+from backend.api.routes import health, ollama
 
-__all__ = ["health"]
+__all__ = ["health", "ollama"]

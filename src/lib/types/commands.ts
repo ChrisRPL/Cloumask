@@ -53,6 +53,46 @@ export interface ReadyResponse {
 }
 
 // ============================================================================
+// Ollama Types
+// ============================================================================
+
+/**
+ * Ollama service status.
+ * Returned by `get_ollama_status` command.
+ */
+export interface OllamaStatus {
+	/** Whether Ollama is reachable. */
+	available: boolean;
+	/** Ollama API URL. */
+	url: string;
+	/** Error message if unavailable. */
+	error: string | null;
+}
+
+/**
+ * Information about an Ollama model.
+ */
+export interface OllamaModel {
+	/** Model name (e.g., "qwen3:14b"). */
+	name: string;
+	/** Model size on disk. */
+	size: string;
+	/** Last modified timestamp. */
+	modified: string;
+}
+
+/**
+ * Response containing available Ollama models.
+ * Returned by `list_ollama_models` command.
+ */
+export interface OllamaModelsResponse {
+	/** List of available models. */
+	models: OllamaModel[];
+	/** Configured default model. */
+	default_model: string;
+}
+
+// ============================================================================
 // System Commands
 // ============================================================================
 
@@ -92,6 +132,9 @@ export type CommandName =
 	// Generic sidecar HTTP commands
 	| 'call_sidecar_get'
 	| 'call_sidecar_post'
+	// Ollama commands
+	| 'get_ollama_status'
+	| 'list_ollama_models'
 	// System commands
 	| 'get_app_info'
 	| 'ping'
@@ -114,6 +157,9 @@ export interface CommandReturnTypes {
 	// Generic sidecar HTTP
 	call_sidecar_get: unknown;
 	call_sidecar_post: unknown;
+	// Ollama
+	get_ollama_status: OllamaStatus;
+	list_ollama_models: OllamaModelsResponse;
 	// System
 	get_app_info: AppInfo;
 	ping: string;
@@ -136,6 +182,9 @@ export interface CommandArgs {
 	// Generic sidecar HTTP
 	call_sidecar_get: { endpoint: string };
 	call_sidecar_post: { endpoint: string; body: unknown };
+	// Ollama
+	get_ollama_status: Record<string, never>;
+	list_ollama_models: Record<string, never>;
 	// System
 	get_app_info: Record<string, never>;
 	ping: Record<string, never>;
