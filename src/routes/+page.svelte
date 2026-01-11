@@ -18,7 +18,9 @@
 	let healthResponse = $state<HealthResponse | null>(null);
 	let error = $state<string | null>(null);
 	let loading = $state(true);
-	let isInTauri = $state(false);
+
+	// Initialize once - isTauri() result never changes during runtime
+	const isInTauri = isTauri();
 
 	// Derived status computations
 	const frontendStatus: HealthStatus = 'healthy';
@@ -103,8 +105,6 @@
 
 	// Initialize on mount and setup auto-refresh
 	$effect(() => {
-		isInTauri = isTauri();
-
 		if (isInTauri) {
 			refreshStatus();
 

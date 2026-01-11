@@ -27,23 +27,32 @@ fn greet(name: &str) -> Result<String, String> {
 fn resolve_backend_src_path() -> String {
     // In development, navigate from current directory to backend/src
     if cfg!(debug_assertions) {
-        // Try to find backend/src relative to the project root
-        // When running with `cargo tauri dev`, CWD is the project root
-        let candidates = [
+        // Try multiple strategies to find backend/src
+        let mut candidates: Vec<PathBuf> = vec![
+            // Direct path (if CWD is project root)
             PathBuf::from("backend/src"),
-            env::current_dir()
-                .map(|p| p.join("backend/src"))
-                .unwrap_or_default(),
         ];
 
+        // Try from current directory
+        if let Ok(cwd) = env::current_dir() {
+            candidates.push(cwd.join("backend/src"));
+            // Try going up one level (if running from src-tauri/)
+            candidates.push(cwd.join("../backend/src"));
+        }
+
+        // Try from CARGO_MANIFEST_DIR (compile-time path)
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        candidates.push(manifest_dir.join("../backend/src"));
+
         for candidate in &candidates {
-            if candidate.exists() {
-                log::info!("Found backend at: {:?}", candidate);
-                return candidate.to_string_lossy().to_string();
+            // Canonicalize to resolve .. and check existence
+            if let Ok(abs_path) = candidate.canonicalize() {
+                log::info!("Found backend at: {:?}", abs_path);
+                return abs_path.to_string_lossy().to_string();
             }
         }
 
-        log::warn!("Backend path not found, using default");
+        log::warn!("Backend path not found in any candidate location");
         "backend/src".to_string()
     } else {
         // In production, the sidecar is bundled - PYTHONPATH not needed
