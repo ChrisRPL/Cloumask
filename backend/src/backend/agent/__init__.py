@@ -1,5 +1,22 @@
 """LangGraph agent implementation for Cloumask pipeline execution."""
 
+from backend.agent.graph import (
+    compile_agent,
+    create_agent_graph,
+    route_after_approval,
+    route_after_checkpoint,
+    route_after_execution,
+    run_agent,
+    should_checkpoint,
+)
+from backend.agent.nodes import (
+    await_approval,
+    complete,
+    create_checkpoint,
+    execute_step,
+    generate_plan,
+    understand,
+)
 from backend.agent.state import (
     Checkpoint,
     CheckpointTrigger,
@@ -34,8 +51,23 @@ __all__ = [
     "PipelineMetadata",
     # TypedDict
     "PipelineState",
-    # Functions
+    # State functions
     "serialize_state",
     "deserialize_state",
     "create_initial_state",
+    # Graph functions
+    "create_agent_graph",
+    "compile_agent",
+    "run_agent",
+    "route_after_approval",
+    "route_after_execution",
+    "route_after_checkpoint",
+    "should_checkpoint",
+    # Node functions
+    "understand",
+    "generate_plan",
+    "await_approval",
+    "execute_step",
+    "create_checkpoint",
+    "complete",
 ]
