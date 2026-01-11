@@ -1,0 +1,13 @@
+# Cloumask Backend - Agent Dependencies
+# Install with: pip install -r requirements-agent.txt
+# Used in 02-agent-system module
+
+-r requirements.txt
+
+# LangGraph and LangChain
+langgraph==0.2.60
+langchain-core==0.3.28
+langchain-ollama==0.2.2
+
+# Additional agent utilities
+tenacity==9.0.0  # Retry logic
