@@ -21,13 +21,13 @@ from backend.agent.nodes.complete import (
 )
 from backend.agent.nodes.execute import (
     StubTool,
-    ToolRegistry,
     execute_step_node,
     format_step_result,
     is_retryable,
     register_stub_tools,
     update_progress,
 )
+from backend.agent.tools import ToolRegistry, get_tool_registry
 from backend.agent.state import MessageRole, PipelineState, StepStatus
 
 # -----------------------------------------------------------------------------
@@ -38,7 +38,7 @@ from backend.agent.state import MessageRole, PipelineState, StepStatus
 @pytest.fixture(autouse=True)
 def clean_registry() -> None:
     """Clear tool registry before each test."""
-    ToolRegistry.clear()
+    get_tool_registry().clear()
 
 
 @pytest.fixture
@@ -507,13 +507,9 @@ class TestExecuteStepNode:
         """Should work with custom tool implementations."""
         custom_result = {"custom": "data", "count": 42}
 
-        async def custom_execute(**kwargs: Any) -> dict[str, Any]:
-            return custom_result
-
+        # Register a stub tool that returns custom data
         tool = StubTool("scan_directory", lambda **kw: custom_result)
-        # Override with async version
-        tool.execute = custom_execute  # type: ignore[method-assign]
-        ToolRegistry.register(tool)
+        get_tool_registry().register(tool)
 
         result = await execute_step_node(base_state)
 
@@ -522,18 +518,27 @@ class TestExecuteStepNode:
     @pytest.mark.asyncio
     async def test_retry_on_transient_error(self, base_state: PipelineState) -> None:
         """Should retry on transient errors."""
+        from backend.agent.tools import BaseTool, ToolCategory, ToolResult, error_result
+
         call_count = 0
 
-        async def failing_execute(**kwargs: Any) -> dict[str, Any]:
-            nonlocal call_count
-            call_count += 1
-            if call_count < 2:
-                raise TimeoutError("Connection timeout")
-            return {"success": True}
+        class FailingTool(BaseTool):
+            """Tool that fails with timeout on first call."""
 
-        tool = StubTool("scan_directory", lambda **kw: {})
-        tool.execute = failing_execute  # type: ignore[method-assign]
-        ToolRegistry.register(tool)
+            name = "scan_directory"
+            description = "Failing scan tool"
+            category = ToolCategory.SCAN
+            parameters = []
+
+            async def execute(self, **kwargs: Any) -> ToolResult:
+                nonlocal call_count
+                call_count += 1
+                if call_count < 2:
+                    # Return error result with retryable message
+                    raise TimeoutError("Connection timeout")
+                return ToolResult(success=True, data={"success": True})
+
+        get_tool_registry().register(FailingTool())
 
         # First call should trigger retry
         result = await execute_step_node(base_state)
@@ -544,13 +549,20 @@ class TestExecuteStepNode:
     @pytest.mark.asyncio
     async def test_no_retry_on_value_error(self, base_state: PipelineState) -> None:
         """Should not retry on non-transient errors."""
+        from backend.agent.tools import BaseTool, ToolCategory, ToolResult
 
-        async def failing_execute(**kwargs: Any) -> dict[str, Any]:
-            raise ValueError("Invalid parameter")
+        class NonRetryableFailingTool(BaseTool):
+            """Tool that fails with non-retryable error."""
 
-        tool = StubTool("scan_directory", lambda **kw: {})
-        tool.execute = failing_execute  # type: ignore[method-assign]
-        ToolRegistry.register(tool)
+            name = "scan_directory"
+            description = "Non-retryable failing tool"
+            category = ToolCategory.SCAN
+            parameters = []
+
+            async def execute(self, **kwargs: Any) -> ToolResult:
+                raise ValueError("Invalid parameter")
+
+        get_tool_registry().register(NonRetryableFailingTool())
 
         result = await execute_step_node(base_state)
 

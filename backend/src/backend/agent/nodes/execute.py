@@ -12,9 +12,16 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any
 
 from backend.agent.state import MessageRole, PipelineState, StepStatus
+from backend.agent.tools import (
+    BaseTool,
+    ToolCategory,
+    ToolResult,
+    get_tool_registry,
+    success_result,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -26,68 +33,36 @@ MAX_RETRIES = 3
 
 
 # -----------------------------------------------------------------------------
-# Tool Interface (stub until 06-tool-system is implemented)
+# Stub Tools (for testing until 07-tool-implementations)
 # -----------------------------------------------------------------------------
 
 
-@runtime_checkable
-class Tool(Protocol):
-    """Protocol for CV tools. Will be replaced by 06-tool-system."""
-
-    name: str
-
-    async def execute(self, **kwargs: Any) -> dict[str, Any]:
-        """Execute the tool with given parameters."""
-        ...
-
-
-class ToolRegistry:
+class StubTool(BaseTool):
     """
-    Registry for CV tools.
+    Base stub tool that returns simulated results.
 
-    This is a stub implementation that will be replaced by the full
-    tool system in spec 06-tool-system. Currently returns stub tools
-    that simulate execution.
+    Used for development and testing before real tool implementations
+    are available.
     """
 
-    _tools: dict[str, Tool] = {}
+    category = ToolCategory.UTILITY
+    parameters = []
 
-    @classmethod
-    def register(cls, tool: Tool) -> None:
-        """Register a tool."""
-        cls._tools[tool.name] = tool
-
-    @classmethod
-    def get(cls, name: str) -> Tool | None:
-        """Get a tool by name."""
-        return cls._tools.get(name)
-
-    @classmethod
-    def clear(cls) -> None:
-        """Clear all registered tools (for testing)."""
-        cls._tools.clear()
-
-
-def get_tool_registry() -> type[ToolRegistry]:
-    """Get the tool registry singleton."""
-    return ToolRegistry
-
-
-# -----------------------------------------------------------------------------
-# Stub Tools (for testing until 06-tool-system and 07-tool-implementations)
-# -----------------------------------------------------------------------------
-
-
-class StubTool:
-    """Base stub tool that returns simulated results."""
-
-    def __init__(self, name: str, result_factory: Callable[..., dict[str, Any]]) -> None:
+    def __init__(
+        self,
+        name: str,
+        result_factory: Callable[..., dict[str, Any]],
+        description: str = "Stub tool for testing",
+    ) -> None:
+        super().__init__()
         self.name = name
+        self.description = description
         self._result_factory = result_factory
 
-    async def execute(self, **kwargs: Any) -> dict[str, Any]:
-        """Execute the stub tool."""
-        return self._result_factory(**kwargs)
+    async def execute(self, **kwargs: Any) -> ToolResult:
+        """Execute the stub tool and return simulated results."""
+        data = self._result_factory(**kwargs)
+        return success_result(data)
 
 
 def _scan_result(**kwargs: Any) -> dict[str, Any]:
@@ -142,13 +117,26 @@ def _export_result(**kwargs: Any) -> dict[str, Any]:
 
 
 def register_stub_tools() -> None:
-    """Register stub tools for development and testing."""
+    """
+    Register stub tools for development and testing.
+
+    These tools simulate real CV operations, returning realistic but
+    fake results. Used before actual tool implementations (07-tool-implementations).
+    """
     registry = get_tool_registry()
-    registry.register(StubTool("scan_directory", _scan_result))
-    registry.register(StubTool("detect", _detect_result))
-    registry.register(StubTool("anonymize", _anonymize_result))
-    registry.register(StubTool("segment", _segment_result))
-    registry.register(StubTool("export", _export_result))
+
+    # Only register if not already registered (idempotent)
+    stub_tools = [
+        ("scan_directory", _scan_result, "Scan directory for image/video files"),
+        ("detect", _detect_result, "Detect objects in images"),
+        ("anonymize", _anonymize_result, "Anonymize faces and license plates"),
+        ("segment", _segment_result, "Generate segmentation masks"),
+        ("export", _export_result, "Export dataset in various formats"),
+    ]
+
+    for name, factory, desc in stub_tools:
+        if not registry.has(name):
+            registry.register(StubTool(name, factory, desc))
 
 
 # -----------------------------------------------------------------------------
@@ -363,48 +351,54 @@ async def execute_step_node(state: PipelineState) -> dict[str, Any]:
     step["status"] = StepStatus.RUNNING.value
     step["started_at"] = datetime.now().isoformat()
 
-    try:
-        # Execute the tool
-        result = await tool.execute(**parameters)
+    # Execute the tool using the run() method for validation and timing
+    tool_result = await tool.run(**parameters)
 
+    if tool_result.success:
         # Mark success
         step["status"] = StepStatus.COMPLETED.value
         step["completed_at"] = datetime.now().isoformat()
-        step["result"] = result
+
+        # Get result data (ToolResult.data or empty dict)
+        result_data = tool_result.data or {}
+        step["result"] = result_data
 
         # Store in execution results
-        execution_results[step_id] = result
+        execution_results[step_id] = result_data
 
         # Update progress
-        update_progress(state, current_idx, len(plan), result)
+        update_progress(state, current_idx, len(plan), result_data)
 
         # Add progress message
         messages.append({
             "role": MessageRole.ASSISTANT.value,
-            "content": format_step_result(step, result),
+            "content": format_step_result(step, result_data),
             "timestamp": datetime.now().isoformat(),
             "tool_calls": [],
             "tool_call_id": None,
         })
 
-        logger.info("Step %d completed successfully", current_idx)
-
-    except Exception as e:
-        logger.exception("Step %d failed: %s", current_idx, e)
+        logger.info("Step %d completed successfully (%.2fs)", current_idx, tool_result.duration_seconds)
+    else:
+        # Tool execution failed
+        error_msg = tool_result.error or "Unknown error"
+        logger.error("Step %d failed: %s", current_idx, error_msg)
 
         # Mark failure
         step["status"] = StepStatus.FAILED.value
         step["completed_at"] = datetime.now().isoformat()
-        step["error"] = str(e)
+        step["error"] = error_msg
 
-        execution_results[step_id] = {"error": str(e)}
+        execution_results[step_id] = {"error": error_msg}
 
-        # Check retry logic
+        # Check retry logic for retryable errors
         retry_count = state.get("retry_count", 0)
-        if retry_count < MAX_RETRIES and is_retryable(e):
+        # Create a synthetic exception to check if retryable
+        synthetic_error = RuntimeError(error_msg)
+        if retry_count < MAX_RETRIES and is_retryable(synthetic_error):
             messages.append({
                 "role": MessageRole.ASSISTANT.value,
-                "content": f"Step failed: {e}. Retrying ({retry_count + 1}/{MAX_RETRIES})...",
+                "content": f"Step failed: {error_msg}. Retrying ({retry_count + 1}/{MAX_RETRIES})...",
                 "timestamp": datetime.now().isoformat(),
                 "tool_calls": [],
                 "tool_call_id": None,
@@ -426,7 +420,7 @@ async def execute_step_node(state: PipelineState) -> dict[str, Any]:
         # Non-retryable or max retries exceeded
         messages.append({
             "role": MessageRole.ASSISTANT.value,
-            "content": f"Step failed: {e}. Moving to next step.",
+            "content": f"Step failed: {error_msg}. Moving to next step.",
             "timestamp": datetime.now().isoformat(),
             "tool_calls": [],
             "tool_call_id": None,

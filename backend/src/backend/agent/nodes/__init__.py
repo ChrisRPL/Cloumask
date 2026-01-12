@@ -48,12 +48,10 @@ from backend.agent.nodes.complete import (
     generate_summary,
 )
 from backend.agent.nodes.execute import (
-    Tool,
-    ToolRegistry,
+    StubTool,
     execute_step,
     execute_step_node,
     format_step_result,
-    get_tool_registry,
     is_retryable,
     register_stub_tools,
     update_progress,
@@ -69,6 +67,16 @@ from backend.agent.nodes.plan import (
 )
 from backend.agent.nodes.understand import understand
 from backend.agent.state import PipelineState
+
+# Re-export from tools package (spec 06)
+from backend.agent.tools import (
+    BaseTool,
+    ToolCategory,
+    ToolParameter,
+    ToolRegistry,
+    ToolResult,
+    get_tool_registry,
+)
 
 
 # Alias functions for graph compatibility
@@ -100,10 +108,15 @@ __all__ = [
     "is_retryable",
     "calculate_final_stats",
     "generate_summary",
-    "Tool",
-    "ToolRegistry",
-    "get_tool_registry",
+    "StubTool",
     "register_stub_tools",
+    # Tool system (spec 06)
+    "BaseTool",
+    "ToolCategory",
+    "ToolParameter",
+    "ToolRegistry",
+    "ToolResult",
+    "get_tool_registry",
     # Human-in-the-Loop nodes (spec 05)
     "await_approval",
     "await_approval_node",
