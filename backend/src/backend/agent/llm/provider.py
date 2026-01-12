@@ -7,8 +7,8 @@ LLM instances that connect to a local Ollama server.
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from dataclasses import dataclass
-from functools import lru_cache
 from typing import TYPE_CHECKING
 
 from langchain_ollama import ChatOllama
@@ -38,7 +38,62 @@ class LLMConfig:
         )
 
 
-@lru_cache(maxsize=4)
+class _LLMCache:
+    """Simple LRU cache for LLM instances with configurable size."""
+
+    def __init__(self) -> None:
+        self._cache: OrderedDict[tuple[str, str, float, int, int], BaseChatModel] = (
+            OrderedDict()
+        )
+
+    @property
+    def maxsize(self) -> int:
+        """Get max cache size from settings."""
+        return settings.llm_cache_size
+
+    def get(
+        self,
+        host: str,
+        model: str,
+        temperature: float,
+        timeout: int,
+        num_ctx: int,
+    ) -> BaseChatModel:
+        """Get or create a cached LLM instance."""
+        key = (host, model, temperature, timeout, num_ctx)
+
+        if key in self._cache:
+            # Move to end (most recently used)
+            self._cache.move_to_end(key)
+            return self._cache[key]
+
+        # Create new instance
+        llm = ChatOllama(
+            base_url=host,
+            model=model,
+            temperature=temperature,
+            timeout=timeout,
+            num_ctx=num_ctx,
+        )
+
+        # Add to cache
+        self._cache[key] = llm
+
+        # Evict oldest if over capacity
+        while len(self._cache) > self.maxsize:
+            self._cache.popitem(last=False)
+
+        return llm
+
+    def clear(self) -> None:
+        """Clear the cache."""
+        self._cache.clear()
+
+
+# Global cache instance
+_llm_cache = _LLMCache()
+
+
 def get_llm_with_config(
     host: str,
     model: str,
@@ -49,7 +104,8 @@ def get_llm_with_config(
     """
     Get a cached LLM instance with specific configuration.
 
-    Uses lru_cache to avoid recreating clients for the same config.
+    Uses LRU cache to avoid recreating clients for the same config.
+    Cache size is configurable via CLOUMASK_LLM_CACHE_SIZE env var.
 
     Args:
         host: Ollama server host URL.
@@ -61,13 +117,7 @@ def get_llm_with_config(
     Returns:
         Configured ChatOllama instance.
     """
-    return ChatOllama(
-        base_url=host,
-        model=model,
-        temperature=temperature,
-        timeout=timeout,
-        num_ctx=num_ctx,
-    )
+    return _llm_cache.get(host, model, temperature, timeout, num_ctx)
 
 
 def get_llm(
@@ -109,7 +159,7 @@ def get_llm(
 
 def clear_llm_cache() -> None:
     """Clear the LLM instance cache. Useful for testing."""
-    get_llm_with_config.cache_clear()
+    _llm_cache.clear()
 
 
 __all__ = [
