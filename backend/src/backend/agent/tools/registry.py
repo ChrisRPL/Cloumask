@@ -165,21 +165,17 @@ class ToolRegistry:
         return name in self._tools
 
 
-# Module-level singleton accessor
-_registry: ToolRegistry | None = None
-
-
 def get_tool_registry() -> ToolRegistry:
     """
     Get the global tool registry instance.
 
+    The ToolRegistry class implements the singleton pattern via __new__,
+    so this always returns the same instance.
+
     Returns:
         The singleton ToolRegistry instance.
     """
-    global _registry
-    if _registry is None:
-        _registry = ToolRegistry()
-    return _registry
+    return ToolRegistry()
 
 
 def register_tool(tool_class: type[BaseTool]) -> type[BaseTool]:

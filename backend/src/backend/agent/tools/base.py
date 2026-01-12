@@ -16,7 +16,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, TypeVar
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -175,9 +175,6 @@ def error_result(error: str, **metadata: Any) -> ToolResult:
 # -----------------------------------------------------------------------------
 
 
-T = TypeVar("T", bound="BaseTool")
-
-
 class BaseTool(ABC):
     """
     Abstract base class for all agent tools.
@@ -207,7 +204,10 @@ class BaseTool(ABC):
                 return success_result({"files": [...]})
     """
 
-    # Class attributes to be overridden by subclasses
+    # Class attributes to be overridden by subclasses.
+    # Note: Subclasses MUST define their own `parameters` list to avoid
+    # sharing state. The empty list default is safe only because subclasses
+    # are expected to override it with their own list.
     name: str = "base_tool"
     description: str = "Base tool description"
     category: ToolCategory = ToolCategory.UTILITY
