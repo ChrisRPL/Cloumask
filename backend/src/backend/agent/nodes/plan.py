@@ -7,7 +7,6 @@ based on the user's intent extracted by the understand node.
 
 from __future__ import annotations
 
-import json
 import logging
 from datetime import datetime
 from typing import Any
@@ -18,6 +17,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from backend.agent.llm import get_llm
 from backend.agent.prompts import load_prompt
 from backend.agent.state import MessageRole, PipelineState, StepStatus
+from backend.agent.utils import extract_json_array
 
 logger = logging.getLogger(__name__)
 
@@ -144,53 +144,6 @@ def format_plan_for_display(plan: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def _extract_json_array_from_response(content: str) -> list[dict[str, Any]] | None:
-    """
-    Extract JSON array from LLM response, handling markdown code blocks.
-
-    Args:
-        content: Raw LLM response content.
-
-    Returns:
-        Parsed JSON list, or None if parsing fails.
-    """
-    # Try direct parsing first
-    try:
-        result = json.loads(content)
-        if isinstance(result, list):
-            return result
-    except json.JSONDecodeError:
-        pass
-
-    # Try extracting from markdown code block
-    if "```" in content:
-        parts = content.split("```")
-        for part in parts:
-            cleaned = part.strip()
-            if cleaned.startswith("json"):
-                cleaned = cleaned[4:].strip()
-
-            try:
-                result = json.loads(cleaned)
-                if isinstance(result, list):
-                    return result
-            except json.JSONDecodeError:
-                continue
-
-    # Try finding JSON-like content with brackets
-    start_idx = content.find("[")
-    end_idx = content.rfind("]")
-    if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
-        try:
-            result = json.loads(content[start_idx : end_idx + 1])
-            if isinstance(result, list):
-                return result
-        except json.JSONDecodeError:
-            pass
-
-    return None
-
-
 async def generate_plan(state: PipelineState) -> dict[str, Any]:
     """
     Generate an execution plan from the understood request.
@@ -260,7 +213,7 @@ Generate a JSON array of steps to accomplish this."""
             logger.debug(f"LLM response (attempt {attempt + 1}): {response_content}")
 
             # Parse JSON array from response
-            steps_raw = _extract_json_array_from_response(str(response_content))
+            steps_raw = extract_json_array(str(response_content))
 
             if steps_raw is None:
                 last_error = f"Failed to parse JSON array from response: {response_content[:200]}"

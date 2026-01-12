@@ -17,9 +17,10 @@ class Settings(BaseSettings):
     port: int = 8765
     debug: bool = False
 
-    # Ollama settings (for 12-dev-workflow-ollama)
+    # Ollama/LLM settings (for 12-dev-workflow-ollama)
     ollama_host: str = "http://localhost:11434"
     ollama_model: str = "qwen3:14b"
+    llm_cache_size: int = 4  # Max cached LLM instances
 
     # Model settings (for 03-cv-models)
     models_dir: str = "models"
