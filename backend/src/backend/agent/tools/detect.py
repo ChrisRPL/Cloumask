@@ -1,12 +1,15 @@
 """Detection tool for object detection in images.
 
-This is a STUB implementation that returns mock data for testing.
-Real implementation will integrate with YOLO11 inference.
+Uses YOLO11 (primary) or RT-DETR (fallback) for real inference.
+Supports 80 COCO classes with configurable confidence threshold.
 
+Implements spec: 03-cv-models/01-yolo11-detection
 Integration point: backend/cv/detection.py
 """
 
-import random
+from __future__ import annotations
+
+import logging
 from pathlib import Path
 
 from backend.agent.tools.base import (
@@ -17,17 +20,20 @@ from backend.agent.tools.base import (
     error_result,
     success_result,
 )
-from backend.agent.tools.constants import DEFAULT_DETECTION_CLASSES, IMAGE_EXTENSIONS
+from backend.agent.tools.constants import IMAGE_EXTENSIONS
 from backend.agent.tools.registry import register_tool
+
+logger = logging.getLogger(__name__)
 
 
 @register_tool
 class DetectTool(BaseTool):
-    """Detect objects in images using YOLO."""
+    """Detect objects in images using YOLO11 or RT-DETR."""
 
     name = "detect"
     description = """Run object detection on images to find and label objects.
-Supports common classes like vehicles, people, and can use custom prompts."""
+Uses YOLO11m (fast) or RT-DETR (accurate) models.
+Supports 80 COCO classes including vehicles, people, animals, furniture, etc."""
     category = ToolCategory.DETECTION
 
     parameters = [
@@ -40,9 +46,10 @@ Supports common classes like vehicles, people, and can use custom prompts."""
         ToolParameter(
             name="classes",
             type=list,
-            description="List of object classes to detect",
+            description="List of COCO class names to detect (e.g., ['person', 'car']). "
+            "None for all 80 classes.",
             required=False,
-            default=list(DEFAULT_DETECTION_CLASSES),  # Create a copy to avoid mutation
+            default=None,
         ),
         ToolParameter(
             name="confidence",
@@ -50,6 +57,13 @@ Supports common classes like vehicles, people, and can use custom prompts."""
             description="Minimum confidence threshold (0-1)",
             required=False,
             default=0.5,
+        ),
+        ToolParameter(
+            name="prefer_accuracy",
+            type=bool,
+            description="Use RT-DETR for higher accuracy (slower, more VRAM)",
+            required=False,
+            default=False,
         ),
         ToolParameter(
             name="save_annotations",
@@ -63,74 +77,119 @@ Supports common classes like vehicles, people, and can use custom prompts."""
     async def execute(
         self,
         input_path: str,
-        classes: list | None = None,
+        classes: list[str] | None = None,
         confidence: float = 0.5,
+        prefer_accuracy: bool = False,
         save_annotations: bool = True,
     ) -> ToolResult:
         """
-        STUB: Returns mock detection results.
+        Execute object detection using CV models.
 
-        TODO: Replace with YOLO11 inference.
-        Integration point: backend/cv/detection.py
+        Args:
+            input_path: Path to input image or directory.
+            classes: List of COCO class names to detect.
+            confidence: Minimum confidence threshold (0-1).
+            prefer_accuracy: Use RT-DETR instead of YOLO11.
+            save_annotations: Whether to save detection annotations.
+
+        Returns:
+            ToolResult with detection statistics.
         """
-        classes = classes if classes is not None else list(DEFAULT_DETECTION_CLASSES)
+        from backend.cv.detection import COCO_CLASSES, get_detector
+
         input_p = Path(input_path)
 
         if not input_p.exists():
             return error_result(f"Input not found: {input_path}")
 
-        # Validate confidence threshold
         if confidence < 0 or confidence > 1:
             return error_result(
                 f"Invalid confidence: {confidence}. Must be between 0 and 1."
             )
 
-        # Count files
-        file_count = self._count_image_files(input_p)
+        # Validate class names if provided
+        if classes:
+            invalid = [c for c in classes if c.lower() not in [cc.lower() for cc in COCO_CLASSES]]
+            if invalid:
+                return error_result(
+                    f"Invalid class names: {invalid}. "
+                    f"Valid classes include: {COCO_CLASSES[:10]}... (80 total)"
+                )
 
-        if file_count == 0:
+        # Collect image files
+        image_paths = self._collect_image_files(input_p)
+        if not image_paths:
             return error_result("No image files found")
 
-        # Generate mock detections with deterministic seed
-        seed = hash(input_path) % (2**32)
-        rng = random.Random(seed)
+        try:
+            # Get and load detector
+            detector = get_detector(prefer_accuracy=prefer_accuracy)
+            detector.load()
 
-        class_counts: dict[str, int] = {}
-        total_detections = 0
-
-        # Limit to 5 classes for mock data
-        for cls in classes[:5]:
-            count = rng.randint(file_count, file_count * 10)
-            class_counts[cls] = count
-            total_detections += count
-
-        # Simulate processing with progress reporting
-        for i in range(file_count):
-            self.report_progress(
-                i + 1, file_count, f"Detecting in file {i + 1}/{file_count}"
+            # Run detection with progress reporting
+            results = detector.predict_batch(
+                image_paths,
+                progress_callback=lambda curr, total: self.report_progress(
+                    curr, total, f"Detecting in image {curr}/{total}"
+                ),
+                confidence=confidence,
+                classes=classes,
             )
 
-        return success_result(
-            {
-                "files_processed": file_count,
-                "count": total_detections,
-                "classes": class_counts,
-                "confidence_threshold": confidence,
-                "confidence": round(0.82 + rng.uniform(-0.05, 0.1), 3),
-                "annotations_saved": save_annotations,
-                "_stub": True,
-                "_integration_point": "backend/cv/detection.py",
-            }
-        )
+            # Aggregate results
+            total_detections = 0
+            class_counts: dict[str, int] = {}
+            total_confidence = 0.0
 
-    def _count_image_files(self, path: Path) -> int:
-        """Count image files in path."""
+            for result in results:
+                total_detections += result.count
+                for det in result.detections:
+                    class_counts[det.class_name] = class_counts.get(det.class_name, 0) + 1
+                    total_confidence += det.confidence
+
+            avg_confidence = total_confidence / total_detections if total_detections > 0 else 0.0
+
+            # Unload to free memory
+            detector.unload()
+
+            return success_result(
+                {
+                    "files_processed": len(image_paths),
+                    "count": total_detections,
+                    "classes": class_counts,
+                    "confidence_threshold": confidence,
+                    "confidence": round(avg_confidence, 3),
+                    "model": detector.info.name,
+                    "annotations_saved": save_annotations,
+                }
+            )
+
+        except ImportError as e:
+            logger.exception("CV dependencies not installed")
+            return error_result(
+                f"CV dependencies not installed: {e}. "
+                "Install with: pip install -r requirements-cv.txt"
+            )
+        except Exception as e:
+            logger.exception("Detection failed")
+            return error_result(f"Detection failed: {e}")
+
+    def _collect_image_files(self, path: Path) -> list[str]:
+        """
+        Collect all image file paths.
+
+        Args:
+            path: Input path (file or directory).
+
+        Returns:
+            List of image file paths as strings.
+        """
         if path.is_file():
             if path.suffix.lower() in IMAGE_EXTENSIONS:
-                return 1
-            return 0
+                return [str(path)]
+            return []
 
-        count = 0
+        files: list[str] = []
         for ext in IMAGE_EXTENSIONS:
-            count += sum(1 for _ in path.glob(f"**/*{ext}"))
-        return count
+            files.extend(str(f) for f in path.glob(f"**/*{ext}"))
+        return files
