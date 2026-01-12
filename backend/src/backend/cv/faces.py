@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -140,13 +141,28 @@ class SCRFDWrapper(BaseModelWrapper[FaceDetectionResult]):
         if image is None:
             raise ValueError(f"Could not read image: {input_path}")
 
+        # Validate image dimensions
+        h, w = image.shape[:2]
+        if h == 0 or w == 0:
+            raise ValueError(f"Invalid image dimensions ({w}x{h}): {input_path}")
+
         # Convert BGR to RGB (InsightFace expects RGB)
         image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        h, w = image.shape[:2]
 
-        start = time.perf_counter()
-        faces = self._face_app.get(image_rgb)
-        elapsed_ms = (time.perf_counter() - start) * 1000
+        try:
+            start = time.perf_counter()
+            faces = self._face_app.get(image_rgb)
+            elapsed_ms = (time.perf_counter() - start) * 1000
+        except Exception as e:
+            # Check for GPU OOM errors
+            error_str = str(e).lower()
+            if any(term in error_str for term in ("out of memory", "oom", "cuda", "alloc")):
+                logger.warning("GPU memory error during face detection: %s", e)
+                raise RuntimeError(
+                    f"GPU out of memory during face detection. "
+                    f"Consider using YuNet fallback (realtime=True): {e}"
+                ) from e
+            raise
 
         # Convert to FaceDetection results
         results: list[FaceDetection] = []
@@ -250,6 +266,8 @@ YUNET_MODEL_URL = (
     "face_detection_yunet/face_detection_yunet_2023mar.onnx"
 )
 YUNET_MODEL_FILENAME = "face_detection_yunet_2023mar.onnx"
+# SHA256 checksum for model integrity verification
+YUNET_MODEL_SHA256 = "7faa3fd8f8e5d7a4c3de0e5a4f9c1e9a8e7c6b5d4a3f2e1d0c9b8a7f6e5d4c3b"  # TODO: Update with actual checksum
 
 
 @register_model
@@ -284,9 +302,16 @@ class YuNetWrapper(BaseModelWrapper[FaceDetectionResult]):
         """
         Get path to YuNet model, downloading if needed.
 
+        Downloads the model with timeout and verifies SHA256 checksum
+        for security. Falls back to skipping checksum if the expected
+        hash is a placeholder (for development).
+
         Returns:
             Path to YuNet ONNX model.
         """
+        import hashlib
+        import ssl
+
         from backend.cv.download import get_models_dir
 
         models_dir = get_models_dir()
@@ -296,12 +321,40 @@ class YuNetWrapper(BaseModelWrapper[FaceDetectionResult]):
             logger.info("Downloading YuNet model from OpenCV Zoo...")
             model_path.parent.mkdir(parents=True, exist_ok=True)
 
-            # Download with progress reporting
             try:
-                urllib.request.urlretrieve(YUNET_MODEL_URL, model_path)
+                # Download with timeout and SSL verification
+                ctx = ssl.create_default_context()
+                req = urllib.request.Request(
+                    YUNET_MODEL_URL,
+                    headers={"User-Agent": "Cloumask/1.0"},
+                )
+
+                with urllib.request.urlopen(req, timeout=120, context=ctx) as response:
+                    data = response.read()
+
+                # Verify checksum (skip if placeholder)
+                if not YUNET_MODEL_SHA256.startswith("7faa3fd8f8e5d7a4"):
+                    actual_hash = hashlib.sha256(data).hexdigest()
+                    if actual_hash.lower() != YUNET_MODEL_SHA256.lower():
+                        raise RuntimeError(
+                            f"Checksum mismatch for YuNet model: "
+                            f"expected {YUNET_MODEL_SHA256[:16]}..., "
+                            f"got {actual_hash[:16]}..."
+                        )
+                    logger.debug("YuNet model checksum verified")
+                else:
+                    logger.warning(
+                        "Skipping checksum verification (placeholder hash). "
+                        "Update YUNET_MODEL_SHA256 with actual checksum for production."
+                    )
+
+                model_path.write_bytes(data)
                 logger.info("YuNet model downloaded to %s", model_path)
-            except Exception as e:
+
+            except urllib.error.URLError as e:
                 raise RuntimeError(f"Failed to download YuNet model: {e}") from e
+            except TimeoutError as e:
+                raise RuntimeError(f"YuNet model download timed out: {e}") from e
 
         return model_path
 
@@ -359,6 +412,11 @@ class YuNetWrapper(BaseModelWrapper[FaceDetectionResult]):
         - landmarks: 5 points (10 values)
         - confidence: 1 value
 
+        Note:
+            This method is NOT thread-safe. The setInputSize/detect sequence
+            is not atomic. Use separate wrapper instances for concurrent
+            processing or synchronize access externally.
+
         Args:
             input_path: Path to input image.
             confidence: Minimum confidence threshold (0-1).
@@ -370,7 +428,7 @@ class YuNetWrapper(BaseModelWrapper[FaceDetectionResult]):
 
         Raises:
             RuntimeError: If model not loaded.
-            ValueError: If image cannot be read.
+            ValueError: If image cannot be read or has invalid dimensions.
         """
         import cv2
 
@@ -382,9 +440,13 @@ class YuNetWrapper(BaseModelWrapper[FaceDetectionResult]):
         if image is None:
             raise ValueError(f"Could not read image: {input_path}")
 
+        # Validate image dimensions
         h, w = image.shape[:2]
+        if h == 0 or w == 0:
+            raise ValueError(f"Invalid image dimensions ({w}x{h}): {input_path}")
 
         # Set input size to match image dimensions
+        # WARNING: Not thread-safe - setInputSize and detect must be atomic
         self._detector.setInputSize((w, h))
 
         start = time.perf_counter()
