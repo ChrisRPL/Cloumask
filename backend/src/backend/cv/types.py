@@ -58,11 +58,11 @@ class BBox(BaseModel):
         x2 = int((self.x + half_w) * img_w)
         y2 = int((self.y + half_h) * img_h)
 
-        # Clamp to image bounds
-        x1 = max(0, min(x1, img_w))
-        y1 = max(0, min(y1, img_h))
-        x2 = max(0, min(x2, img_w))
-        y2 = max(0, min(y2, img_h))
+        # Clamp to image bounds (0-indexed, so max is size-1)
+        x1 = max(0, min(x1, img_w - 1))
+        y1 = max(0, min(y1, img_h - 1))
+        x2 = max(0, min(x2, img_w - 1))
+        y2 = max(0, min(y2, img_h - 1))
 
         return x1, y1, x2, y2
 

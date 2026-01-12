@@ -95,6 +95,9 @@ class ModelManager:
         Lazy-loads the model if not already loaded. Moves model to
         front of LRU list on access.
 
+        Note: Model loading happens outside the lock to avoid blocking
+        other threads from accessing cached models during slow loads.
+
         Args:
             name: Registered model name.
             device: Target device ("cuda", "cpu", "mps", or "auto").
@@ -106,8 +109,8 @@ class ModelManager:
             ValueError: If model name not registered.
             RuntimeError: If model fails to load.
         """
+        # Fast path: check cache with lock
         with self._models_lock:
-            # Return cached model if loaded
             if name in self._models:
                 # Move to end for LRU tracking
                 self._models.move_to_end(name)
@@ -118,17 +121,30 @@ class ModelManager:
             if name not in self._registry:
                 raise ValueError(f"Unknown model: {name}. Register with manager.register() first.")
 
-            # Check VRAM and potentially evict
+            # Get wrapper class while holding lock
             wrapper_class = self._registry[name]
-            if device == "auto":
-                device = self._select_device(wrapper_class)
 
-            # Evict if necessary
-            self._ensure_capacity(wrapper_class.info.vram_required_mb)
+        # Select device and evict outside main lock (eviction acquires lock internally)
+        if device == "auto":
+            device = self._select_device(wrapper_class)
 
-            # Create and load model
-            wrapper = wrapper_class()
-            wrapper.load(device)
+        # Evict if necessary (this method handles its own locking)
+        self._ensure_capacity(wrapper_class.info.vram_required_mb)
+
+        # Create and load model OUTSIDE lock to avoid blocking other threads
+        wrapper = wrapper_class()
+        wrapper.load(device)
+
+        # Reacquire lock to store in cache
+        with self._models_lock:
+            # Check if another thread loaded the same model while we were loading
+            if name in self._models:
+                # Another thread beat us - unload our copy and use theirs
+                logger.debug("Model %s was loaded by another thread, using existing", name)
+                wrapper.unload()
+                self._models.move_to_end(name)
+                return self._models[name]
+
             self._models[name] = wrapper
 
             logger.info(
@@ -145,17 +161,23 @@ class ModelManager:
         """
         Unload a model and free memory.
 
+        Note: Model unloading happens outside the lock to avoid blocking
+        other threads during slow GPU memory cleanup.
+
         Args:
             name: Model name to unload.
         """
+        # Pop from cache with lock
         with self._models_lock:
             if name not in self._models:
                 logger.debug("Model %s not loaded, nothing to unload", name)
                 return
-
             model = self._models.pop(name)
-            model.unload()
-            logger.info("Unloaded model: %s (remaining=%d)", name, len(self._models))
+            remaining = len(self._models)
+
+        # Unload outside lock to avoid blocking other threads
+        model.unload()
+        logger.info("Unloaded model: %s (remaining=%d)", name, remaining)
 
     def unload_all(self) -> None:
         """Unload all models and free all GPU memory."""
@@ -324,8 +346,10 @@ class ModelManager:
 
         available = get_available_vram_mb()
 
-        # Check model count limit
-        if self._max_loaded > 0 and len(self._models) >= self._max_loaded:
+        # Check model count limit - use while loop in case max was decreased
+        while self._max_loaded > 0 and len(self._models) >= self._max_loaded:
+            if not self._models:
+                break
             self._evict_lru(1)
 
         # Check VRAM if GPU is being used

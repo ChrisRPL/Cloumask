@@ -15,6 +15,7 @@ from backend.cv.types import (
     BBox,
     Detection,
     Detection3D,
+    Detection3DResult,
     DetectionResult,
     FaceDetection,
     Mask,
@@ -346,6 +347,53 @@ class TestDetection3D:
         )
 
         assert detection.volume == pytest.approx(12.0)
+
+
+class TestDetection3DResult:
+    """Tests for Detection3DResult model."""
+
+    def test_detection3d_result_creation(self) -> None:
+        """Detection3DResult should contain multiple 3D detections."""
+        detections = [
+            Detection3D(
+                class_id=0,
+                class_name="car",
+                center=(10.0, 5.0, 0.8),
+                dimensions=(4.5, 1.8, 1.5),
+                rotation=0.0,
+                confidence=0.95,
+            ),
+            Detection3D(
+                class_id=1,
+                class_name="pedestrian",
+                center=(5.0, 2.0, 0.9),
+                dimensions=(0.5, 0.5, 1.8),
+                rotation=1.57,
+                confidence=0.88,
+            ),
+        ]
+
+        result = Detection3DResult(
+            detections=detections,
+            pointcloud_path="/test/pointcloud.pcd",
+            processing_time_ms=150.0,
+            model_name="pvrcnn",
+        )
+
+        assert result.count == 2
+        assert result.model_name == "pvrcnn"
+        assert result.pointcloud_path == "/test/pointcloud.pcd"
+
+    def test_detection3d_result_empty(self) -> None:
+        """Detection3DResult should handle empty detections."""
+        result = Detection3DResult(
+            detections=[],
+            pointcloud_path="/test/empty.pcd",
+            processing_time_ms=50.0,
+            model_name="centerpoint",
+        )
+
+        assert result.count == 0
 
 
 # -----------------------------------------------------------------------------

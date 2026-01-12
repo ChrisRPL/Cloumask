@@ -18,9 +18,10 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from backend.api.config import settings
-
 logger = logging.getLogger(__name__)
+
+# Default models directory (can be overridden by CLOUMASK_MODELS_DIR or settings)
+_DEFAULT_MODELS_DIR = "models"
 
 
 class ModelSource(str, Enum):
@@ -54,12 +55,27 @@ def get_models_dir() -> Path:
     """
     Get the models directory path.
 
-    Uses CLOUMASK_MODELS_DIR environment variable or settings default.
+    Priority order:
+    1. CLOUMASK_MODELS_DIR environment variable
+    2. settings.models_dir (if backend.api.config is available)
+    3. Default "models" directory
 
     Returns:
         Path to models directory.
     """
-    return Path(settings.models_dir).resolve()
+    # Check environment variable first
+    env_dir = os.getenv("CLOUMASK_MODELS_DIR")
+    if env_dir:
+        return Path(env_dir).resolve()
+
+    # Try to get from settings (lazy import to avoid hard dependency)
+    try:
+        from backend.api.config import settings
+
+        return Path(settings.models_dir).resolve()
+    except ImportError:
+        logger.debug("backend.api.config not available, using default models dir")
+        return Path(_DEFAULT_MODELS_DIR).resolve()
 
 
 # Model registry with known models and their metadata
@@ -205,7 +221,7 @@ def download_model(
 
     try:
         if entry.source == ModelSource.ULTRALYTICS:
-            return _download_ultralytics(name, entry, progress_callback)
+            return _get_ultralytics_path(name, entry, progress_callback)
         elif entry.source == ModelSource.HUGGINGFACE:
             return _download_huggingface(name, entry, progress_callback)
         elif entry.source == ModelSource.LOCAL:
@@ -240,8 +256,10 @@ def _download_huggingface(
     if not entry.repo_id:
         raise ValueError(f"Model {name} missing repo_id for HuggingFace download")
 
-    # Get token from environment if auth required
-    token = os.getenv("HF_TOKEN") if entry.requires_auth else None
+    # Get token from environment if auth required (support both common env var names)
+    token = None
+    if entry.requires_auth:
+        token = os.getenv("HF_TOKEN") or os.getenv("HUGGING_FACE_HUB_TOKEN")
 
     models_dir = get_models_dir()
     local_dir = models_dir / name
@@ -269,29 +287,32 @@ def _download_huggingface(
         return local_dir
 
 
-def _download_ultralytics(
+def _get_ultralytics_path(
     name: str,
     entry: ModelRegistryEntry,
     progress_callback: DownloadProgressCallback | None = None,
 ) -> Path:
     """
-    Download Ultralytics model.
+    Get expected path for Ultralytics model.
 
-    Note: Ultralytics models auto-download on first use. This function
-    just returns the expected path.
+    Note: Ultralytics models auto-download on first use via their API.
+    This function does NOT download the model - it only returns the
+    expected path where the model will be stored. The actual download
+    happens when the model is first loaded via ultralytics.YOLO().
 
     Args:
         name: Model name.
         entry: Registry entry.
-        progress_callback: Optional progress callback (not used).
+        progress_callback: Optional progress callback (not used - Ultralytics
+            handles download internally).
 
     Returns:
-        Expected path to model.
+        Expected path where model will be stored.
     """
     models_dir = get_models_dir()
     model_path = models_dir / entry.filename if entry.filename else models_dir / f"{name}.pt"
 
-    # Ultralytics handles its own downloads, we just ensure directory exists
+    # Ensure directory exists for when Ultralytics downloads the model
     models_dir.mkdir(parents=True, exist_ok=True)
 
     logger.info(

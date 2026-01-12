@@ -373,7 +373,6 @@ class TestMaxLoadedLimit:
         clean_manager.set_max_loaded(0)
         assert clean_manager._max_loaded == 0
 
-    @pytest.mark.skip(reason="Test hangs due to singleton reset timing issues in CI")
     @patch("backend.cv.device.select_device", return_value="cpu")
     @patch("backend.cv.device.get_available_vram_mb", return_value=10000)
     @patch("backend.cv.device.clear_gpu_memory")

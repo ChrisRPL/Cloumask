@@ -14,10 +14,7 @@ import os
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    pass
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -77,8 +74,11 @@ def get_vram_usage() -> tuple[int, int]:
     """
     try:
         return _get_vram_pynvml()
+    except (ImportError, ModuleNotFoundError) as e:
+        logger.debug("pynvml not installed (%s), trying nvidia-smi", e)
+        return _get_vram_nvidia_smi()
     except Exception as e:
-        logger.debug("pynvml unavailable (%s), trying nvidia-smi", e)
+        logger.warning("pynvml failed unexpectedly (%s), trying nvidia-smi", e)
         return _get_vram_nvidia_smi()
 
 
