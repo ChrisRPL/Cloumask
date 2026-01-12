@@ -119,6 +119,12 @@ MODEL_REGISTRY: dict[str, ModelRegistryEntry] = {
         filename="yolov8l-worldv2.pt",
         size_mb=170,
     ),
+    "rtdetr-l": ModelRegistryEntry(
+        name="rtdetr-l",
+        source=ModelSource.ULTRALYTICS,
+        filename="rtdetr-l.pt",
+        size_mb=150,
+    ),
 }
 
 
