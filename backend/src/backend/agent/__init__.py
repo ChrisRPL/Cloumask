@@ -9,14 +9,19 @@ from backend.agent.graph import (
     run_agent,
     should_checkpoint,
 )
+from backend.agent.llm import LLMConfig, get_llm
 from backend.agent.nodes import (
+    VALID_TOOLS,
     await_approval,
     complete,
     create_checkpoint,
     execute_step,
+    format_plan_for_display,
     generate_plan,
     understand,
+    validate_plan,
 )
+from backend.agent.prompts import clear_prompt_cache, load_prompt
 from backend.agent.state import (
     Checkpoint,
     CheckpointTrigger,
@@ -66,8 +71,17 @@ __all__ = [
     # Node functions
     "understand",
     "generate_plan",
+    "validate_plan",
+    "format_plan_for_display",
+    "VALID_TOOLS",
     "await_approval",
     "execute_step",
     "create_checkpoint",
     "complete",
+    # LLM
+    "get_llm",
+    "LLMConfig",
+    # Prompts
+    "load_prompt",
+    "clear_prompt_cache",
 ]
