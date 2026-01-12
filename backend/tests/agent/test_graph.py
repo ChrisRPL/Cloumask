@@ -331,23 +331,27 @@ class TestRunAgent:
 
 
 class TestNodeStubs:
-    """Tests for node stub implementations."""
+    """Tests for node implementations (stubs for some, real for planning nodes)."""
 
-    def test_understand_returns_empty_dict(self) -> None:
-        """understand node should return empty dict (pass-through)."""
+    @pytest.mark.asyncio
+    async def test_understand_returns_result(self) -> None:
+        """understand node (now async) should return state update or error."""
         from backend.agent.nodes import understand
 
         state = _create_minimal_state()
-        result = understand(state)
-        assert result == {}
+        result = await understand(state)
+        # Without a user message, it returns an error
+        assert "last_error" in result or "metadata" in result
 
-    def test_generate_plan_returns_empty_dict(self) -> None:
-        """generate_plan node should return empty dict (pass-through)."""
+    @pytest.mark.asyncio
+    async def test_generate_plan_returns_result(self) -> None:
+        """generate_plan node (now async) should return state update or error."""
         from backend.agent.nodes import generate_plan
 
         state = _create_minimal_state()
-        result = generate_plan(state)
-        assert result == {}
+        result = await generate_plan(state)
+        # Without understanding, it returns an error
+        assert "last_error" in result or "plan" in result
 
     def test_await_approval_sets_awaiting_user(self) -> None:
         """await_approval node should set awaiting_user flag."""

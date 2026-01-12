@@ -1,14 +1,14 @@
 """
 LangGraph node implementations for the Cloumask agent.
 
-This module provides minimal pass-through stub implementations for all graph nodes.
-The actual node logic will be implemented in future specifications:
-- 03-agent-nodes-planning: understand, plan nodes
+This module provides node implementations for the agent state machine.
+Implemented nodes (spec 03-agent-nodes-planning):
+- understand: Parse natural language request and extract intent
+- generate_plan: Generate execution plan using LLM
+
+Stub implementations for future specs:
 - 04-agent-nodes-execution: execute_step, complete nodes
 - 05-human-in-the-loop: await_approval, checkpoint nodes
-
-Note: Stubs are synchronous for simplicity. Future implementations may be async
-when actual I/O operations are added (LLM calls, file operations, etc.).
 """
 
 from __future__ import annotations
@@ -17,47 +17,19 @@ from datetime import datetime
 from typing import Any
 from uuid import uuid4
 
+# Import real implementations from submodules
+from backend.agent.nodes.plan import (
+    VALID_TOOLS,
+    format_plan_for_display,
+    generate_plan,
+    validate_plan,
+)
+from backend.agent.nodes.understand import understand
 from backend.agent.state import CheckpointTrigger, PipelineState
 
-
-def understand(state: PipelineState) -> dict[str, Any]:
-    """
-    Analyze user request and extract intent.
-
-    Pass-through stub: Returns empty dict (no state changes).
-
-    Future implementation (spec 03):
-    - Parse natural language request
-    - Extract file paths, operations, parameters
-    - Add intent analysis to messages
-
-    Args:
-        state: Current pipeline state.
-
-    Returns:
-        State update dict (empty for stub).
-    """
-    return {}
-
-
-def generate_plan(state: PipelineState) -> dict[str, Any]:
-    """
-    Generate execution plan from understood request.
-
-    Pass-through stub: Returns empty dict (no state changes).
-
-    Future implementation (spec 03):
-    - Generate PipelineStep list from intent
-    - Use LLM to create optimal execution order
-    - Add plan to state for approval
-
-    Args:
-        state: Current pipeline state.
-
-    Returns:
-        State update dict (empty for stub).
-    """
-    return {}
+# -----------------------------------------------------------------------------
+# Stub implementations for future specs
+# -----------------------------------------------------------------------------
 
 
 def await_approval(state: PipelineState) -> dict[str, Any]:
@@ -169,8 +141,13 @@ def complete(state: PipelineState) -> dict[str, Any]:
 
 
 __all__ = [
+    # Real implementations (spec 03)
     "understand",
     "generate_plan",
+    "validate_plan",
+    "format_plan_for_display",
+    "VALID_TOOLS",
+    # Stubs (future specs)
     "await_approval",
     "execute_step",
     "create_checkpoint",
