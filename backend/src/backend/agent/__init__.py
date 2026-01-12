@@ -1,5 +1,14 @@
 """LangGraph agent implementation for Cloumask pipeline execution."""
 
+from backend.agent.checkpoints import (
+    CheckpointManager,
+    SQLiteCheckpointSaver,
+    STATUS_ACTIVE,
+    STATUS_CANCELLED,
+    STATUS_COMPLETED,
+    create_compiled_graph_with_manager,
+    resume_pipeline,
+)
 from backend.agent.graph import (
     compile_agent,
     create_agent_graph,
@@ -84,4 +93,12 @@ __all__ = [
     # Prompts
     "load_prompt",
     "clear_prompt_cache",
+    # Checkpoint persistence
+    "SQLiteCheckpointSaver",
+    "CheckpointManager",
+    "create_compiled_graph_with_manager",
+    "resume_pipeline",
+    "STATUS_ACTIVE",
+    "STATUS_COMPLETED",
+    "STATUS_CANCELLED",
 ]
