@@ -372,36 +372,35 @@ class CheckpointManager:
             yield checkpointer
 
 
+@asynccontextmanager
 async def create_compiled_graph_with_manager(
     db_path: str = "data/checkpoints.db",
-) -> tuple[CompiledStateGraph, CheckpointManager]:
+) -> AsyncGenerator[tuple[CompiledStateGraph, CheckpointManager], None]:
     """
     Create a compiled graph with checkpoint manager.
 
-    This is a convenience function that creates both
+    This is an async context manager that creates both
     the compiled graph and manager for use together.
-
-    Note: This function creates but does not yield the graph.
-    For async context manager usage, use CheckpointManager.get_checkpointer()
-    directly.
 
     Args:
         db_path: Path to SQLite database file.
 
-    Returns:
+    Yields:
         Tuple of (compiled_graph, checkpoint_manager).
+
+    Example:
+        async with create_compiled_graph_with_manager() as (graph, manager):
+            async for event in resume_pipeline("thread-1", "message", graph, manager):
+                print(event)
     """
     from backend.agent.graph import create_agent_graph
 
     manager = CheckpointManager(db_path)
     graph = create_agent_graph()
 
-    # Create the checkpointer context
     async with manager.get_checkpointer() as checkpointer:
         compiled = graph.compile(checkpointer=checkpointer)
-        # Note: This returns inside the context, so caller must
-        # manage the lifecycle appropriately
-        return compiled, manager
+        yield compiled, manager
 
 
 async def resume_pipeline(

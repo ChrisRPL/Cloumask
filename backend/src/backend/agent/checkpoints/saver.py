@@ -13,7 +13,7 @@ import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterator
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -211,6 +211,14 @@ class SQLiteCheckpointSaver:
             ).fetchone()
 
             if row:
+                # Handle potentially corrupted metadata JSON
+                metadata = None
+                if row["metadata"]:
+                    try:
+                        metadata = json.loads(row["metadata"])
+                    except json.JSONDecodeError:
+                        metadata = {"_raw": row["metadata"], "_error": "invalid_json"}
+
                 return {
                     "thread_id": row["thread_id"],
                     "created_at": row["created_at"],
@@ -218,23 +226,29 @@ class SQLiteCheckpointSaver:
                     "status": row["status"],
                     "title": row["title"],
                     "input_path": row["input_path"],
-                    "metadata": json.loads(row["metadata"]) if row["metadata"] else None,
+                    "metadata": metadata,
                 }
             return None
 
-    def update_thread_status(self, thread_id: str, status: str) -> None:
+    def update_thread_status(self, thread_id: str, status: str) -> bool:
         """
         Update thread status.
 
         Args:
             thread_id: Thread identifier.
             status: New status (active, completed, cancelled).
+
+        Returns:
+            True if thread was updated, False if thread not found.
+
+        Raises:
+            ValueError: If status is not valid.
         """
         if status not in (STATUS_ACTIVE, STATUS_COMPLETED, STATUS_CANCELLED):
             raise ValueError(f"Invalid status: {status}")
 
         with self._get_conn() as conn:
-            conn.execute(
+            cursor = conn.execute(
                 """
                 UPDATE threads
                 SET status = ?, updated_at = CURRENT_TIMESTAMP
@@ -242,6 +256,7 @@ class SQLiteCheckpointSaver:
                 """,
                 (status, thread_id),
             )
+            return cursor.rowcount > 0
 
     def list_threads(
         self,
@@ -342,6 +357,11 @@ class SQLiteCheckpointSaver:
             checkpoint_data: The checkpoint data to store.
             parent_id: Parent checkpoint ID (optional).
             metadata: Additional metadata (optional).
+
+        Note:
+            Checkpoint data is serialized using pickle. This is suitable
+            for single-user desktop apps but should not be used with
+            untrusted data. Consider msgpack for production deployments.
         """
         self.ensure_thread(thread_id)
 
@@ -469,7 +489,13 @@ class SQLiteCheckpointSaver:
             thread_id: Thread identifier.
             checkpoint_id: Checkpoint identifier.
             writes: List of (channel, value) tuples.
+
+        Note:
+            Values are serialized using pickle. Only use with trusted data.
         """
+        # Ensure thread exists to satisfy foreign key constraint
+        self.ensure_thread(thread_id)
+
         with self._get_conn() as conn:
             for channel, value in writes:
                 conn.execute(
