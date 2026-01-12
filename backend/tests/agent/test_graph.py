@@ -361,12 +361,22 @@ class TestNodeStubs:
         result = await_approval(state)
         assert result["awaiting_user"] is True
 
-    def test_execute_step_increments_current_step(self) -> None:
+    @pytest.mark.asyncio
+    async def test_execute_step_increments_current_step(self) -> None:
         """execute_step node should increment current_step."""
-        from backend.agent.nodes import execute_step
+        from backend.agent.nodes import execute_step, register_stub_tools
 
+        register_stub_tools()
         state = _create_minimal_state(current_step=0)
-        result = execute_step(state)
+        # Add a valid plan step for the execution
+        state["plan"] = [{
+            "id": "step-0",
+            "tool_name": "scan_directory",
+            "parameters": {"path": "/data"},
+            "description": "Scan",
+            "status": "pending",
+        }]
+        result = await execute_step(state)
         assert result["current_step"] == 1
 
     def test_create_checkpoint_creates_checkpoint_record(self) -> None:
@@ -383,10 +393,11 @@ class TestNodeStubs:
         assert cp["trigger_reason"] == "percentage"
         assert result["awaiting_user"] is True
 
-    def test_complete_returns_awaiting_user_false(self) -> None:
+    @pytest.mark.asyncio
+    async def test_complete_returns_awaiting_user_false(self) -> None:
         """complete node should set awaiting_user to False."""
         from backend.agent.nodes import complete
 
         state = _create_minimal_state(awaiting_user=True)
-        result = complete(state)
+        result = await complete(state)
         assert result["awaiting_user"] is False
