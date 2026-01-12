@@ -17,10 +17,8 @@ from backend.agent.tools.base import (
     error_result,
     success_result,
 )
+from backend.agent.tools.constants import IMAGE_EXTENSIONS
 from backend.agent.tools.registry import register_tool
-
-# Supported image extensions for anonymization
-SUPPORTED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
 
 
 @register_tool
@@ -136,11 +134,11 @@ This protects privacy by anonymizing identifiable information."""
     def _count_image_files(self, path: Path) -> int:
         """Count image files in path."""
         if path.is_file():
-            if path.suffix.lower() in SUPPORTED_IMAGE_EXTENSIONS:
+            if path.suffix.lower() in IMAGE_EXTENSIONS:
                 return 1
             return 0
 
         count = 0
-        for ext in SUPPORTED_IMAGE_EXTENSIONS:
+        for ext in IMAGE_EXTENSIONS:
             count += sum(1 for _ in path.glob(f"**/*{ext}"))
         return count

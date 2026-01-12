@@ -17,13 +17,8 @@ from backend.agent.tools.base import (
     error_result,
     success_result,
 )
+from backend.agent.tools.constants import DEFAULT_DETECTION_CLASSES, IMAGE_EXTENSIONS
 from backend.agent.tools.registry import register_tool
-
-# Default object classes for detection
-DEFAULT_CLASSES = ["person", "car", "truck", "bus", "bicycle", "motorcycle"]
-
-# Supported image extensions
-SUPPORTED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
 
 
 @register_tool
@@ -47,7 +42,7 @@ Supports common classes like vehicles, people, and can use custom prompts."""
             type=list,
             description="List of object classes to detect",
             required=False,
-            default=DEFAULT_CLASSES,
+            default=list(DEFAULT_DETECTION_CLASSES),  # Create a copy to avoid mutation
         ),
         ToolParameter(
             name="confidence",
@@ -78,7 +73,7 @@ Supports common classes like vehicles, people, and can use custom prompts."""
         TODO: Replace with YOLO11 inference.
         Integration point: backend/cv/detection.py
         """
-        classes = classes if classes is not None else DEFAULT_CLASSES
+        classes = classes if classes is not None else list(DEFAULT_DETECTION_CLASSES)
         input_p = Path(input_path)
 
         if not input_p.exists():
@@ -131,11 +126,11 @@ Supports common classes like vehicles, people, and can use custom prompts."""
     def _count_image_files(self, path: Path) -> int:
         """Count image files in path."""
         if path.is_file():
-            if path.suffix.lower() in SUPPORTED_IMAGE_EXTENSIONS:
+            if path.suffix.lower() in IMAGE_EXTENSIONS:
                 return 1
             return 0
 
         count = 0
-        for ext in SUPPORTED_IMAGE_EXTENSIONS:
+        for ext in IMAGE_EXTENSIONS:
             count += sum(1 for _ in path.glob(f"**/*{ext}"))
         return count

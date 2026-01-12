@@ -44,33 +44,41 @@ class ToolRegistry:
             cls._instance._tools = {}
         return cls._instance
 
-    def register(self, tool: BaseTool) -> None:
+    def register(self, tool: BaseTool, allow_replace: bool = False) -> None:
         """
         Register a tool instance.
 
         Args:
             tool: The tool instance to register.
+            allow_replace: If True, silently replace existing registration.
 
         Raises:
-            ValueError: If a tool with the same name is already registered.
+            ValueError: If a tool with the same name is already registered
+                       and allow_replace is False.
         """
         if tool.name in self._tools:
-            raise ValueError(f"Tool already registered: {tool.name}")
+            if not allow_replace:
+                raise ValueError(f"Tool already registered: {tool.name}")
+            logger.debug("Replacing tool: %s", tool.name)
         self._tools[tool.name] = tool
         logger.debug("Registered tool: %s", tool.name)
 
-    def register_class(self, tool_class: type[BaseTool]) -> None:
+    def register_class(
+        self, tool_class: type[BaseTool], allow_replace: bool = False
+    ) -> None:
         """
         Register a tool by class (instantiates it).
 
         Args:
             tool_class: The tool class to instantiate and register.
+            allow_replace: If True, silently replace existing registration.
 
         Raises:
-            ValueError: If a tool with the same name is already registered.
+            ValueError: If a tool with the same name is already registered
+                       and allow_replace is False.
         """
         tool = tool_class()
-        self.register(tool)
+        self.register(tool, allow_replace=allow_replace)
 
     def unregister(self, name: str) -> bool:
         """
@@ -183,7 +191,8 @@ def register_tool(tool_class: type[BaseTool]) -> type[BaseTool]:
     Decorator to automatically register a tool class.
 
     Use this decorator on tool classes to have them automatically
-    registered when the module is imported.
+    registered when the module is imported. If the tool is already
+    registered, it will be replaced (supports module reloading).
 
     Example:
         @register_tool
@@ -197,5 +206,5 @@ def register_tool(tool_class: type[BaseTool]) -> type[BaseTool]:
     Returns:
         The same tool class (unmodified).
     """
-    get_tool_registry().register_class(tool_class)
+    get_tool_registry().register_class(tool_class, allow_replace=True)
     return tool_class

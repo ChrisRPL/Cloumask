@@ -16,10 +16,8 @@ from backend.agent.tools.base import (
     error_result,
     success_result,
 )
+from backend.agent.tools.constants import ANNOTATION_EXTENSIONS, SUPPORTED_EXPORT_FORMATS
 from backend.agent.tools.registry import register_tool
-
-# Supported export formats
-SUPPORTED_FORMATS = ["yolo", "coco", "pascal", "labelme", "cvat"]
 
 
 @register_tool
@@ -45,11 +43,11 @@ Use after detection/segmentation to create training data."""
             required=True,
         ),
         ToolParameter(
-            name="format",
+            name="output_format",
             type=str,
-            description="Output format",
+            description="Output format (yolo, coco, pascal, labelme, cvat)",
             required=True,
-            enum_values=SUPPORTED_FORMATS,
+            enum_values=SUPPORTED_EXPORT_FORMATS,
         ),
         ToolParameter(
             name="split_ratio",
@@ -64,7 +62,7 @@ Use after detection/segmentation to create training data."""
         self,
         input_path: str,
         output_path: str,
-        format: str,
+        output_format: str,
         split_ratio: float = 0.8,
     ) -> ToolResult:
         """
@@ -79,9 +77,10 @@ Use after detection/segmentation to create training data."""
         if not input_p.exists():
             return error_result(f"Input not found: {input_path}")
 
-        if format not in SUPPORTED_FORMATS:
+        if output_format not in SUPPORTED_EXPORT_FORMATS:
             return error_result(
-                f"Unsupported format: {format}. Use one of {SUPPORTED_FORMATS}"
+                f"Unsupported format: {output_format}. "
+                f"Use one of {SUPPORTED_EXPORT_FORMATS}"
             )
 
         # Validate split ratio
@@ -101,7 +100,13 @@ Use after detection/segmentation to create training data."""
         val_count = annotation_count - train_count
 
         # Mock export structure based on format
-        export_structure = self._get_format_structure(format, output_p)
+        export_structure = self._get_format_structure(output_format)
+
+        # Simulate processing with progress reporting
+        for i in range(annotation_count):
+            self.report_progress(
+                i + 1, annotation_count, f"Exporting annotation {i + 1}/{annotation_count}"
+            )
 
         return success_result(
             {
@@ -109,27 +114,27 @@ Use after detection/segmentation to create training data."""
                 "train_count": train_count,
                 "val_count": val_count,
                 "output_path": str(output_p),
-                "format": format,
+                "format": output_format,
                 "split_ratio": split_ratio,
                 "structure": export_structure,
                 "_stub": True,
-                "_integration_point": f"backend/data/exporters/{format}.py",
+                "_integration_point": f"backend/data/exporters/{output_format}.py",
             }
         )
 
     def _count_annotation_files(self, path: Path) -> int:
         """Count annotation files in path."""
         if path.is_file():
-            if path.suffix.lower() in {".json", ".xml", ".txt"}:
+            if path.suffix.lower() in ANNOTATION_EXTENSIONS:
                 return 1
             return 0
 
         count = 0
-        for ext in [".json", ".xml", ".txt"]:
+        for ext in ANNOTATION_EXTENSIONS:
             count += sum(1 for _ in path.glob(f"**/*{ext}"))
         return count
 
-    def _get_format_structure(self, format: str, output_path: Path) -> dict[str, str]:
+    def _get_format_structure(self, output_format: str) -> dict[str, str]:
         """Get expected output structure for format."""
         format_structures: dict[str, dict[str, str]] = {
             "yolo": {
@@ -160,4 +165,4 @@ Use after detection/segmentation to create training data."""
                 "annotations.xml": "CVAT XML annotations",
             },
         }
-        return format_structures.get(format, {"output/": "Exported annotations"})
+        return format_structures.get(output_format, {"output/": "Exported annotations"})

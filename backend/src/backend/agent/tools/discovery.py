@@ -12,6 +12,7 @@ from __future__ import annotations
 import importlib
 import logging
 import pkgutil
+import sys
 from pathlib import Path
 
 from backend.agent.tools.registry import get_tool_registry
@@ -52,16 +53,23 @@ def discover_tools(package_path: str = "backend.agent.tools") -> list[str]:
 
     package_dir = Path(package.__file__).parent
 
+    # Modules that should never be reloaded (would break singletons or cause issues)
+    skip_modules = {"registry", "base", "constants", "discovery"}
+
     # Iterate through all modules in the package
     for _, module_name, is_pkg in pkgutil.iter_modules([str(package_dir)]):
-        # Skip private modules and sub-packages
-        if module_name.startswith("_"):
+        # Skip private modules, sub-packages, and system modules
+        if module_name.startswith("_") or module_name in skip_modules:
             continue
 
         full_name = f"{package_path}.{module_name}"
 
         try:
-            importlib.import_module(full_name)
+            # Use reload() for already-imported modules to re-trigger decorators
+            if full_name in sys.modules:
+                importlib.reload(sys.modules[full_name])
+            else:
+                importlib.import_module(full_name)
             discovered_modules.append(module_name)
             logger.debug("Discovered tool module: %s", full_name)
 

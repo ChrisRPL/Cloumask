@@ -7,59 +7,7 @@ import pytest
 
 from backend.agent.tools.scan import ScanDirectoryTool
 
-
-@pytest.fixture
-def temp_dataset(tmp_path):
-    """Create a temporary dataset directory with various file types."""
-    # Create image directory with files
-    img_dir = tmp_path / "images"
-    img_dir.mkdir()
-    for i in range(10):
-        (img_dir / f"image_{i}.jpg").write_bytes(b"fake_image_data" * 100)
-
-    # Create video directory with files
-    vid_dir = tmp_path / "videos"
-    vid_dir.mkdir()
-    for i in range(3):
-        (vid_dir / f"video_{i}.mp4").write_bytes(b"fake_video_data" * 1000)
-
-    # Create annotation files
-    (tmp_path / "labels.json").write_text('{"annotations": []}')
-
-    return tmp_path
-
-
-@pytest.fixture
-def nested_dataset(tmp_path):
-    """Create a nested directory structure."""
-    # Level 1
-    level1 = tmp_path / "level1"
-    level1.mkdir()
-    (level1 / "file1.jpg").touch()
-
-    # Level 2
-    level2 = level1 / "level2"
-    level2.mkdir()
-    (level2 / "file2.jpg").touch()
-
-    # Level 3
-    level3 = level2 / "level3"
-    level3.mkdir()
-    (level3 / "file3.jpg").touch()
-
-    return tmp_path
-
-
-@pytest.fixture
-def pointcloud_dataset(tmp_path):
-    """Create a point cloud dataset."""
-    pc_dir = tmp_path / "pointclouds"
-    pc_dir.mkdir()
-    for i in range(5):
-        (pc_dir / f"scan_{i}.las").touch()
-        (pc_dir / f"scan_{i}.pcd").touch()
-
-    return tmp_path
+# Fixtures temp_dataset, nested_dataset, pointcloud_dataset are defined in conftest.py
 
 
 class TestScanDirectoryBasic:
@@ -72,8 +20,8 @@ class TestScanDirectoryBasic:
         result = await tool.run(path=str(temp_dataset))
 
         assert result.success is True
-        # 10 images + 3 videos + 1 json = 14 files
-        assert result.data["total_files"] == 14
+        # 10 images + 3 videos + 5 annotations = 18 files
+        assert result.data["total_files"] == 18
 
     @pytest.mark.asyncio
     async def test_scan_directory_categorizes_types(self, temp_dataset):
@@ -84,7 +32,7 @@ class TestScanDirectoryBasic:
         assert result.success is True
         assert result.data["type_counts"]["images"] == 10
         assert result.data["type_counts"]["videos"] == 3
-        assert result.data["type_counts"]["annotations"] == 1
+        assert result.data["type_counts"]["annotations"] == 5
         assert result.data["type_counts"]["pointclouds"] == 0
 
     @pytest.mark.asyncio
@@ -94,8 +42,8 @@ class TestScanDirectoryBasic:
         result = await tool.run(path=str(temp_dataset))
 
         assert result.success is True
-        # images/ and videos/ directories
-        assert result.data["subdirectories"] == 2
+        # images/, videos/, and annotations/ directories
+        assert result.data["subdirectories"] == 3
 
     @pytest.mark.asyncio
     async def test_scan_directory_calculates_size(self, temp_dataset):
@@ -248,6 +196,15 @@ class TestScanDirectoryErrors:
         assert result.success is False
         assert "not a directory" in result.error.lower()
 
+    @pytest.mark.asyncio
+    async def test_empty_directory_returns_zero_files(self, empty_dataset):
+        """Should handle empty directories gracefully."""
+        tool = ScanDirectoryTool()
+        result = await tool.run(path=str(empty_dataset))
+
+        assert result.success is True
+        assert result.data["total_files"] == 0
+
 
 class TestScanDirectoryAnnotations:
     """Tests for annotation detection."""
@@ -287,10 +244,31 @@ class TestScanDirectoryProgress:
         result = await tool.run(path=str(temp_dataset))
 
         assert result.success is True
-        assert len(progress_reports) > 0
+        # Progress is reported at least once (final report)
+        assert len(progress_reports) >= 1
         # Last progress should report all files
         last_current, _, _ = progress_reports[-1]
         assert last_current == result.data["total_files"]
+
+    @pytest.mark.asyncio
+    async def test_progress_throttling_with_many_files(self, tmp_path):
+        """Should throttle progress for large number of files."""
+        # Create 250 files to test throttling (threshold is 100)
+        for i in range(250):
+            (tmp_path / f"file_{i}.txt").touch()
+
+        progress_reports = []
+
+        def capture_progress(current, total, message):
+            progress_reports.append((current, total, message))
+
+        tool = ScanDirectoryTool()
+        tool.set_progress_callback(capture_progress)
+        result = await tool.run(path=str(tmp_path))
+
+        assert result.success is True
+        # Should have progress at 100, 200, and 250 (final)
+        assert len(progress_reports) == 3
 
 
 class TestScanDirectorySchema:

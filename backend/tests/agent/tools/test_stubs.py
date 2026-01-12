@@ -14,27 +14,7 @@ from backend.agent.tools.detect import DetectTool
 from backend.agent.tools.export import ExportTool
 from backend.agent.tools.scan import ScanDirectoryTool
 
-
-@pytest.fixture
-def temp_dataset(tmp_path):
-    """Create a temporary dataset directory."""
-    img_dir = tmp_path / "images"
-    img_dir.mkdir()
-    for i in range(10):
-        (img_dir / f"image_{i}.jpg").touch()
-
-    vid_dir = tmp_path / "videos"
-    vid_dir.mkdir()
-    for i in range(3):
-        (vid_dir / f"video_{i}.mp4").touch()
-
-    # Add some annotation files
-    anno_dir = tmp_path / "annotations"
-    anno_dir.mkdir()
-    for i in range(5):
-        (anno_dir / f"label_{i}.json").write_text('{"objects": []}')
-
-    return tmp_path
+# Fixtures temp_dataset, empty_dataset are defined in conftest.py
 
 
 class TestAnonymizeStub:
@@ -123,15 +103,12 @@ class TestAnonymizeStub:
         assert "not found" in result.error.lower()
 
     @pytest.mark.asyncio
-    async def test_anonymize_error_no_images(self, tmp_path):
+    async def test_anonymize_error_no_images(self, empty_dataset):
         """Should return error when no images found."""
-        empty_dir = tmp_path / "empty"
-        empty_dir.mkdir()
-
         tool = AnonymizeTool()
         result = await tool.run(
-            input_path=str(empty_dir),
-            output_path=str(tmp_path / "output"),
+            input_path=str(empty_dataset),
+            output_path=str(empty_dataset.parent / "output"),
         )
 
         assert result.success is False
@@ -234,14 +211,11 @@ class TestDetectStub:
         assert "not found" in result.error.lower()
 
     @pytest.mark.asyncio
-    async def test_detect_error_no_images(self, tmp_path):
+    async def test_detect_error_no_images(self, empty_dataset):
         """Should return error when no images found."""
-        empty_dir = tmp_path / "empty"
-        empty_dir.mkdir()
-
         tool = DetectTool()
         result = await tool.run(
-            input_path=str(empty_dir),
+            input_path=str(empty_dataset),
         )
 
         assert result.success is False
@@ -281,7 +255,7 @@ class TestExportStub:
         result = await tool.run(
             input_path=str(temp_dataset / "annotations"),
             output_path=str(temp_dataset / "export"),
-            format="yolo",
+            output_format="yolo",
         )
 
         assert result.success is True
@@ -298,7 +272,7 @@ class TestExportStub:
         result = await tool.run(
             input_path=str(temp_dataset / "annotations"),
             output_path=str(temp_dataset / "export"),
-            format="coco",
+            output_format="coco",
         )
 
         assert result.success is True
@@ -312,7 +286,7 @@ class TestExportStub:
         result = await tool.run(
             input_path=str(temp_dataset / "annotations"),
             output_path=str(temp_dataset / "export"),
-            format="pascal",
+            output_format="pascal",
         )
 
         assert result.success is True
@@ -327,7 +301,7 @@ class TestExportStub:
         result = await tool.run(
             input_path=str(temp_dataset / "annotations"),
             output_path=str(temp_dataset / "export"),
-            format="yolo",
+            output_format="yolo",
             split_ratio=0.8,
         )
 
@@ -346,7 +320,7 @@ class TestExportStub:
         result = await tool.run(
             input_path=str(temp_dataset / "annotations"),
             output_path=str(temp_dataset / "export"),
-            format="yolo",
+            output_format="yolo",
             split_ratio=0.7,
         )
 
@@ -360,7 +334,7 @@ class TestExportStub:
         result = await tool.run(
             input_path="/nonexistent/path",
             output_path="/tmp/export",
-            format="yolo",
+            output_format="yolo",
         )
 
         assert result.success is False
@@ -373,25 +347,22 @@ class TestExportStub:
         result = await tool.run(
             input_path=str(temp_dataset / "annotations"),
             output_path=str(temp_dataset / "export"),
-            format="invalid_format",
+            output_format="invalid_format",
         )
 
         assert result.success is False
         # Validation catches invalid enum before execute()
-        assert "format" in result.error.lower()
+        assert "output_format" in result.error.lower()
         assert "must be one of" in result.error.lower()
 
     @pytest.mark.asyncio
-    async def test_export_error_no_annotations(self, tmp_path):
+    async def test_export_error_no_annotations(self, empty_dataset):
         """Should return error when no annotations found."""
-        empty_dir = tmp_path / "empty"
-        empty_dir.mkdir()
-
         tool = ExportTool()
         result = await tool.run(
-            input_path=str(empty_dir),
-            output_path=str(tmp_path / "export"),
-            format="yolo",
+            input_path=str(empty_dataset),
+            output_path=str(empty_dataset.parent / "export"),
+            output_format="yolo",
         )
 
         assert result.success is False
@@ -404,7 +375,7 @@ class TestExportStub:
         result = await tool.run(
             input_path=str(temp_dataset / "annotations"),
             output_path=str(temp_dataset / "export"),
-            format="yolo",
+            output_format="yolo",
             split_ratio=1.5,  # Invalid: > 1
         )
 
@@ -418,11 +389,31 @@ class TestExportStub:
         result = await tool.run(
             input_path=str(temp_dataset / "annotations"),
             output_path=str(temp_dataset / "export"),
-            format="yolo",
+            output_format="yolo",
         )
 
         assert "_integration_point" in result.data
         assert "yolo" in result.data["_integration_point"]
+
+    @pytest.mark.asyncio
+    async def test_export_reports_progress(self, temp_dataset):
+        """Should report progress during export."""
+        progress_reports = []
+
+        def capture_progress(current, total, message):
+            progress_reports.append((current, total, message))
+
+        tool = ExportTool()
+        tool.set_progress_callback(capture_progress)
+        result = await tool.run(
+            input_path=str(temp_dataset / "annotations"),
+            output_path=str(temp_dataset / "export"),
+            output_format="yolo",
+        )
+
+        assert result.success is True
+        # Should report progress for each annotation file
+        assert len(progress_reports) == result.data["annotations_processed"]
 
 
 class TestIntegrationPipeline:
@@ -449,7 +440,7 @@ class TestIntegrationPipeline:
         export_result = await export_tool.run(
             input_path=str(temp_dataset / "annotations"),
             output_path=str(temp_dataset / "export"),
-            format="yolo",
+            output_format="yolo",
         )
         assert export_result.success is True
         assert export_result.data["_stub"] is True
@@ -460,19 +451,12 @@ class TestToolRegistration:
 
     def test_tools_are_registered(self):
         """All tools should be registered via decorator."""
-        from backend.agent.tools import get_tool_registry
+        from backend.agent.tools import get_tool_registry, initialize_tools
+
+        # Ensure tools are initialized
+        initialize_tools()
 
         registry = get_tool_registry()
-
-        # Manually register tools if not present (registry may be cleared by other tests)
-        if not registry.has("scan_directory"):
-            registry.register_class(ScanDirectoryTool)
-        if not registry.has("anonymize"):
-            registry.register_class(AnonymizeTool)
-        if not registry.has("detect"):
-            registry.register_class(DetectTool)
-        if not registry.has("export"):
-            registry.register_class(ExportTool)
 
         assert registry.has("scan_directory")
         assert registry.has("anonymize")
@@ -481,20 +465,12 @@ class TestToolRegistration:
 
     def test_tool_schemas_available(self):
         """All tools should provide valid schemas."""
-        from backend.agent.tools import get_tool_registry
+        from backend.agent.tools import get_tool_registry, initialize_tools
+
+        # Ensure tools are initialized
+        initialize_tools()
 
         registry = get_tool_registry()
-
-        # Manually register tools if not present (registry may be cleared by other tests)
-        if not registry.has("scan_directory"):
-            registry.register_class(ScanDirectoryTool)
-        if not registry.has("anonymize"):
-            registry.register_class(AnonymizeTool)
-        if not registry.has("detect"):
-            registry.register_class(DetectTool)
-        if not registry.has("export"):
-            registry.register_class(ExportTool)
-
         schemas = registry.get_schemas()
 
         tool_names = {s["function"]["name"] for s in schemas}

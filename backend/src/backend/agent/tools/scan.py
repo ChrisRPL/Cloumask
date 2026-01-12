@@ -4,6 +4,7 @@ This tool provides functionality to scan directories and analyze their contents,
 categorizing files by type (images, videos, point clouds, annotations).
 """
 
+import asyncio
 import contextlib
 from collections import Counter
 from pathlib import Path
@@ -16,13 +17,14 @@ from backend.agent.tools.base import (
     error_result,
     success_result,
 )
+from backend.agent.tools.constants import (
+    ANNOTATION_EXTENSIONS,
+    IMAGE_EXTENSIONS,
+    POINTCLOUD_EXTENSIONS,
+    PROGRESS_THROTTLE_INTERVAL,
+    VIDEO_EXTENSIONS,
+)
 from backend.agent.tools.registry import register_tool
-
-# Supported file extensions by type
-IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".webp", ".gif"}
-VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".webm", ".wmv", ".flv"}
-POINTCLOUD_EXTENSIONS = {".las", ".laz", ".pcd", ".ply", ".xyz", ".pts", ".e57"}
-ANNOTATION_EXTENSIONS = {".json", ".xml", ".txt", ".csv", ".yaml", ".yml"}
 
 
 @register_tool
@@ -73,9 +75,11 @@ Use this as the first step to understand what data you're working with."""
         if not dir_path.is_dir():
             return error_result(f"Not a directory: {path}")
 
-        # Scan files
+        # Scan files in thread pool to avoid blocking event loop
         try:
-            scan_result = self._scan_directory(dir_path, recursive, max_depth)
+            scan_result = await asyncio.to_thread(
+                self._scan_directory, dir_path, recursive, max_depth
+            )
             return success_result(scan_result)
         except PermissionError:
             return error_result(f"Permission denied: {path}")
@@ -129,10 +133,11 @@ Use this as the first step to understand what data you're working with."""
                         else:
                             type_counts["other"] += 1
 
-                        # Report progress
-                        self.report_progress(
-                            len(files), 0, f"Scanned {len(files)} files"
-                        )
+                        # Report progress with throttling to avoid performance issues
+                        if len(files) % PROGRESS_THROTTLE_INTERVAL == 0:
+                            self.report_progress(
+                                len(files), 0, f"Scanned {len(files)} files"
+                            )
 
                     elif entry.is_dir() and recursive:
                         subdirs.append(str(entry))
@@ -142,6 +147,10 @@ Use this as the first step to understand what data you're working with."""
                 pass  # Skip inaccessible directories
 
         scan_path(root)
+
+        # Report final progress
+        if len(files) > 0:
+            self.report_progress(len(files), 0, f"Scanned {len(files)} files")
 
         # Determine primary data type
         primary_type = self._determine_primary_type(type_counts)
