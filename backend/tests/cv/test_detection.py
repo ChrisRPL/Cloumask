@@ -536,6 +536,19 @@ class TestResultConversion:
         assert det.bbox.width == 0.2
         assert det.bbox.height == 0.3
 
+    def test_convert_invalid_class_id_skipped(self) -> None:
+        """Should skip detections with invalid class IDs."""
+        from backend.cv.detection import _convert_ultralytics_result
+
+        mock_result = MockUltralyticsResult([
+            {"cls": 0, "conf": 0.95, "x": 0.5, "y": 0.5, "w": 0.2, "h": 0.3},
+            {"cls": 999, "conf": 0.90, "x": 0.3, "y": 0.3, "w": 0.1, "h": 0.1},  # Invalid
+        ])
+        detections = _convert_ultralytics_result(mock_result)
+
+        assert len(detections) == 1  # Only valid detection
+        assert detections[0].class_id == 0
+
 
 # -----------------------------------------------------------------------------
 # Integration Tests (require real models)
