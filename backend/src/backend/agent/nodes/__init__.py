@@ -12,25 +12,33 @@ Implemented nodes:
   - execute_step: Execute current pipeline step
   - complete: Finalize pipeline and generate summary
 
-Stub implementations for future specs:
-- 05-human-in-the-loop: await_approval, checkpoint nodes
+- spec 05-human-in-the-loop:
+  - await_approval: Pause execution for user review
+  - create_checkpoint: Evaluate quality and create checkpoint if needed
+  - handle_user_response: Process user decisions
+  - apply_plan_edits: Apply user modifications to the plan
 """
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
-from uuid import uuid4
 
-# Import real implementations from submodules
-# Spec 03 - Planning nodes
-from backend.agent.nodes.plan import (
-    VALID_TOOLS,
-    format_plan_for_display,
-    generate_plan,
-    validate_plan,
+# Spec 05 - Human-in-the-Loop nodes
+from backend.agent.nodes.approval import (
+    apply_plan_edits,
+    await_approval_node,
+    handle_user_response,
 )
-from backend.agent.nodes.understand import understand
+from backend.agent.nodes.checkpoint import (
+    CONFIDENCE_DROP_THRESHOLD,
+    CRITICAL_TOOLS,
+    ERROR_RATE_THRESHOLD,
+    PERCENTAGE_THRESHOLDS,
+    calculate_quality_metrics,
+    checkpoint_node,
+    determine_trigger,
+    format_checkpoint_message,
+)
 
 # Spec 04 - Execution nodes
 from backend.agent.nodes.complete import (
@@ -50,74 +58,29 @@ from backend.agent.nodes.execute import (
     register_stub_tools,
     update_progress,
 )
-from backend.agent.state import CheckpointTrigger, PipelineState
 
-# -----------------------------------------------------------------------------
-# Stub implementations for future specs
-# -----------------------------------------------------------------------------
+# Import real implementations from submodules
+# Spec 03 - Planning nodes
+from backend.agent.nodes.plan import (
+    VALID_TOOLS,
+    format_plan_for_display,
+    generate_plan,
+    validate_plan,
+)
+from backend.agent.nodes.understand import understand
+from backend.agent.state import PipelineState
 
 
+# Alias functions for graph compatibility
+# The graph uses 'await_approval' and 'create_checkpoint' as node names
 def await_approval(state: PipelineState) -> dict[str, Any]:
-    """
-    Wait for human approval of plan or checkpoint.
-
-    Sets awaiting_user flag to pause graph execution.
-
-    Future implementation (spec 05):
-    - Present plan/checkpoint to user via SSE
-    - Wait for user feedback
-    - Process approval/edit/cancel decision
-
-    Args:
-        state: Current pipeline state.
-
-    Returns:
-        State update with awaiting_user=True.
-    """
-    return {"awaiting_user": True}
+    """Alias for await_approval_node for graph compatibility."""
+    return await_approval_node(state)
 
 
 def create_checkpoint(state: PipelineState) -> dict[str, Any]:
-    """
-    Create a human-in-the-loop checkpoint.
-
-    Stub: Creates minimal checkpoint record.
-
-    Future implementation (spec 05):
-    - Calculate quality metrics
-    - Determine checkpoint trigger reason
-    - Create detailed checkpoint record
-    - Set awaiting_user for critical checkpoints
-
-    Args:
-        state: Current pipeline state.
-
-    Returns:
-        State update with new checkpoint.
-    """
-    current_step = state.get("current_step", 0)
-    existing_checkpoints = state.get("checkpoints", [])
-
-    new_checkpoint = {
-        "id": str(uuid4()),
-        "step_index": current_step,
-        "trigger_reason": CheckpointTrigger.PERCENTAGE.value,
-        "quality_metrics": {
-            "average_confidence": 1.0,
-            "error_count": 0,
-            "total_processed": current_step,
-            "processing_speed": 0.0,
-        },
-        "created_at": datetime.now().isoformat(),
-        "user_decision": None,
-        "user_feedback": None,
-        "resolved_at": None,
-    }
-
-    return {
-        "checkpoints": [*existing_checkpoints, new_checkpoint],
-        "awaiting_user": True,
-    }
+    """Alias for checkpoint_node for graph compatibility."""
+    return checkpoint_node(state)
 
 
 __all__ = [
@@ -141,7 +104,18 @@ __all__ = [
     "ToolRegistry",
     "get_tool_registry",
     "register_stub_tools",
-    # Stubs (spec 05)
+    # Human-in-the-Loop nodes (spec 05)
     "await_approval",
+    "await_approval_node",
     "create_checkpoint",
+    "checkpoint_node",
+    "handle_user_response",
+    "apply_plan_edits",
+    "determine_trigger",
+    "calculate_quality_metrics",
+    "format_checkpoint_message",
+    "CRITICAL_TOOLS",
+    "PERCENTAGE_THRESHOLDS",
+    "ERROR_RATE_THRESHOLD",
+    "CONFIDENCE_DROP_THRESHOLD",
 ]
