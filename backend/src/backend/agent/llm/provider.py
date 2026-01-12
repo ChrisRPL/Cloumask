@@ -55,7 +55,6 @@ class OllamaProvider:
         self.config = config
         self._llm: ChatOllama | None = None
         self._current_model: str = config.model
-        self._fallback_index: int = 0
         self._token_usage: dict[str, int] = {"prompt": 0, "completion": 0}
         self._last_error: Exception | None = None
 

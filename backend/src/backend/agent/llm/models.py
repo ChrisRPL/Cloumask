@@ -13,6 +13,8 @@ import asyncio
 import logging
 from typing import Any
 
+from backend.api.config import settings
+
 logger = logging.getLogger(__name__)
 
 # Default timeout for model operations (in seconds)
@@ -210,7 +212,7 @@ async def get_model_details(model: str) -> dict[str, Any] | None:
 
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                "http://localhost:11434/api/show",
+                f"{settings.ollama_host}/api/show",
                 json={"name": model},
                 timeout=DEFAULT_TIMEOUT,
             )
@@ -284,7 +286,7 @@ async def get_running_models() -> list[dict[str, Any]]:
 
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                "http://localhost:11434/api/ps",
+                f"{settings.ollama_host}/api/ps",
                 timeout=DEFAULT_TIMEOUT,
             )
 
