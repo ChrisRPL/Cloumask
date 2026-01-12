@@ -22,5 +22,9 @@ safetensors==0.4.5
 # Ultralytics (YOLO11, RT-DETR)
 ultralytics>=8.3.0
 
-# ONNX Runtime (optional, for optimized inference)
+# InsightFace (SCRFD face detection)
+insightface>=0.7.3
+onnxruntime>=1.16.0
+
+# ONNX Runtime GPU (optional, for optimized inference on GPU)
 # onnxruntime-gpu==1.20.0

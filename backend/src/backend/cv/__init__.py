@@ -42,6 +42,11 @@ from backend.cv.detection import (
     get_class_indices,
     get_detector,
 )
+from backend.cv.faces import (
+    SCRFDWrapper,
+    YuNetWrapper,
+    get_face_detector,
+)
 from backend.cv.device import (
     CUDAOOMHandler,
     DeviceInfo,
@@ -150,4 +155,8 @@ __all__ = [
     "SAM2Wrapper",
     "MobileSAMWrapper",
     "get_segmenter",
+    # Face Detection
+    "SCRFDWrapper",
+    "YuNetWrapper",
+    "get_face_detector",
 ]
