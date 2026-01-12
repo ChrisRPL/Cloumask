@@ -2,12 +2,17 @@
 LangGraph node implementations for the Cloumask agent.
 
 This module provides node implementations for the agent state machine.
-Implemented nodes (spec 03-agent-nodes-planning):
-- understand: Parse natural language request and extract intent
-- generate_plan: Generate execution plan using LLM
+
+Implemented nodes:
+- spec 03-agent-nodes-planning:
+  - understand: Parse natural language request and extract intent
+  - generate_plan: Generate execution plan using LLM
+
+- spec 04-agent-nodes-execution:
+  - execute_step: Execute current pipeline step
+  - complete: Finalize pipeline and generate summary
 
 Stub implementations for future specs:
-- 04-agent-nodes-execution: execute_step, complete nodes
 - 05-human-in-the-loop: await_approval, checkpoint nodes
 """
 
@@ -18,6 +23,7 @@ from typing import Any
 from uuid import uuid4
 
 # Import real implementations from submodules
+# Spec 03 - Planning nodes
 from backend.agent.nodes.plan import (
     VALID_TOOLS,
     format_plan_for_display,
@@ -25,6 +31,25 @@ from backend.agent.nodes.plan import (
     validate_plan,
 )
 from backend.agent.nodes.understand import understand
+
+# Spec 04 - Execution nodes
+from backend.agent.nodes.complete import (
+    calculate_final_stats,
+    complete,
+    complete_node,
+    generate_summary,
+)
+from backend.agent.nodes.execute import (
+    Tool,
+    ToolRegistry,
+    execute_step,
+    execute_step_node,
+    format_step_result,
+    get_tool_registry,
+    is_retryable,
+    register_stub_tools,
+    update_progress,
+)
 from backend.agent.state import CheckpointTrigger, PipelineState
 
 # -----------------------------------------------------------------------------
@@ -50,31 +75,6 @@ def await_approval(state: PipelineState) -> dict[str, Any]:
         State update with awaiting_user=True.
     """
     return {"awaiting_user": True}
-
-
-def execute_step(state: PipelineState) -> dict[str, Any]:
-    """
-    Execute the current step in the plan.
-
-    Stub: Increments current_step without actual execution.
-
-    Future implementation (spec 04):
-    - Get current step from plan
-    - Dispatch to appropriate CV tool
-    - Record results and update status
-    - Handle errors with retry logic
-
-    Args:
-        state: Current pipeline state.
-
-    Returns:
-        State update with incremented current_step.
-    """
-    current = state.get("current_step", 0)
-    return {
-        "current_step": current + 1,
-        "awaiting_user": False,
-    }
 
 
 def create_checkpoint(state: PipelineState) -> dict[str, Any]:
@@ -120,36 +120,28 @@ def create_checkpoint(state: PipelineState) -> dict[str, Any]:
     }
 
 
-def complete(state: PipelineState) -> dict[str, Any]:
-    """
-    Finalize pipeline execution.
-
-    Pass-through stub: Returns empty dict (no state changes).
-
-    Future implementation (spec 04):
-    - Generate execution summary
-    - Clean up temporary resources
-    - Add completion message to conversation
-
-    Args:
-        state: Current pipeline state.
-
-    Returns:
-        State update dict (empty for stub).
-    """
-    return {"awaiting_user": False}
-
-
 __all__ = [
-    # Real implementations (spec 03)
+    # Planning nodes (spec 03)
     "understand",
     "generate_plan",
     "validate_plan",
     "format_plan_for_display",
     "VALID_TOOLS",
-    # Stubs (future specs)
-    "await_approval",
+    # Execution nodes (spec 04)
     "execute_step",
-    "create_checkpoint",
+    "execute_step_node",
     "complete",
+    "complete_node",
+    "format_step_result",
+    "update_progress",
+    "is_retryable",
+    "calculate_final_stats",
+    "generate_summary",
+    "Tool",
+    "ToolRegistry",
+    "get_tool_registry",
+    "register_stub_tools",
+    # Stubs (spec 05)
+    "await_approval",
+    "create_checkpoint",
 ]
