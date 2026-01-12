@@ -72,6 +72,12 @@ from backend.cv.download import (
     register_model as register_model_download,
 )
 from backend.cv.manager import ModelManager, get_model_manager
+from backend.cv.segmentation import (
+    MobileSAMWrapper,
+    SAM2Wrapper,
+    SAM3Wrapper,
+    get_segmenter,
+)
 from backend.cv.types import (
     BBox,
     Detection,
@@ -139,4 +145,9 @@ __all__ = [
     "RTDETRWrapper",
     "get_detector",
     "get_class_indices",
+    # Segmentation
+    "SAM3Wrapper",
+    "SAM2Wrapper",
+    "MobileSAMWrapper",
+    "get_segmenter",
 ]

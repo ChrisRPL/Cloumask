@@ -125,6 +125,26 @@ MODEL_REGISTRY: dict[str, ModelRegistryEntry] = {
         filename="rtdetr-l.pt",
         size_mb=150,
     ),
+    "sam3": ModelRegistryEntry(
+        name="sam3",
+        source=ModelSource.ULTRALYTICS,
+        filename="sam3.pt",
+        size_mb=3500,
+        requires_auth=True,  # Gated model - requires HF approval
+        extra={"hf_model_id": "facebook/sam3-hiera-large"},
+    ),
+    "sam2": ModelRegistryEntry(
+        name="sam2",
+        source=ModelSource.ULTRALYTICS,
+        filename="sam2.1_b.pt",
+        size_mb=400,
+    ),
+    "mobilesam": ModelRegistryEntry(
+        name="mobilesam",
+        source=ModelSource.ULTRALYTICS,
+        filename="mobile_sam.pt",
+        size_mb=40,
+    ),
 }
 
 
