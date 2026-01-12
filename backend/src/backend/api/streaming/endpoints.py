@@ -10,13 +10,15 @@ Provides endpoints for:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
+import time
 import uuid
 from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sse_starlette.sse import EventSourceResponse
 
 from backend.agent.graph import compile_agent, run_agent
@@ -26,6 +28,7 @@ from backend.agent.state import (
     UserDecision,
     create_initial_state,
 )
+from backend.api.streaming.batching import EventBatcher
 from backend.api.streaming.events import (
     SSEEvent,
     await_input_event,
@@ -49,20 +52,108 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/chat", tags=["streaming"])
 
-# Store active connections for cleanup
-_active_connections: dict[str, asyncio.Event] = {}
+# Configuration
+THREAD_TIMEOUT_SECONDS = 3600  # 1 hour TTL for idle threads
+CLEANUP_INTERVAL_SECONDS = 300  # Run cleanup every 5 minutes
+MAX_CONNECTIONS_PER_THREAD = 1  # Only allow one SSE connection per thread
 
-# Event queues for each thread
+
+class ThreadState:
+    """Thread state with activity tracking."""
+
+    def __init__(self, thread_id: str) -> None:
+        self.thread_id = thread_id
+        self.queue: asyncio.Queue[SSEEvent] = asyncio.Queue()
+        self.cancel_event = asyncio.Event()
+        self.created_at = time.time()
+        self.last_activity = time.time()
+        self.pipeline_state: dict[str, Any] = {}
+        self.active_task: asyncio.Task[None] | None = None
+        self.connection_count = 0
+        # Track emitted state to prevent duplicates
+        self.last_emitted_message_count = 0
+        self.last_emitted_plan_hash: str | None = None
+        self.last_emitted_checkpoint_id: str | None = None
+        self.plan_approved_emitted = False
+
+    def touch(self) -> None:
+        """Update last activity timestamp."""
+        self.last_activity = time.time()
+
+    def is_expired(self) -> bool:
+        """Check if thread has exceeded TTL."""
+        return time.time() - self.last_activity > THREAD_TIMEOUT_SECONDS
+
+
+# Thread storage with proper encapsulation
+_threads: dict[str, ThreadState] = {}
+_cleanup_task: asyncio.Task[None] | None = None
+
+
+def _get_thread(thread_id: str) -> ThreadState | None:
+    """Get thread state, returning None if not found."""
+    thread = _threads.get(thread_id)
+    if thread:
+        thread.touch()
+    return thread
+
+
+def _get_or_create_thread(thread_id: str) -> ThreadState:
+    """Get or create thread state."""
+    if thread_id not in _threads:
+        _threads[thread_id] = ThreadState(thread_id)
+    thread = _threads[thread_id]
+    thread.touch()
+    return thread
+
+
+def _delete_thread(thread_id: str) -> None:
+    """Delete thread and cancel any active task."""
+    thread = _threads.pop(thread_id, None)
+    if thread:
+        thread.cancel_event.set()
+        if thread.active_task and not thread.active_task.done():
+            thread.active_task.cancel()
+
+
+async def _cleanup_expired_threads() -> None:
+    """Periodic task to clean up expired threads."""
+    while True:
+        await asyncio.sleep(CLEANUP_INTERVAL_SECONDS)
+        expired = [
+            tid for tid, thread in _threads.items()
+            if thread.is_expired()
+        ]
+        for tid in expired:
+            logger.info(f"Cleaning up expired thread {tid}")
+            _delete_thread(tid)
+
+
+def _ensure_cleanup_task() -> None:
+    """Ensure the cleanup task is running."""
+    global _cleanup_task
+    if _cleanup_task is None or _cleanup_task.done():
+        _cleanup_task = asyncio.create_task(_cleanup_expired_threads())
+
+
+# Legacy exports for test compatibility
 _event_queues: dict[str, asyncio.Queue[SSEEvent]] = {}
-
-# Track thread state for resumption
 _thread_states: dict[str, dict[str, Any]] = {}
+
+
+def _sync_legacy_exports() -> None:
+    """Sync legacy exports for backward compatibility with tests."""
+    _event_queues.clear()
+    _thread_states.clear()
+    for tid, thread in _threads.items():
+        _event_queues[tid] = thread.queue
+        _thread_states[tid] = thread.pipeline_state
 
 
 class SendMessageRequest(BaseModel):
     """Request body for sending a message."""
 
-    content: str = Field(..., description="The message content")
+    content: str = Field(..., description="The message content", min_length=1)
     decision: UserDecision | None = Field(
         default=None,
         description="User decision for checkpoint/approval responses",
@@ -71,6 +162,14 @@ class SendMessageRequest(BaseModel):
         default=None,
         description="Optional plan modifications when decision is EDIT",
     )
+
+    @field_validator("content")
+    @classmethod
+    def content_not_empty(cls, v: str) -> str:
+        """Validate content is not just whitespace."""
+        if not v.strip():
+            raise ValueError("Content cannot be empty or whitespace")
+        return v
 
 
 class SendMessageResponse(BaseModel):
@@ -109,17 +208,21 @@ async def stream_chat(
     Returns:
         EventSourceResponse for SSE streaming.
     """
+    # Ensure cleanup task is running
+    _ensure_cleanup_task()
+
+    # Get or create thread
+    thread = _get_or_create_thread(thread_id)
+
+    # Check for existing connection (prevent race condition)
+    if thread.connection_count >= MAX_CONNECTIONS_PER_THREAD:
+        raise HTTPException(
+            status_code=409,
+            detail="Thread already has an active SSE connection"
+        )
 
     async def event_generator() -> AsyncGenerator[dict[str, Any], None]:
-        # Create cancel event for this connection
-        cancel_event = asyncio.Event()
-        _active_connections[thread_id] = cancel_event
-
-        # Ensure we have a queue for this thread
-        if thread_id not in _event_queues:
-            _event_queues[thread_id] = asyncio.Queue()
-
-        queue = _event_queues[thread_id]
+        thread.connection_count += 1
         heartbeat_sequence = 0
 
         try:
@@ -131,14 +234,14 @@ async def stream_chat(
             }
 
             # Main event loop
-            while not cancel_event.is_set():
+            while not thread.cancel_event.is_set():
                 if await request.is_disconnected():
                     logger.info(f"Client disconnected from thread {thread_id}")
                     break
 
                 try:
                     # Wait for events with timeout for heartbeat
-                    event = await asyncio.wait_for(queue.get(), timeout=30.0)
+                    event = await asyncio.wait_for(thread.queue.get(), timeout=30.0)
                     yield {
                         "event": event.type.value,
                         "data": json.dumps(event.to_dict()),
@@ -155,8 +258,7 @@ async def stream_chat(
         except asyncio.CancelledError:
             logger.info(f"SSE connection cancelled for thread {thread_id}")
         finally:
-            # Cleanup
-            _active_connections.pop(thread_id, None)
+            thread.connection_count -= 1
             logger.info(f"SSE cleanup complete for thread {thread_id}")
 
     return EventSourceResponse(event_generator())
@@ -179,7 +281,15 @@ async def send_message(
 
     Returns:
         Status response.
+
+    Raises:
+        HTTPException: If thread not found.
     """
+    # Validate thread exists
+    thread = _get_thread(thread_id)
+    if not thread:
+        raise HTTPException(status_code=404, detail="Thread not found")
+
     message_id = str(uuid.uuid4())
 
     # Queue the message for processing
@@ -189,6 +299,9 @@ async def send_message(
         decision=message.decision,
         plan_edits=message.plan_edits,
     )
+
+    # Sync legacy exports for tests
+    _sync_legacy_exports()
 
     return SendMessageResponse(
         status="queued",
@@ -205,8 +318,14 @@ async def create_thread() -> ThreadInfo:
     Returns:
         Thread information with new thread_id.
     """
+    # Ensure cleanup task is running
+    _ensure_cleanup_task()
+
     thread_id = str(uuid.uuid4())
-    _event_queues[thread_id] = asyncio.Queue()
+    _get_or_create_thread(thread_id)
+
+    # Sync legacy exports for tests
+    _sync_legacy_exports()
 
     return ThreadInfo(
         thread_id=thread_id,
@@ -228,10 +347,11 @@ async def get_thread_info(thread_id: str) -> ThreadInfo:
     Raises:
         HTTPException: If thread not found.
     """
-    if thread_id not in _event_queues:
+    thread = _get_thread(thread_id)
+    if not thread:
         raise HTTPException(status_code=404, detail="Thread not found")
 
-    state = _thread_states.get(thread_id)
+    state = thread.pipeline_state
     plan = state.get("plan", []) if state else []
 
     return ThreadInfo(
@@ -254,14 +374,10 @@ async def close_thread(thread_id: str) -> dict[str, str]:
     Returns:
         Confirmation message.
     """
-    # Signal cancellation if connected
-    if thread_id in _active_connections:
-        _active_connections[thread_id].set()
-        _active_connections.pop(thread_id, None)
+    _delete_thread(thread_id)
 
-    # Cleanup queues and state
-    _event_queues.pop(thread_id, None)
-    _thread_states.pop(thread_id, None)
+    # Sync legacy exports for tests
+    _sync_legacy_exports()
 
     return {"status": "closed", "thread_id": thread_id}
 
@@ -286,11 +402,18 @@ async def queue_agent_request(
         decision: Optional user decision for checkpoints.
         plan_edits: Optional plan modifications.
     """
-    if thread_id not in _event_queues:
-        _event_queues[thread_id] = asyncio.Queue()
+    thread = _get_thread(thread_id)
+    if not thread:
+        return
 
-    # Start agent processing in background
-    asyncio.create_task(
+    # Cancel any existing task for this thread
+    if thread.active_task and not thread.active_task.done():
+        thread.active_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await thread.active_task
+
+    # Start agent processing in background with tracking
+    thread.active_task = asyncio.create_task(
         process_agent_request(thread_id, content, decision, plan_edits)
     )
 
@@ -310,53 +433,132 @@ async def process_agent_request(
         decision: Optional user decision.
         plan_edits: Optional plan modifications.
     """
-    queue = _event_queues.get(thread_id)
-    if not queue:
+    thread = _get_thread(thread_id)
+    if not thread:
         return
+
+    queue = thread.queue
+    batcher = EventBatcher(batch_window_ms=100)
 
     try:
         # Emit thinking event
         await queue.put(thinking_event("Processing your request..."))
 
+        # Handle CANCEL decision
+        if decision == UserDecision.CANCEL:
+            await queue.put(
+                message_event("system", "Operation cancelled by user.")
+            )
+            await queue.put(
+                complete_event({
+                    "pipeline_id": thread.pipeline_state.get("metadata", {}).get(
+                        "pipeline_id", thread_id
+                    ),
+                    "total_steps": len(thread.pipeline_state.get("plan", [])),
+                    "completed_steps": thread.pipeline_state.get("current_step", 0),
+                    "failed_steps": 0,
+                    "summary": "Cancelled by user",
+                })
+            )
+            # Reset thread state for new requests
+            thread.pipeline_state = {}
+            thread.last_emitted_message_count = 0
+            thread.last_emitted_plan_hash = None
+            thread.last_emitted_checkpoint_id = None
+            thread.plan_approved_emitted = False
+            return
+
         # Get or create initial state
         initial_state: PipelineState
-        if thread_id in _thread_states and decision is not None:
+        if thread.pipeline_state and decision is not None:
             # Resume from existing state with decision
-            initial_state = _thread_states[thread_id]  # type: ignore[assignment]
+            initial_state = thread.pipeline_state  # type: ignore[assignment]
             # Update state with user decision
-            await _apply_user_decision(initial_state, decision, content, plan_edits)
+            _apply_user_decision(initial_state, decision, content, plan_edits)
         else:
             # New request - create initial state
             pipeline_id = str(uuid.uuid4())
             initial_state = create_initial_state(content, pipeline_id)
+            # Reset tracking for new conversation
+            thread.last_emitted_message_count = 0
+            thread.last_emitted_plan_hash = None
+            thread.last_emitted_checkpoint_id = None
+            thread.plan_approved_emitted = False
 
         # Run agent and stream events
         async with compile_agent(":memory:") as compiled:
             async for state_update in run_agent(compiled, initial_state, thread_id):
                 # Store latest state
-                _thread_states[thread_id] = state_update
+                thread.pipeline_state = state_update
 
-                # Convert state updates to SSE events
-                events = state_to_events(state_update, thread_id)
+                # Convert state updates to SSE events with deduplication
+                events = state_to_events(state_update, thread_id, thread)
                 for event in events:
-                    await queue.put(event)
+                    # Apply batching for progress events
+                    batched = batcher.add(event)
+                    if batched:
+                        await queue.put(batched)
+
+                # Flush any remaining batched events periodically
+                for pending in batcher.flush():
+                    await queue.put(pending)
 
                 # Check if we should pause for user input
                 if state_update.get("awaiting_user", False):
                     break
 
+    except asyncio.CancelledError:
+        logger.info(f"Agent request cancelled for thread {thread_id}")
+        raise
     except Exception as e:
         logger.exception(f"Error processing agent request for {thread_id}")
+        # Sanitize error message - don't expose internal details
+        safe_message = _sanitize_error_message(str(e))
         await queue.put(
             error_event(
                 "AGENT_ERROR",
-                str(e),
+                safe_message,
                 recoverable=True,
             )
         )
 
 
-async def _apply_user_decision(
+def _sanitize_error_message(message: str) -> str:
+    """
+    Sanitize error message to avoid exposing internal details.
+
+    Args:
+        message: Raw error message.
+
+    Returns:
+        Sanitized message safe for frontend.
+    """
+    # List of patterns that might expose internal details
+    sensitive_patterns = [
+        "password",
+        "secret",
+        "token",
+        "key",
+        "credential",
+        "/home/",
+        "/root/",
+        "traceback",
+        "File \"",
+    ]
+
+    message_lower = message.lower()
+    for pattern in sensitive_patterns:
+        if pattern.lower() in message_lower:
+            return "An internal error occurred. Please try again."
+
+    # Truncate very long messages
+    if len(message) > 200:
+        return message[:200] + "..."
+
+    return message
+
+
+def _apply_user_decision(
     state: PipelineState,
     decision: UserDecision,
     message: str,
@@ -389,38 +591,72 @@ async def _apply_user_decision(
         state["plan_approved"] = True
 
 
-def state_to_events(state_update: dict[str, Any], thread_id: str) -> list[SSEEvent]:
+def _compute_plan_hash(plan: list[dict[str, Any]]) -> str:
+    """Compute a simple hash of plan for change detection."""
+    return str(len(plan)) + ":" + ",".join(
+        step.get("id", str(i)) for i, step in enumerate(plan)
+    )
+
+
+def state_to_events(
+    state_update: dict[str, Any],
+    thread_id: str,
+    thread: ThreadState | None = None,
+) -> list[SSEEvent]:
     """
     Convert LangGraph state update to SSE events.
 
     Analyzes the state to determine which events should be emitted.
+    Uses thread state to prevent duplicate events.
 
     Args:
         state_update: Current pipeline state dictionary.
         thread_id: Thread identifier for event context.
+        thread: Thread state for deduplication tracking.
 
     Returns:
         List of SSE events to emit.
     """
     events: list[SSEEvent] = []
 
-    # Check for new messages
+    # Check for new messages (with deduplication)
     messages = state_update.get("messages", [])
-    if messages:
-        last_msg = messages[-1]
-        role = last_msg.get("role", "assistant")
-        content = last_msg.get("content", "")
-        # Only emit if content exists and isn't an internal marker
-        if content and not content.startswith("AWAIT_"):
-            events.append(message_event(role, content))
+    start_idx = thread.last_emitted_message_count if thread else 0
+    if len(messages) > start_idx:
+        for msg in messages[start_idx:]:
+            role = msg.get("role", "assistant")
+            content = msg.get("content", "")
+            # Only emit if content exists and isn't an internal marker
+            if content and not content.startswith("AWAIT_"):
+                events.append(message_event(role, content))
+        if thread:
+            thread.last_emitted_message_count = len(messages)
 
-    # Check for plan updates
+    # Check for plan updates (with deduplication)
     plan = state_update.get("plan", [])
-    if plan and not state_update.get("plan_approved", False):
-        pipeline_id = (
-            state_update.get("metadata", {}).get("pipeline_id", "") or thread_id
+    plan_approved = state_update.get("plan_approved", False)
+
+    if plan:
+        plan_hash = _compute_plan_hash(plan)
+        should_emit_plan = (
+            thread is None or
+            thread.last_emitted_plan_hash != plan_hash
         )
-        events.append(plan_event(pipeline_id, plan))
+
+        if should_emit_plan and not plan_approved:
+            pipeline_id = (
+                state_update.get("metadata", {}).get("pipeline_id", "") or thread_id
+            )
+            events.append(plan_event(pipeline_id, plan))
+            if thread:
+                thread.last_emitted_plan_hash = plan_hash
+
+    # Emit PLAN_APPROVED event when plan is first approved
+    if plan_approved and thread and not thread.plan_approved_emitted:
+        events.append(
+            message_event("system", "Plan approved. Starting execution...")
+        )
+        thread.plan_approved_emitted = True
 
     # Check for current step changes (execution progress)
     current_step = state_update.get("current_step", 0)
@@ -468,17 +704,25 @@ def state_to_events(state_update: dict[str, Any], thread_id: str) -> list[SSEEve
                 )
             )
 
-    # Check for checkpoint
+    # Check for checkpoint (with deduplication)
     checkpoints = state_update.get("checkpoints", [])
     if checkpoints:
         latest = checkpoints[-1]
-        if not latest.get("resolved_at"):
+        checkpoint_id = latest.get("id", "")
+        is_new_checkpoint = (
+            thread is None or
+            thread.last_emitted_checkpoint_id != checkpoint_id
+        )
+
+        if not latest.get("resolved_at") and is_new_checkpoint:
             events.append(
                 checkpoint_event(
                     latest,
                     f"Checkpoint at step {latest.get('step_index', 0)}",
                 )
             )
+            if thread:
+                thread.last_emitted_checkpoint_id = checkpoint_id
 
     # Check for awaiting user
     if state_update.get("awaiting_user"):
@@ -545,11 +789,11 @@ async def get_next_event(thread_id: str, timeout: float = 1.0) -> SSEEvent | Non
     Returns:
         Next SSE event or None if timeout.
     """
-    queue = _event_queues.get(thread_id)
-    if not queue:
+    thread = _get_thread(thread_id)
+    if not thread:
         return None
 
     try:
-        return await asyncio.wait_for(queue.get(), timeout=timeout)
+        return await asyncio.wait_for(thread.queue.get(), timeout=timeout)
     except TimeoutError:
         return None

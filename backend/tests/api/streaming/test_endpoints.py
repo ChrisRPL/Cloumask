@@ -10,7 +10,10 @@ from backend.api.main import app
 from backend.api.streaming.endpoints import (
     _event_queues,
     _thread_states,
+    _threads,
+    _sanitize_error_message,
     state_to_events,
+    ThreadState,
 )
 from backend.api.streaming.events import SSEEventType
 
@@ -27,6 +30,7 @@ def cleanup_state() -> None:
     yield
     _event_queues.clear()
     _thread_states.clear()
+    _threads.clear()
 
 
 class TestCreateThread:
@@ -104,6 +108,11 @@ class TestCloseThread:
 
         assert thread_id not in _event_queues
 
+    def test_close_nonexistent_thread(self, client: TestClient) -> None:
+        """Closing nonexistent thread should succeed silently."""
+        response = client.delete("/api/chat/thread/nonexistent-id")
+        assert response.status_code == 200
+
 
 class TestSendMessage:
     """Tests for send message endpoint."""
@@ -151,6 +160,36 @@ class TestSendMessage:
 
         assert response.status_code == 200
 
+    def test_send_message_thread_not_found(self, client: TestClient) -> None:
+        """Send message should return 404 for unknown thread."""
+        response = client.post(
+            "/api/chat/send/unknown-thread-id",
+            json={"content": "Hello"},
+        )
+        assert response.status_code == 404
+
+    def test_send_message_empty_content_rejected(self, client: TestClient) -> None:
+        """Send message should reject empty content."""
+        create_response = client.post("/api/chat/thread/new")
+        thread_id = create_response.json()["thread_id"]
+
+        response = client.post(
+            f"/api/chat/send/{thread_id}",
+            json={"content": ""},
+        )
+        assert response.status_code == 422  # Validation error
+
+    def test_send_message_whitespace_content_rejected(self, client: TestClient) -> None:
+        """Send message should reject whitespace-only content."""
+        create_response = client.post("/api/chat/thread/new")
+        thread_id = create_response.json()["thread_id"]
+
+        response = client.post(
+            f"/api/chat/send/{thread_id}",
+            json={"content": "   "},
+        )
+        assert response.status_code == 422  # Validation error
+
 
 class TestSSEStream:
     """Tests for SSE streaming endpoint."""
@@ -164,7 +203,6 @@ class TestSSEStream:
         # Just verify the endpoint is accessible
         # Full SSE testing requires async test client with proper handling
         # This test verifies the route exists and accepts GET requests
-        from fastapi import FastAPI
         from backend.api.main import app
 
         # Verify the route is registered
@@ -173,6 +211,42 @@ class TestSSEStream:
 
         # Cleanup
         client.delete(f"/api/chat/thread/{thread_id}")
+
+
+class TestSanitizeErrorMessage:
+    """Tests for error message sanitization."""
+
+    def test_sanitize_normal_message(self) -> None:
+        """Normal error messages should pass through."""
+        msg = "File not found"
+        assert _sanitize_error_message(msg) == msg
+
+    def test_sanitize_password_in_message(self) -> None:
+        """Messages with password should be sanitized."""
+        msg = "Invalid password for user admin"
+        result = _sanitize_error_message(msg)
+        assert "password" not in result.lower()
+        assert "internal error" in result.lower()
+
+    def test_sanitize_path_in_message(self) -> None:
+        """Messages with file paths should be sanitized."""
+        msg = "Error reading /home/user/secrets.txt"
+        result = _sanitize_error_message(msg)
+        assert "/home/" not in result
+        assert "internal error" in result.lower()
+
+    def test_sanitize_long_message(self) -> None:
+        """Very long messages should be truncated."""
+        msg = "A" * 300
+        result = _sanitize_error_message(msg)
+        assert len(result) <= 203  # 200 + "..."
+        assert result.endswith("...")
+
+    def test_sanitize_traceback_in_message(self) -> None:
+        """Messages with traceback should be sanitized."""
+        msg = 'Traceback (most recent call last): File "test.py"'
+        result = _sanitize_error_message(msg)
+        assert "internal error" in result.lower()
 
 
 class TestStateToEvents:
@@ -352,3 +426,157 @@ class TestStateToEvents:
 
         message_events = [e for e in events if e.type == SSEEventType.MESSAGE]
         assert len(message_events) == 0
+
+
+class TestStateToEventsDeduplication:
+    """Tests for event deduplication in state_to_events."""
+
+    def test_message_deduplication(self) -> None:
+        """Duplicate messages should not be emitted."""
+        thread = ThreadState("test-thread")
+        state = {
+            "messages": [
+                {"role": "assistant", "content": "First message"},
+            ],
+            "plan": [],
+            "current_step": 0,
+            "checkpoints": [],
+            "awaiting_user": False,
+        }
+
+        # First call should emit message
+        events1 = state_to_events(state, "test-thread", thread)
+        message_events1 = [e for e in events1 if e.type == SSEEventType.MESSAGE]
+        assert len(message_events1) == 1
+
+        # Second call with same state should not emit message
+        events2 = state_to_events(state, "test-thread", thread)
+        message_events2 = [e for e in events2 if e.type == SSEEventType.MESSAGE]
+        assert len(message_events2) == 0
+
+        # Adding new message should emit only the new one
+        state["messages"].append({"role": "assistant", "content": "Second message"})
+        events3 = state_to_events(state, "test-thread", thread)
+        message_events3 = [e for e in events3 if e.type == SSEEventType.MESSAGE]
+        assert len(message_events3) == 1
+        assert message_events3[0].data["content"] == "Second message"
+
+    def test_plan_deduplication(self) -> None:
+        """Duplicate plan events should not be emitted."""
+        thread = ThreadState("test-thread")
+        state = {
+            "messages": [],
+            "plan": [
+                {"id": "step-1", "tool_name": "scan"},
+            ],
+            "plan_approved": False,
+            "current_step": 0,
+            "checkpoints": [],
+            "awaiting_user": False,
+        }
+
+        # First call should emit plan
+        events1 = state_to_events(state, "test-thread", thread)
+        plan_events1 = [e for e in events1 if e.type == SSEEventType.PLAN]
+        assert len(plan_events1) == 1
+
+        # Second call with same plan should not emit
+        events2 = state_to_events(state, "test-thread", thread)
+        plan_events2 = [e for e in events2 if e.type == SSEEventType.PLAN]
+        assert len(plan_events2) == 0
+
+    def test_checkpoint_deduplication(self) -> None:
+        """Duplicate checkpoint events should not be emitted."""
+        thread = ThreadState("test-thread")
+        state = {
+            "messages": [],
+            "plan": [],
+            "current_step": 0,
+            "checkpoints": [
+                {
+                    "id": "ckpt-1",
+                    "step_index": 2,
+                    "trigger_reason": "percentage",
+                    "quality_metrics": {},
+                    "resolved_at": None,
+                },
+            ],
+            "awaiting_user": False,
+        }
+
+        # First call should emit checkpoint
+        events1 = state_to_events(state, "test-thread", thread)
+        ckpt_events1 = [e for e in events1 if e.type == SSEEventType.CHECKPOINT]
+        assert len(ckpt_events1) == 1
+
+        # Second call with same checkpoint should not emit
+        events2 = state_to_events(state, "test-thread", thread)
+        ckpt_events2 = [e for e in events2 if e.type == SSEEventType.CHECKPOINT]
+        assert len(ckpt_events2) == 0
+
+    def test_plan_approved_emitted_once(self) -> None:
+        """Plan approved message should only be emitted once."""
+        thread = ThreadState("test-thread")
+        state = {
+            "messages": [],
+            "plan": [{"id": "step-1", "tool_name": "scan"}],
+            "plan_approved": True,
+            "current_step": 0,
+            "checkpoints": [],
+            "awaiting_user": False,
+        }
+
+        # First call should emit plan approved message
+        events1 = state_to_events(state, "test-thread", thread)
+        msg_events1 = [
+            e for e in events1
+            if e.type == SSEEventType.MESSAGE and "approved" in e.data.get("content", "").lower()
+        ]
+        assert len(msg_events1) == 1
+
+        # Second call should not emit plan approved again
+        events2 = state_to_events(state, "test-thread", thread)
+        msg_events2 = [
+            e for e in events2
+            if e.type == SSEEventType.MESSAGE and "approved" in e.data.get("content", "").lower()
+        ]
+        assert len(msg_events2) == 0
+
+
+class TestThreadState:
+    """Tests for ThreadState class."""
+
+    def test_thread_state_initialization(self) -> None:
+        """ThreadState should initialize with correct defaults."""
+        thread = ThreadState("test-123")
+
+        assert thread.thread_id == "test-123"
+        assert thread.connection_count == 0
+        assert thread.last_emitted_message_count == 0
+        assert thread.last_emitted_plan_hash is None
+        assert thread.last_emitted_checkpoint_id is None
+        assert not thread.plan_approved_emitted
+
+    def test_thread_state_touch(self) -> None:
+        """Touch should update last_activity timestamp."""
+        thread = ThreadState("test-123")
+        initial_activity = thread.last_activity
+
+        import time
+        time.sleep(0.01)
+        thread.touch()
+
+        assert thread.last_activity > initial_activity
+
+    def test_thread_state_expiry(self) -> None:
+        """is_expired should correctly detect expired threads."""
+        thread = ThreadState("test-123")
+
+        # New thread should not be expired
+        assert not thread.is_expired()
+
+        # Manually set old timestamp
+        import time
+        thread.last_activity = time.time() - 7200  # 2 hours ago
+
+        assert thread.is_expired()
