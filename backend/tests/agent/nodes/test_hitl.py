@@ -1141,3 +1141,76 @@ class TestConstants:
     def test_confidence_drop_threshold(self) -> None:
         """Confidence drop threshold should be 15%."""
         assert pytest.approx(0.15) == CONFIDENCE_DROP_THRESHOLD
+
+
+# -----------------------------------------------------------------------------
+# Code review fix tests
+# -----------------------------------------------------------------------------
+
+
+class TestCodeReviewFixes:
+    """Tests for issues identified in code review."""
+
+    def test_add_step_does_not_mutate_input(self) -> None:
+        """apply_plan_edits should not mutate the input step dict."""
+        plan = [{"tool_name": "a"}]
+        original_step = {"tool_name": "new_step"}
+        edits = [{"action": "add", "after_index": 0, "step": original_step}]
+
+        apply_plan_edits(plan, edits)
+
+        # Original step should NOT have id, status, or description added
+        assert "id" not in original_step
+        assert "status" not in original_step
+        assert "description" not in original_step
+
+    def test_add_step_generates_unique_ids(self) -> None:
+        """Each added step should have a unique id using uuid."""
+        plan = [{"tool_name": "a"}]
+        edits = [
+            {"action": "add", "after_index": 0, "step": {"tool_name": "b"}},
+            {"action": "add", "after_index": 1, "step": {"tool_name": "c"}},
+        ]
+
+        result = apply_plan_edits(plan, edits)
+
+        # Both added steps should have different IDs
+        id_b = result[1]["id"]
+        id_c = result[2]["id"]
+        assert id_b != id_c
+        # IDs should be uuid-based (8 hex chars)
+        assert id_b.startswith("step-")
+        assert len(id_b.split("-")[1]) == 8
+        assert id_c.startswith("step-")
+        assert len(id_c.split("-")[1]) == 8
+
+    def test_edit_decision_sets_plan_approved_false(
+        self, base_state: PipelineState
+    ) -> None:
+        """EDIT decision should set plan_approved to False for re-approval."""
+        base_state["awaiting_user"] = True
+        base_state["plan_approved"] = True  # Was previously approved
+
+        edits = [
+            {"action": "modify", "step_index": 0, "changes": {"parameters": {"path": "/new"}}}
+        ]
+        result = handle_user_response(
+            base_state,
+            {"decision": "edit", "plan_edits": edits},
+        )
+
+        # After edit, plan_approved should be False to require re-approval
+        assert result["plan_approved"] is False
+
+    def test_edit_without_edits_also_sets_plan_approved_false(
+        self, base_state: PipelineState
+    ) -> None:
+        """EDIT decision without edits should also set plan_approved False."""
+        base_state["awaiting_user"] = True
+        base_state["plan_approved"] = True
+
+        result = handle_user_response(base_state, {"decision": "edit"})
+
+        assert result["plan_approved"] is False
+        # Should still be awaiting user for edit details
+        assert result["awaiting_user"] is True

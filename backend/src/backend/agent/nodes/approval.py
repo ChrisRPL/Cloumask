@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 from typing import Any
+from uuid import uuid4
 
 from backend.agent.state import PipelineState, StepStatus, UserDecision
 
@@ -156,6 +157,8 @@ def handle_user_response(
 
     elif decision == UserDecision.EDIT:
         updated_state["awaiting_user"] = False
+        # Edited plans require re-approval
+        updated_state["plan_approved"] = False
 
         if plan_edits:
             # Apply the edits to the plan
@@ -281,9 +284,11 @@ def apply_plan_edits(
             new_step = edit.get("step")
             # Validate new step exists and has required tool_name field
             if new_step and "tool_name" in new_step:
-                # Ensure required fields exist
+                # Copy to avoid mutating the input
+                new_step = dict(new_step)
+                # Ensure required fields exist with unique IDs
                 if "id" not in new_step:
-                    new_step["id"] = f"step-{len(modified_plan) + 1}"
+                    new_step["id"] = f"step-{uuid4().hex[:8]}"
                 if "status" not in new_step:
                     new_step["status"] = StepStatus.PENDING.value
                 if "description" not in new_step:
