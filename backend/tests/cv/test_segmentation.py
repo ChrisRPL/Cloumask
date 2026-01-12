@@ -533,6 +533,14 @@ class TestGetSegmenter:
         segmenter = get_segmenter(prompt_type="box")
         assert isinstance(segmenter, SAM2Wrapper)
 
+    @patch("backend.cv.device.get_available_vram_mb", return_value=1000)
+    def test_box_prompt_low_vram_raises(self, mock_vram: MagicMock) -> None:
+        """Box prompt with insufficient VRAM should raise RuntimeError."""
+        from backend.cv.segmentation import get_segmenter
+
+        with pytest.raises(RuntimeError, match="SAM2 requires"):
+            get_segmenter(prompt_type="box")
+
 
 # -----------------------------------------------------------------------------
 # Mask Conversion Tests

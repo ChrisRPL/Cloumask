@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from backend.cv.base import BaseModelWrapper, ModelInfo, register_model
+from backend.cv.device import CUDAOOMHandler
 from backend.cv.types import Mask, SegmentationResult
 
 if TYPE_CHECKING:
@@ -133,6 +134,7 @@ class SAM3Wrapper(BaseModelWrapper[SegmentationResult]):
         Note:
             SAM3 weights must be downloaded from HuggingFace (gated model).
             Set HF_TOKEN environment variable if required.
+            Falls back to CPU if GPU runs out of memory.
         """
         from ultralytics.models.sam import SAM3SemanticPredictor  # type: ignore[attr-defined]
 
@@ -142,22 +144,31 @@ class SAM3Wrapper(BaseModelWrapper[SegmentationResult]):
 
         logger.info("Loading SAM3 from %s", model_path)
 
-        # Configure predictor overrides
-        overrides = {
-            "conf": 0.25,
-            "task": "segment",
-            "mode": "predict",
-            "model": str(model_path),
-            "half": device == "cuda",  # FP16 for GPU
-            "save": False,
-            "verbose": False,
-            "device": device if device != "cuda" else 0,
-        }
+        def create_predictor(dev: str) -> None:
+            # Configure predictor overrides
+            overrides = {
+                "conf": 0.25,
+                "task": "segment",
+                "mode": "predict",
+                "model": str(model_path),
+                "half": dev == "cuda",  # FP16 for GPU
+                "save": False,
+                "verbose": False,
+                "device": dev if dev != "cuda" else 0,
+            }
+            self._predictor = SAM3SemanticPredictor(overrides=overrides)
+            self._model = self._predictor
 
-        self._predictor = SAM3SemanticPredictor(overrides=overrides)
-        self._model = self._predictor
+        # Use OOM handler to catch GPU memory errors and fallback to CPU
+        oom_handler = CUDAOOMHandler(fallback_device="cpu", callback=create_predictor)
+        with oom_handler:
+            create_predictor(device)
 
-        logger.debug("SAM3 loaded on %s", device)
+        if oom_handler.used_fallback:
+            logger.warning("SAM3 fell back to CPU due to GPU OOM")
+            self._device = "cpu"
+
+        logger.debug("SAM3 loaded on %s", self._device or device)
 
     def _unload_model(self) -> None:
         """Unload model and free memory."""
@@ -172,7 +183,6 @@ class SAM3Wrapper(BaseModelWrapper[SegmentationResult]):
         prompt: str | None = None,
         point: tuple[int, int] | None = None,
         box: tuple[int, int, int, int] | None = None,
-        multimask_output: bool = True,
         confidence: float = 0.25,
         **kwargs: Any,
     ) -> SegmentationResult:
@@ -187,12 +197,11 @@ class SAM3Wrapper(BaseModelWrapper[SegmentationResult]):
             prompt: Text prompt (e.g., "red car", "person on left").
             point: Point prompt as (x, y) pixel coordinates.
             box: Box prompt as (x1, y1, x2, y2) pixel coordinates.
-            multimask_output: Return multiple mask candidates (default True).
-            confidence: Minimum confidence threshold (0-1).
+            confidence: Minimum confidence threshold (0-1) for filtering masks.
             **kwargs: Additional arguments (ignored).
 
         Returns:
-            SegmentationResult with masks ranked by confidence.
+            SegmentationResult with masks ranked by confidence, filtered by threshold.
 
         Raises:
             RuntimeError: If model not loaded.
@@ -235,7 +244,7 @@ class SAM3Wrapper(BaseModelWrapper[SegmentationResult]):
                 else:
                     scores = np.ones(len(masks))
 
-                return _convert_sam_masks_to_result(
+                seg_result = _convert_sam_masks_to_result(
                     masks=masks,
                     scores=scores,
                     image_path=input_path,
@@ -243,6 +252,18 @@ class SAM3Wrapper(BaseModelWrapper[SegmentationResult]):
                     model_name=self.info.name,
                     prompt=prompt,
                 )
+
+                # Filter masks by confidence threshold
+                if confidence > 0:
+                    filtered_masks = [m for m in seg_result.masks if m.confidence >= confidence]
+                    return SegmentationResult(
+                        masks=filtered_masks,
+                        image_path=input_path,
+                        processing_time_ms=elapsed_ms,
+                        model_name=self.info.name,
+                        prompt=prompt,
+                    )
+                return seg_result
 
         # No masks found
         return SegmentationResult(
@@ -294,6 +315,7 @@ class SAM2Wrapper(BaseModelWrapper[SegmentationResult]):
 
         Args:
             device: Target device ("cuda", "cpu", "mps").
+            Falls back to CPU if GPU runs out of memory.
         """
         from ultralytics import SAM
 
@@ -304,17 +326,28 @@ class SAM2Wrapper(BaseModelWrapper[SegmentationResult]):
         logger.info("Loading SAM2 from %s", model_path)
         self._sam = SAM(str(model_path))
 
-        # Move to device
-        if device == "cuda":
-            import torch
+        def move_to_device(dev: str) -> None:
+            if dev == "cuda":
+                import torch
 
-            if torch.cuda.is_available():
-                self._sam.to(device)
-            else:
-                logger.warning("CUDA requested but not available, using CPU")
+                if torch.cuda.is_available():
+                    self._sam.to(dev)  # type: ignore[union-attr]
+                else:
+                    logger.warning("CUDA requested but not available, using CPU")
+            elif dev != "cpu":
+                self._sam.to(dev)  # type: ignore[union-attr]
+
+        # Use OOM handler to catch GPU memory errors and fallback to CPU
+        oom_handler = CUDAOOMHandler(fallback_device="cpu", callback=move_to_device)
+        with oom_handler:
+            move_to_device(device)
+
+        if oom_handler.used_fallback:
+            logger.warning("SAM2 fell back to CPU due to GPU OOM")
+            self._device = "cpu"
 
         self._model = self._sam
-        logger.debug("SAM2 loaded on %s", device)
+        logger.debug("SAM2 loaded on %s", self._device or device)
 
     def _unload_model(self) -> None:
         """Unload model and free memory."""
@@ -329,7 +362,6 @@ class SAM2Wrapper(BaseModelWrapper[SegmentationResult]):
         prompt: str | None = None,
         point: tuple[int, int] | None = None,
         box: tuple[int, int, int, int] | None = None,
-        multimask_output: bool = True,
         **kwargs: Any,
     ) -> SegmentationResult:
         """
@@ -342,7 +374,6 @@ class SAM2Wrapper(BaseModelWrapper[SegmentationResult]):
             prompt: Text prompt (NOT SUPPORTED - raises NotImplementedError).
             point: Point prompt as (x, y) pixel coordinates.
             box: Box prompt as (x1, y1, x2, y2) pixel coordinates.
-            multimask_output: Return multiple mask candidates (default True).
             **kwargs: Additional arguments (ignored).
 
         Returns:
@@ -454,6 +485,7 @@ class MobileSAMWrapper(BaseModelWrapper[SegmentationResult]):
 
         Args:
             device: Target device ("cuda", "cpu", "mps").
+            Falls back to CPU if GPU runs out of memory.
         """
         from ultralytics import SAM
 
@@ -464,17 +496,28 @@ class MobileSAMWrapper(BaseModelWrapper[SegmentationResult]):
         logger.info("Loading MobileSAM from %s", model_path)
         self._sam = SAM(str(model_path))
 
-        # Move to device
-        if device == "cuda":
-            import torch
+        def move_to_device(dev: str) -> None:
+            if dev == "cuda":
+                import torch
 
-            if torch.cuda.is_available():
-                self._sam.to(device)
-            else:
-                logger.warning("CUDA requested but not available, using CPU")
+                if torch.cuda.is_available():
+                    self._sam.to(dev)  # type: ignore[union-attr]
+                else:
+                    logger.warning("CUDA requested but not available, using CPU")
+            elif dev != "cpu":
+                self._sam.to(dev)  # type: ignore[union-attr]
+
+        # Use OOM handler to catch GPU memory errors and fallback to CPU
+        oom_handler = CUDAOOMHandler(fallback_device="cpu", callback=move_to_device)
+        with oom_handler:
+            move_to_device(device)
+
+        if oom_handler.used_fallback:
+            logger.warning("MobileSAM fell back to CPU due to GPU OOM")
+            self._device = "cpu"
 
         self._model = self._sam
-        logger.debug("MobileSAM loaded on %s", device)
+        logger.debug("MobileSAM loaded on %s", self._device or device)
 
     def _unload_model(self) -> None:
         """Unload model and free memory."""
@@ -652,7 +695,7 @@ def get_segmenter(
         )
         return SAM2Wrapper()
 
-    # Box prompts - need SAM2 or SAM3
+    # Box prompts - need SAM2 or SAM3 (MobileSAM doesn't support box prompts)
     if prompt_type == "box":
         available = get_available_vram_mb()
         if available >= SAM2Wrapper.info.vram_required_mb:
@@ -661,10 +704,11 @@ def get_segmenter(
                 available,
             )
             return SAM2Wrapper()
-        logger.info(
-            "Insufficient VRAM for SAM2, trying MobileSAM (note: limited box support)"
+        raise RuntimeError(
+            f"SAM2 requires {SAM2Wrapper.info.vram_required_mb}MB VRAM for box prompts, "
+            f"only {available}MB available. MobileSAM does not support box prompts. "
+            "Use point prompts instead or free up GPU memory."
         )
-        return MobileSAMWrapper()
 
     # Default to SAM2
     logger.info("Returning SAM2 segmenter (default)")
