@@ -35,6 +35,13 @@ from backend.cv.base import (
     ProgressCallback,
     register_model,
 )
+from backend.cv.detection import (
+    COCO_CLASSES,
+    RTDETRWrapper,
+    YOLO11Wrapper,
+    get_class_indices,
+    get_detector,
+)
 from backend.cv.device import (
     CUDAOOMHandler,
     DeviceInfo,
@@ -126,4 +133,10 @@ __all__ = [
     "get_total_downloaded_size_mb",
     "delete_model",
     "register_model_download",
+    # Detection
+    "COCO_CLASSES",
+    "YOLO11Wrapper",
+    "RTDETRWrapper",
+    "get_detector",
+    "get_class_indices",
 ]
