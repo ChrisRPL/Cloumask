@@ -7,7 +7,6 @@ extract structured information about what the user wants to do.
 
 from __future__ import annotations
 
-import json
 import logging
 from datetime import datetime
 from typing import Any
@@ -17,59 +16,12 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from backend.agent.llm import get_llm
 from backend.agent.prompts import load_prompt
 from backend.agent.state import MessageRole, PipelineState
+from backend.agent.utils import extract_json_object
 
 logger = logging.getLogger(__name__)
 
 # Maximum retries for LLM calls
 MAX_RETRIES = 3
-
-
-def _extract_json_from_response(content: str) -> dict[str, Any] | None:
-    """
-    Extract JSON from LLM response, handling markdown code blocks.
-
-    Args:
-        content: Raw LLM response content.
-
-    Returns:
-        Parsed JSON dict, or None if parsing fails.
-    """
-
-    def _parse_and_validate(text: str) -> dict[str, Any] | None:
-        """Parse JSON and ensure it's a dict."""
-        try:
-            result = json.loads(text)
-            if isinstance(result, dict):
-                return result
-        except json.JSONDecodeError:
-            pass
-        return None
-
-    # Try direct parsing first
-    if result := _parse_and_validate(content):
-        return result
-
-    # Try extracting from markdown code block
-    if "```" in content:
-        # Find JSON between code blocks
-        parts = content.split("```")
-        for part in parts:
-            # Remove 'json' language identifier if present
-            cleaned = part.strip()
-            if cleaned.startswith("json"):
-                cleaned = cleaned[4:].strip()
-
-            if result := _parse_and_validate(cleaned):
-                return result
-
-    # Try finding JSON-like content with braces
-    start_idx = content.find("{")
-    end_idx = content.rfind("}")
-    if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
-        if result := _parse_and_validate(content[start_idx : end_idx + 1]):
-            return result
-
-    return None
 
 
 async def understand(state: PipelineState) -> dict[str, Any]:
@@ -130,7 +82,7 @@ async def understand(state: PipelineState) -> dict[str, Any]:
             logger.debug(f"LLM response (attempt {attempt + 1}): {response_content}")
 
             # Parse JSON from response
-            understanding = _extract_json_from_response(str(response_content))
+            understanding = extract_json_object(str(response_content))
 
             if understanding is None:
                 last_error = f"Failed to parse JSON from response: {response_content[:200]}"
@@ -153,9 +105,8 @@ async def understand(state: PipelineState) -> dict[str, Any]:
                     "awaiting_user": True,
                 }
 
-            # Store understanding in metadata
-            metadata = state.get("metadata", {})
-            metadata["understanding"] = understanding
+            # Store understanding in metadata (avoid mutating original state)
+            metadata = {**state.get("metadata", {}), "understanding": understanding}
             logger.info(f"Understood intent: {understanding.get('intent')}")
 
             # Build confirmation message
