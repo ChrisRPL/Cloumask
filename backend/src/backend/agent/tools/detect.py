@@ -152,6 +152,10 @@ Supports 80 COCO classes including vehicles, people, animals, furniture, etc."""
             # Unload to free memory
             detector.unload()
 
+            # TODO: Implement annotation saving when save_annotations=True
+            if save_annotations:
+                logger.debug("Annotation saving not yet implemented")
+
             return success_result(
                 {
                     "files_processed": len(image_paths),
@@ -160,7 +164,7 @@ Supports 80 COCO classes including vehicles, people, animals, furniture, etc."""
                     "confidence_threshold": confidence,
                     "confidence": round(avg_confidence, 3),
                     "model": detector.info.name,
-                    "annotations_saved": save_annotations,
+                    "annotations_saved": False,  # Not yet implemented
                 }
             )
 

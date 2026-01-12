@@ -123,16 +123,10 @@ def get_class_indices(class_names: list[str] | None) -> list[int] | None:
     indices: list[int] = []
     for name in class_names:
         name_lower = name.lower().strip()
-        if name_lower in COCO_CLASSES:
+        try:
             indices.append(COCO_CLASSES.index(name_lower))
-        else:
-            # Try case-insensitive match
-            for i, coco_name in enumerate(COCO_CLASSES):
-                if coco_name.lower() == name_lower:
-                    indices.append(i)
-                    break
-            else:
-                logger.warning("Unknown class name: %s (not in COCO classes)", name)
+        except ValueError:
+            logger.warning("Unknown class name: %s (not in COCO classes)", name)
 
     return indices if indices else None
 
@@ -421,10 +415,12 @@ class RTDETRWrapper(BaseModelWrapper[DetectionResult]):
         """
         from ultralytics import RTDETR
 
-        from backend.cv.download import get_model_path
+        from backend.cv.download import download_model, get_model_path
 
-        # Get model path - ultralytics auto-downloads if not present
+        # Get model path - ensure downloaded
         model_path = get_model_path("rtdetr-l")
+        if not model_path.exists():
+            download_model("rtdetr-l")
 
         logger.info("Loading RT-DETR-l from %s", model_path)
         self._rtdetr = RTDETR(str(model_path))
@@ -438,8 +434,24 @@ class RTDETRWrapper(BaseModelWrapper[DetectionResult]):
             else:
                 logger.warning("CUDA requested but not available, using CPU")
 
+        # Warm up model for consistent inference times
+        self._warmup(device)
+
         # Store reference for base class compatibility
         self._model = self._rtdetr
+
+    def _warmup(self, device: str) -> None:
+        """
+        Warm up model with dummy inference.
+
+        Args:
+            device: Current device.
+        """
+        import numpy as np
+
+        dummy = np.zeros((640, 640, 3), dtype=np.uint8)
+        self._rtdetr.predict(dummy, verbose=False, device=device)  # type: ignore[union-attr]
+        logger.debug("RT-DETR warmed up on %s", device)
 
     def _unload_model(self) -> None:
         """Unload model and free memory."""
