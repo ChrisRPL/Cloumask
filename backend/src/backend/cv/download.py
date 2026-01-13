@@ -145,6 +145,30 @@ MODEL_REGISTRY: dict[str, ModelRegistryEntry] = {
         filename="mobile_sam.pt",
         size_mb=40,
     ),
+    # 3D Detection models (OpenPCDet)
+    # Note: These require manual download from OpenPCDet model zoo
+    "pvrcnn++": ModelRegistryEntry(
+        name="pvrcnn++",
+        source=ModelSource.LOCAL,
+        size_mb=150,
+        filename="pvrcnn/pv_rcnn_plusplus_8369.pth",
+        extra={
+            "config": "pvrcnn/pv_rcnn_plusplus.yaml",
+            "manual_download": True,
+            "model_zoo_url": "https://github.com/open-mmlab/OpenPCDet",
+        },
+    ),
+    "centerpoint": ModelRegistryEntry(
+        name="centerpoint",
+        source=ModelSource.LOCAL,
+        size_mb=100,
+        filename="centerpoint/centerpoint_pillar_512.pth",
+        extra={
+            "config": "centerpoint/centerpoint.yaml",
+            "manual_download": True,
+            "model_zoo_url": "https://github.com/open-mmlab/OpenPCDet",
+        },
+    ),
 }
 
 
