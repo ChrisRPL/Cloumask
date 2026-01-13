@@ -28,6 +28,13 @@ Example:
     manager.unload("yolo11m")
 """
 
+from backend.cv.anonymization import (
+    AnonymizationConfig,
+    AnonymizationMode,
+    AnonymizationPipeline,
+    AnonymizationResult,
+    anonymize,
+)
 from backend.cv.base import (
     BaseModelWrapper,
     ModelInfo,
@@ -42,10 +49,14 @@ from backend.cv.detection import (
     get_class_indices,
     get_detector,
 )
-from backend.cv.faces import (
-    SCRFDWrapper,
-    YuNetWrapper,
-    get_face_detector,
+from backend.cv.detection_3d import (
+    DETECTION_3D_CLASSES,
+    CenterPointWrapper,
+    CoordinateSystem,
+    PointCloudLoader,
+    PVRCNNWrapper,
+    convert_coordinates,
+    get_3d_detector,
 )
 from backend.cv.device import (
     CUDAOOMHandler,
@@ -76,6 +87,11 @@ from backend.cv.download import (
 from backend.cv.download import (
     register_model as register_model_download,
 )
+from backend.cv.faces import (
+    SCRFDWrapper,
+    YuNetWrapper,
+    get_face_detector,
+)
 from backend.cv.manager import ModelManager, get_model_manager
 from backend.cv.openvocab import (
     GroundingDINOWrapper,
@@ -86,15 +102,6 @@ from backend.cv.plates import (
     PLATE_REGIONS,
     PlateDetectorWrapper,
     get_plate_detector,
-)
-from backend.cv.detection_3d import (
-    DETECTION_3D_CLASSES,
-    CenterPointWrapper,
-    CoordinateSystem,
-    PointCloudLoader,
-    PVRCNNWrapper,
-    convert_coordinates,
-    get_3d_detector,
 )
 from backend.cv.segmentation import (
     MobileSAMWrapper,
@@ -114,13 +121,6 @@ from backend.cv.types import (
     PlateDetection,
     PlateDetectionResult,
     SegmentationResult,
-)
-from backend.cv.anonymization import (
-    AnonymizationConfig,
-    AnonymizationMode,
-    AnonymizationPipeline,
-    AnonymizationResult,
-    anonymize,
 )
 
 __all__ = [

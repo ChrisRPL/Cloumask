@@ -36,10 +36,10 @@ from backend.agent.checkpoints.manager import (
     resume_pipeline,
 )
 from backend.agent.checkpoints.saver import (
-    SQLiteCheckpointSaver,
     STATUS_ACTIVE,
     STATUS_CANCELLED,
     STATUS_COMPLETED,
+    SQLiteCheckpointSaver,
 )
 
 __all__ = [

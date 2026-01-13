@@ -1,6 +1,6 @@
 # CV Infrastructure
 
-> **Status:** Not Started
+> **Status:** Completed
 > **Priority:** P0 (Critical)
 > **Dependencies:** 01-foundation (Python sidecar setup)
 > **Parent:** [SPEC.md](./SPEC.md)

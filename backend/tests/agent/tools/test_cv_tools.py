@@ -13,8 +13,6 @@ Tests cover:
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -26,7 +24,6 @@ from backend.agent.tools import (
     FaceDetectTool,
     SegmentTool,
 )
-
 
 # =============================================================================
 # Test Fixtures (Mock CV Models)
@@ -62,9 +59,9 @@ def mock_detection_result():
 @pytest.fixture
 def mock_segmentation_result():
     """Create a mock SegmentationResult."""
-    from backend.cv.types import Mask, SegmentationResult
-
     import numpy as np
+
+    from backend.cv.types import Mask, SegmentationResult
 
     # Create a simple binary mask
     mask_data = np.zeros((480, 640), dtype=np.uint8)
