@@ -1,8 +1,9 @@
 # CV Models Module
 
-> **Status:** 🔴 Not Started
+> **Status:** 🟢 Complete
 > **Priority:** P0 (Critical)
 > **Dependencies:** 01-foundation, 02-agent-system
+> **Completed:** January 2026
 
 ## Overview
 
@@ -10,12 +11,12 @@ Integrate computer vision models for detection, segmentation, and anonymization.
 
 ## Goals
 
-- [ ] YOLO11 object detection with configurable classes
-- [ ] SAM3 text-prompted segmentation
-- [ ] SCRFD face detection + anonymization (blur/blackbox)
-- [ ] License plate detection and anonymization
-- [ ] Lazy model loading to manage VRAM
-- [ ] Batch processing with progress callbacks
+- [x] YOLO11 object detection with configurable classes
+- [x] SAM3 text-prompted segmentation
+- [x] SCRFD face detection + anonymization (blur/blackbox)
+- [x] License plate detection and anonymization
+- [x] Lazy model loading to manage VRAM
+- [x] Batch processing with progress callbacks
 
 ## Technical Design
 
@@ -51,47 +52,60 @@ class ModelManager:
 - **Pixelate:** Mosaic effect
 - **Mask:** SAM3 precise boundary
 
+### Quality Mode (SAM3 Priority)
+
+For precision/quality in 2D operations, SAM3 is used as the priority model:
+
+| Tool | `quality=True` Behavior | VRAM |
+|------|------------------------|------|
+| DetectTool | Routes through SAM3 detection-via-segmentation | ~8GB |
+| FaceDetectTool | Uses SAM3 with "face, human face" prompt | ~8GB |
+| AnonymizeTool | Forces mask mode with SAM3 precise boundaries | ~8GB |
+| Detect3DTool | N/A (uses PV-RCNN++/CenterPoint for point clouds) | ~4GB |
+
+This architectural decision provides superior precision when accuracy matters more than speed.
+
 ## Implementation Tasks
 
-- [ ] **Model Infrastructure**
-  - [ ] Create `ModelManager` singleton
-  - [ ] Implement lazy loading
-  - [ ] Add VRAM monitoring
-  - [ ] GPU/CPU fallback logic
+- [x] **Model Infrastructure**
+  - [x] Create `ModelManager` singleton
+  - [x] Implement lazy loading
+  - [x] Add VRAM monitoring
+  - [x] GPU/CPU fallback logic
 
-- [ ] **Object Detection**
-  - [ ] Integrate YOLO11m via ultralytics
-  - [ ] Add confidence threshold config
-  - [ ] Implement class filtering
-  - [ ] Add batch processing
+- [x] **Object Detection**
+  - [x] Integrate YOLO11m via ultralytics
+  - [x] Add confidence threshold config
+  - [x] Implement class filtering
+  - [x] Add batch processing
 
-- [ ] **Segmentation**
-  - [ ] Integrate SAM3 from HuggingFace
-  - [ ] Implement text prompt interface
-  - [ ] Add point/box prompt fallback
-  - [ ] Mask refinement options
+- [x] **Segmentation**
+  - [x] Integrate SAM3 from HuggingFace
+  - [x] Implement text prompt interface
+  - [x] Add point/box prompt fallback
+  - [x] Mask refinement options
 
-- [ ] **Anonymization**
-  - [ ] Integrate SCRFD for faces
-  - [ ] Add license plate detector
-  - [ ] Implement blur/blackbox/pixelate
-  - [ ] SAM3 precise masking option
+- [x] **Anonymization**
+  - [x] Integrate SCRFD for faces
+  - [x] Add license plate detector
+  - [x] Implement blur/blackbox/pixelate
+  - [x] SAM3 precise masking option
 
-- [ ] **Agent Tools**
-  - [ ] `detect_objects` tool
-  - [ ] `segment_sam3` tool
-  - [ ] `anonymize` tool
-  - [ ] `detect_faces` tool
-  - [ ] `detect_3d` tool
+- [x] **Agent Tools**
+  - [x] `detect_objects` tool
+  - [x] `segment_sam3` tool
+  - [x] `anonymize` tool
+  - [x] `detect_faces` tool
+  - [x] `detect_3d` tool
 
 ## Acceptance Criteria
 
-- [ ] `detect_objects("car, person", image_path)` returns bounding boxes
-- [ ] `segment_sam3("red car", image_path)` returns masks
-- [ ] `anonymize(image_path, faces=True, plates=True)` produces anonymized image
-- [ ] Models load on first use, not at startup
-- [ ] VRAM usage stays under 10GB for typical workflow
-- [ ] Batch of 100 images processes with progress updates
+- [x] `detect_objects("car, person", image_path)` returns bounding boxes
+- [x] `segment_sam3("red car", image_path)` returns masks
+- [x] `anonymize(image_path, faces=True, plates=True)` produces anonymized image
+- [x] Models load on first use, not at startup
+- [x] VRAM usage stays under 10GB for typical workflow
+- [x] Batch of 100 images processes with progress updates
 
 ## Files to Create/Modify
 
