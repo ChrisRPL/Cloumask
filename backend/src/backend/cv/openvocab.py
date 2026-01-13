@@ -123,8 +123,15 @@ class YOLOWorldWrapper(BaseModelWrapper[DetectionResult]):
         """
         from ultralytics import YOLOWorld
 
-        logger.info("Loading YOLO-World-l model")
-        self._yoloworld = YOLOWorld("yolov8l-world.pt")
+        from backend.cv.download import download_model, get_model_path
+
+        # Get model path - download if not present
+        model_path = get_model_path("yolo-world-l")
+        if not model_path.exists():
+            download_model("yolo-world-l")
+
+        logger.info("Loading YOLO-World-l from %s", model_path)
+        self._yoloworld = YOLOWorld(str(model_path))
 
         # Move to device if CUDA
         if device == "cuda":
@@ -151,13 +158,12 @@ class YOLOWorldWrapper(BaseModelWrapper[DetectionResult]):
 
         # Set a dummy class for warmup
         self._yoloworld.set_classes(["object"])  # type: ignore[union-attr]
+        self._current_classes = ["object"]
 
         # Create dummy image tensor (640x640 RGB)
         dummy = np.zeros((640, 640, 3), dtype=np.uint8)
         self._yoloworld.predict(dummy, verbose=False, device=device)  # type: ignore[union-attr]
 
-        # Clear the warmup class
-        self._current_classes = []
         logger.debug("YOLO-World warmed up on %s", device)
 
     def _unload_model(self) -> None:
@@ -355,12 +361,19 @@ class GroundingDINOWrapper(BaseModelWrapper[DetectionResult]):
         self._processor = AutoProcessor.from_pretrained(self.MODEL_ID)
         self._gdino = AutoModelForZeroShotObjectDetection.from_pretrained(self.MODEL_ID)
 
-        # Move to device if CUDA
+        # Move to device if GPU requested
         if device == "cuda":
             if torch.cuda.is_available():
                 self._gdino.to(device)  # type: ignore[union-attr]
             else:
                 logger.warning("CUDA requested but not available, using CPU")
+                device = "cpu"
+        elif device == "mps":
+            if torch.backends.mps.is_available():
+                self._gdino.to(device)  # type: ignore[union-attr]
+            else:
+                logger.warning("MPS requested but not available, using CPU")
+                device = "cpu"
 
         # Store reference for base class compatibility
         self._model = self._gdino

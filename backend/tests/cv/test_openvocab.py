@@ -246,13 +246,21 @@ class TestYOLOWorldWrapperUnit:
             wrapper.predict_batch(["test.jpg"], prompt="car")
 
     @patch("ultralytics.YOLOWorld", MockYOLOWorld)
+    @patch("backend.cv.download.get_model_path")
     @patch("backend.cv.device.clear_gpu_memory")
     def test_load_and_predict(
         self,
         mock_clear: MagicMock,
+        mock_path: MagicMock,
     ) -> None:
         """Should load and predict successfully with mocked model."""
         from backend.cv.openvocab import YOLOWorldWrapper
+
+        # Mock model path
+        fake_path = MagicMock()
+        fake_path.exists.return_value = True
+        fake_path.__str__ = lambda self: "/fake/path/yolov8l-worldv2.pt"
+        mock_path.return_value = fake_path
 
         wrapper = YOLOWorldWrapper()
         wrapper.load(device="cpu")
@@ -272,13 +280,21 @@ class TestYOLOWorldWrapperUnit:
         assert not wrapper.is_loaded
 
     @patch("ultralytics.YOLOWorld", MockYOLOWorld)
+    @patch("backend.cv.download.get_model_path")
     @patch("backend.cv.device.clear_gpu_memory")
     def test_class_embedding_cache(
         self,
         mock_clear: MagicMock,
+        mock_path: MagicMock,
     ) -> None:
         """Should cache class embeddings - set_classes only called on change."""
         from backend.cv.openvocab import YOLOWorldWrapper
+
+        # Mock model path
+        fake_path = MagicMock()
+        fake_path.exists.return_value = True
+        fake_path.__str__ = lambda self: "/fake/path/yolov8l-worldv2.pt"
+        mock_path.return_value = fake_path
 
         wrapper = YOLOWorldWrapper()
         wrapper.load(device="cpu")
@@ -298,13 +314,21 @@ class TestYOLOWorldWrapperUnit:
         wrapper.unload()
 
     @patch("ultralytics.YOLOWorld", MockYOLOWorld)
+    @patch("backend.cv.download.get_model_path")
     @patch("backend.cv.device.clear_gpu_memory")
     def test_batch_prediction(
         self,
         mock_clear: MagicMock,
+        mock_path: MagicMock,
     ) -> None:
         """Should handle batch predictions with progress callback."""
         from backend.cv.openvocab import YOLOWorldWrapper
+
+        # Mock model path
+        fake_path = MagicMock()
+        fake_path.exists.return_value = True
+        fake_path.__str__ = lambda self: "/fake/path/yolov8l-worldv2.pt"
+        mock_path.return_value = fake_path
 
         wrapper = YOLOWorldWrapper()
         wrapper.load(device="cpu")
@@ -329,13 +353,21 @@ class TestYOLOWorldWrapperUnit:
         wrapper.unload()
 
     @patch("ultralytics.YOLOWorld", MockYOLOWorld)
+    @patch("backend.cv.download.get_model_path")
     @patch("backend.cv.device.clear_gpu_memory")
     def test_empty_prompt_defaults_to_object(
         self,
         mock_clear: MagicMock,
+        mock_path: MagicMock,
     ) -> None:
         """Empty prompt should default to 'object'."""
         from backend.cv.openvocab import YOLOWorldWrapper
+
+        # Mock model path
+        fake_path = MagicMock()
+        fake_path.exists.return_value = True
+        fake_path.__str__ = lambda self: "/fake/path/yolov8l-worldv2.pt"
+        mock_path.return_value = fake_path
 
         wrapper = YOLOWorldWrapper()
         wrapper.load(device="cpu")
@@ -444,6 +476,39 @@ class TestGroundingDINOWrapperUnit:
 
         wrapper = GroundingDINOWrapper()
         assert wrapper.info.supports_batching is False
+
+    @patch("transformers.AutoModelForZeroShotObjectDetection.from_pretrained")
+    @patch("transformers.AutoProcessor.from_pretrained")
+    @patch("backend.cv.device.clear_gpu_memory")
+    @patch("PIL.Image.open")
+    def test_batch_uses_sequential_predict(
+        self,
+        mock_image_open: MagicMock,
+        mock_clear: MagicMock,
+        mock_processor: MagicMock,
+        mock_model: MagicMock,
+    ) -> None:
+        """predict_batch should iterate since supports_batching=False."""
+        from backend.cv.openvocab import GroundingDINOWrapper
+
+        # Setup mocks
+        mock_model.return_value = MockGroundingDINOModel()
+        mock_processor.return_value = MockGroundingDINOProcessor()
+
+        mock_img = MagicMock()
+        mock_img.convert.return_value = mock_img
+        mock_img.size = (640, 480)
+        mock_image_open.return_value = mock_img
+
+        wrapper = GroundingDINOWrapper()
+        wrapper.load(device="cpu")
+
+        results = wrapper.predict_batch(["img1.jpg", "img2.jpg"], prompt="car")
+
+        assert len(results) == 2
+        assert all(isinstance(r, DetectionResult) for r in results)
+
+        wrapper.unload()
 
 
 # -----------------------------------------------------------------------------
