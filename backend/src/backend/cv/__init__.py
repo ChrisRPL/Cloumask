@@ -82,6 +82,11 @@ from backend.cv.openvocab import (
     YOLOWorldWrapper,
     get_openvocab_detector,
 )
+from backend.cv.plates import (
+    PLATE_REGIONS,
+    PlateDetectorWrapper,
+    get_plate_detector,
+)
 from backend.cv.segmentation import (
     MobileSAMWrapper,
     SAM2Wrapper,
@@ -168,4 +173,8 @@ __all__ = [
     "YOLOWorldWrapper",
     "GroundingDINOWrapper",
     "get_openvocab_detector",
+    # Plate Detection
+    "PlateDetectorWrapper",
+    "get_plate_detector",
+    "PLATE_REGIONS",
 ]
