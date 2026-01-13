@@ -77,6 +77,11 @@ from backend.cv.download import (
     register_model as register_model_download,
 )
 from backend.cv.manager import ModelManager, get_model_manager
+from backend.cv.openvocab import (
+    GroundingDINOWrapper,
+    YOLOWorldWrapper,
+    get_openvocab_detector,
+)
 from backend.cv.segmentation import (
     MobileSAMWrapper,
     SAM2Wrapper,
@@ -159,4 +164,8 @@ __all__ = [
     "SCRFDWrapper",
     "YuNetWrapper",
     "get_face_detector",
+    # Open-Vocabulary Detection
+    "YOLOWorldWrapper",
+    "GroundingDINOWrapper",
+    "get_openvocab_detector",
 ]
