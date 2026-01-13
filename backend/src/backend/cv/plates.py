@@ -135,6 +135,9 @@ class PlateDetectorWrapper(BaseModelWrapper[PlateDetectionResult]):
         self._yolo_world = YOLOWorldWrapper()
         self._yolo_world.load(device)
 
+        # Sync device in case YOLO-World changed it internally
+        self._device = self._yolo_world._device
+
         # Store reference for base class compatibility
         self._model = self._yolo_world._model
 
@@ -153,11 +156,28 @@ class PlateDetectorWrapper(BaseModelWrapper[PlateDetectionResult]):
 
         self._specialized_model = YOLO(str(model_path))
 
-        if device == "cuda":
-            if torch.cuda.is_available():
-                self._specialized_model.to(device)
+        try:
+            if device == "cuda":
+                if torch.cuda.is_available():
+                    self._specialized_model.to(device)
+                else:
+                    logger.warning("CUDA requested but not available, using CPU")
+                    device = "cpu"
+            elif device == "mps":
+                if torch.backends.mps.is_available():
+                    self._specialized_model.to(device)
+                else:
+                    logger.warning("MPS requested but not available, using CPU")
+                    device = "cpu"
+        except RuntimeError as e:
+            if "out of memory" in str(e).lower():
+                logger.warning("GPU OOM loading specialized model, falling back to CPU")
+                self._specialized_model.to("cpu")
+                device = "cpu"
             else:
-                logger.warning("CUDA requested but not available, using CPU")
+                raise
+
+        self._device = device
 
         # Store reference for base class compatibility
         self._model = self._specialized_model
