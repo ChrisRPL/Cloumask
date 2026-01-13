@@ -201,30 +201,6 @@ def sample_image(tmp_path: Path) -> Path:
     return path
 
 
-@pytest.fixture
-def config_blur() -> AnonymizationConfig:
-    """Configuration for blur mode."""
-    return AnonymizationConfig(faces=True, plates=True, mode="blur")
-
-
-@pytest.fixture
-def config_blackbox() -> AnonymizationConfig:
-    """Configuration for blackbox mode."""
-    return AnonymizationConfig(faces=True, plates=True, mode="blackbox")
-
-
-@pytest.fixture
-def config_pixelate() -> AnonymizationConfig:
-    """Configuration for pixelate mode."""
-    return AnonymizationConfig(faces=True, plates=True, mode="pixelate")
-
-
-@pytest.fixture
-def config_mask() -> AnonymizationConfig:
-    """Configuration for mask mode."""
-    return AnonymizationConfig(faces=True, plates=True, mode="mask")
-
-
 # -----------------------------------------------------------------------------
 # Configuration Tests
 # -----------------------------------------------------------------------------

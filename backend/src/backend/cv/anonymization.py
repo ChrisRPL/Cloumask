@@ -213,20 +213,36 @@ class AnonymizationPipeline:
         self._device = device
         logger.info("Loading anonymization pipeline on device: %s", device)
 
-        # Load face detector
+        # Load face detector with OOM fallback
         if self.config.faces:
             logger.info("Loading face detector...")
             self._face_detector = get_face_detector(realtime=False)
-            self._face_detector.load(device)
+            try:
+                self._face_detector.load(device)
+            except RuntimeError as e:
+                if "CUDA" in str(e) or "out of memory" in str(e).lower():
+                    logger.warning("GPU OOM loading face detector, falling back to CPU")
+                    self._face_detector.load("cpu")
+                    self._device = "cpu"
+                else:
+                    raise
 
-        # Load plate detector
+        # Load plate detector with OOM fallback
         if self.config.plates:
             logger.info("Loading plate detector...")
             self._plate_detector = get_plate_detector()
-            self._plate_detector.load(device)
+            try:
+                self._plate_detector.load(self._device)
+            except RuntimeError as e:
+                if "CUDA" in str(e) or "out of memory" in str(e).lower():
+                    logger.warning("GPU OOM loading plate detector, falling back to CPU")
+                    self._plate_detector.load("cpu")
+                    self._device = "cpu"
+                else:
+                    raise
 
         self._is_loaded = True
-        logger.info("Anonymization pipeline loaded successfully")
+        logger.info("Anonymization pipeline loaded successfully on %s", self._device)
 
     def unload(self) -> None:
         """Unload all models and free VRAM."""
@@ -295,7 +311,9 @@ class AnonymizationPipeline:
                 detections.append(("face", face.bbox))
                 face_list.append(face)
 
-        # Detect plates
+        # Detect plates (reload if unloaded during mask mode)
+        if self.config.plates:
+            self._ensure_plate_detector_loaded()
         if self.config.plates and self._plate_detector is not None:
             plate_result = self._plate_detector.predict(
                 image_path,
@@ -318,7 +336,9 @@ class AnonymizationPipeline:
             output_path = str(path.parent / f"{path.stem}_anon{path.suffix}")
 
         # Save output
-        cv2.imwrite(output_path, image)
+        success = cv2.imwrite(output_path, image)
+        if not success:
+            raise OSError(f"Failed to write output image: {output_path}")
 
         elapsed_ms = (time.perf_counter() - start) * 1000
 
@@ -553,6 +573,20 @@ class AnonymizationPipeline:
 
         return image
 
+    def _ensure_plate_detector_loaded(self) -> None:
+        """Reload plate detector if it was unloaded for VRAM management."""
+        if self._plate_detector is None and self.config.plates:
+            logger.info("Reloading plate detector...")
+            self._plate_detector = get_plate_detector()
+            try:
+                self._plate_detector.load(self._device)
+            except RuntimeError as e:
+                if "CUDA" in str(e) or "out of memory" in str(e).lower():
+                    logger.warning("GPU OOM reloading plate detector, using CPU")
+                    self._plate_detector.load("cpu")
+                else:
+                    raise
+
     def _ensure_sam_loaded(self) -> None:
         """Ensure SAM3 is loaded for mask mode."""
         if self._segmenter is None:
@@ -560,7 +594,14 @@ class AnonymizationPipeline:
 
             logger.info("Loading SAM3 for precise masking...")
             self._segmenter = SAM3Wrapper()
-            self._segmenter.load(self._device)
+            try:
+                self._segmenter.load(self._device)
+            except RuntimeError as e:
+                if "CUDA" in str(e) or "out of memory" in str(e).lower():
+                    logger.warning("GPU OOM loading SAM3, falling back to CPU")
+                    self._segmenter.load("cpu")
+                else:
+                    raise
 
     def _apply_mask_effect(
         self,
