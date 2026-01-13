@@ -28,3 +28,11 @@ onnxruntime>=1.16.0
 
 # ONNX Runtime GPU (optional, for optimized inference on GPU)
 # onnxruntime-gpu==1.20.0
+
+# Point Cloud Processing (3D detection)
+open3d>=0.18.0
+laspy>=2.5.0
+
+# OpenPCDet (3D object detection with PV-RCNN++, CenterPoint)
+# Note: OpenPCDet requires source installation with CUDA compilation
+# See models/README.md for installation instructions
