@@ -106,6 +106,13 @@ from backend.cv.types import (
     PlateDetectionResult,
     SegmentationResult,
 )
+from backend.cv.anonymization import (
+    AnonymizationConfig,
+    AnonymizationMode,
+    AnonymizationPipeline,
+    AnonymizationResult,
+    anonymize,
+)
 
 __all__ = [
     # Types
@@ -177,4 +184,10 @@ __all__ = [
     "PlateDetectorWrapper",
     "get_plate_detector",
     "PLATE_REGIONS",
+    # Anonymization
+    "AnonymizationConfig",
+    "AnonymizationMode",
+    "AnonymizationPipeline",
+    "AnonymizationResult",
+    "anonymize",
 ]
