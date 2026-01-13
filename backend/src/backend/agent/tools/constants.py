@@ -37,6 +37,7 @@ POINTCLOUD_EXTENSIONS: frozenset[str] = frozenset({
     ".xyz",
     ".pts",
     ".e57",
+    ".bin",  # KITTI binary format
 })
 
 ANNOTATION_EXTENSIONS: frozenset[str] = frozenset({
@@ -57,7 +58,7 @@ SUPPORTED_EXPORT_FORMATS: list[str] = [
     "cvat",
 ]
 
-# Default detection classes
+# Default 2D detection classes (common COCO subset)
 DEFAULT_DETECTION_CLASSES: list[str] = [
     "person",
     "car",
@@ -65,6 +66,13 @@ DEFAULT_DETECTION_CLASSES: list[str] = [
     "bus",
     "bicycle",
     "motorcycle",
+]
+
+# 3D detection classes (KITTI/nuScenes)
+DETECTION_3D_CLASSES: list[str] = [
+    "Car",
+    "Pedestrian",
+    "Cyclist",
 ]
 
 # Progress reporting throttle interval

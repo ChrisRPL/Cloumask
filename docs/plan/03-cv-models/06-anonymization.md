@@ -1,6 +1,6 @@
 # Anonymization Pipeline
 
-> **Status:** Not Started
+> **Status:** Completed
 > **Priority:** P0 (Critical)
 > **Dependencies:** [02-sam3-segmentation.md](./02-sam3-segmentation.md), [03-scrfd-faces.md](./03-scrfd-faces.md), [05-plate-detection.md](./05-plate-detection.md)
 > **Parent:** [SPEC.md](./SPEC.md)

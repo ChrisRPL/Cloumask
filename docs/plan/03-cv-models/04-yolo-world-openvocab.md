@@ -1,6 +1,6 @@
 # YOLO-World Open-Vocabulary Detection
 
-> **Status:** Not Started
+> **Status:** Completed
 > **Priority:** P1 (High)
 > **Dependencies:** [00-infrastructure.md](./00-infrastructure.md)
 > **Parent:** [SPEC.md](./SPEC.md)

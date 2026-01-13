@@ -2,8 +2,6 @@
 
 import time
 
-import pytest
-
 from backend.api.streaming.batching import (
     DEFAULT_RATE_LIMITS,
     EventBatcher,

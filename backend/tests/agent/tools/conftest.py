@@ -69,3 +69,67 @@ def empty_dataset(tmp_path):
     empty_dir = tmp_path / "empty"
     empty_dir.mkdir()
     return empty_dir
+
+
+@pytest.fixture
+def temp_image(tmp_path):
+    """
+    Create a minimal valid RGB image file.
+
+    Returns path to a small but valid JPEG image that can be loaded by CV models.
+    """
+    try:
+        from PIL import Image
+    except ImportError:
+        pytest.skip("PIL not installed, skipping image fixture")
+
+    img = Image.new("RGB", (640, 480), color=(128, 64, 32))
+    # Add some variation so it's not completely uniform
+    pixels = img.load()
+    for x in range(0, 640, 10):
+        for y in range(0, 480, 10):
+            pixels[x, y] = (255, 0, 0)  # type: ignore[index]
+
+    path = tmp_path / "test_image.jpg"
+    img.save(path)
+    return path
+
+
+@pytest.fixture
+def temp_pointcloud(tmp_path):
+    """
+    Create a minimal point cloud in KITTI binary format.
+
+    Returns path to a binary file with random 3D points (N x 4: x, y, z, intensity).
+    """
+    import numpy as np
+
+    # Create 1000 random points with xyz and intensity
+    points = np.random.rand(1000, 4).astype(np.float32)
+    # Scale to reasonable range: x/y: -50 to 50m, z: -2 to 2m
+    points[:, :2] = points[:, :2] * 100 - 50  # x, y
+    points[:, 2] = points[:, 2] * 4 - 2  # z
+    points[:, 3] = points[:, 3]  # intensity 0-1
+
+    path = tmp_path / "test_pointcloud.bin"
+    points.tofile(path)
+    return path
+
+
+@pytest.fixture
+def temp_image_dir(tmp_path):
+    """Create directory with multiple valid images."""
+    try:
+        from PIL import Image
+    except ImportError:
+        pytest.skip("PIL not installed, skipping image directory fixture")
+
+    img_dir = tmp_path / "images"
+    img_dir.mkdir()
+
+    for i in range(5):
+        img = Image.new("RGB", (320, 240), color=(i * 50, 100, 150))
+        (img_dir / f"image_{i}.jpg").parent.mkdir(parents=True, exist_ok=True)
+        img.save(img_dir / f"image_{i}.jpg")
+
+    return img_dir
