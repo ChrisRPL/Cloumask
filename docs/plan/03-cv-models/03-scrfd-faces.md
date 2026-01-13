@@ -1,6 +1,6 @@
 # SCRFD Face Detection
 
-> **Status:** Not Started
+> **Status:** Completed
 > **Priority:** P0 (Critical)
 > **Dependencies:** [00-infrastructure.md](./00-infrastructure.md)
 > **Parent:** [SPEC.md](./SPEC.md)

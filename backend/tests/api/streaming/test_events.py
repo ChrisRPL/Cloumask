@@ -2,14 +2,9 @@
 
 import json
 
-import pytest
-
 from backend.api.streaming.events import (
-    CheckpointEventData,
     MessageEventData,
-    SSEEvent,
     SSEEventType,
-    ToolProgressEventData,
     checkpoint_event,
     complete_event,
     connected_event,

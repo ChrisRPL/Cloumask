@@ -1,19 +1,17 @@
 """Tests for SSE streaming endpoints."""
 
-import json
-from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
 from backend.api.main import app
 from backend.api.streaming.endpoints import (
+    ThreadState,
     _event_queues,
+    _sanitize_error_message,
     _thread_states,
     _threads,
-    _sanitize_error_message,
     state_to_events,
-    ThreadState,
 )
 from backend.api.streaming.events import SSEEventType
 

@@ -27,8 +27,8 @@ from backend.agent.nodes.execute import (
     register_stub_tools,
     update_progress,
 )
-from backend.agent.tools import ToolRegistry, get_tool_registry
 from backend.agent.state import MessageRole, PipelineState, StepStatus
+from backend.agent.tools import get_tool_registry
 
 # -----------------------------------------------------------------------------
 # Fixtures
@@ -518,7 +518,7 @@ class TestExecuteStepNode:
     @pytest.mark.asyncio
     async def test_retry_on_transient_error(self, base_state: PipelineState) -> None:
         """Should retry on transient errors."""
-        from backend.agent.tools import BaseTool, ToolCategory, ToolResult, error_result
+        from backend.agent.tools import BaseTool, ToolCategory, ToolResult
 
         call_count = 0
 

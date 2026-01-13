@@ -4,18 +4,17 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 from backend.agent.checkpoints import (
-    CheckpointManager,
-    SQLiteCheckpointSaver,
     STATUS_ACTIVE,
     STATUS_COMPLETED,
+    CheckpointManager,
     resume_pipeline,
 )
-from backend.agent.state import PipelineState, create_initial_state
+from backend.agent.state import create_initial_state
 
 
 @pytest.fixture

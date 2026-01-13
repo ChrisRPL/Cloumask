@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 import pytest
 
 from backend.agent.checkpoints.saver import (
-    SQLiteCheckpointSaver,
     STATUS_ACTIVE,
     STATUS_CANCELLED,
     STATUS_COMPLETED,
+    SQLiteCheckpointSaver,
 )
 
 

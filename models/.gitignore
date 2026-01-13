@@ -1,0 +1,32 @@
+# Model weights - not tracked in git
+# These are downloaded on first use or manually via download_model()
+
+# PyTorch models
+*.pt
+*.pth
+*.bin
+*.safetensors
+
+# ONNX models
+*.onnx
+
+# TensorRT engines
+*.engine
+*.trt
+
+# Model directories (HuggingFace downloads)
+sam2-*/
+sam3-*/
+scrfd-*/
+yolo-world-*/
+pvrcnn*/
+centerpoint*/
+
+# Temporary files
+*.tmp
+*.partial
+*.download
+
+# Keep this file and README
+!.gitignore
+!README.md
