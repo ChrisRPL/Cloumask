@@ -87,6 +87,15 @@ from backend.cv.plates import (
     PlateDetectorWrapper,
     get_plate_detector,
 )
+from backend.cv.detection_3d import (
+    DETECTION_3D_CLASSES,
+    CenterPointWrapper,
+    CoordinateSystem,
+    PointCloudLoader,
+    PVRCNNWrapper,
+    convert_coordinates,
+    get_3d_detector,
+)
 from backend.cv.segmentation import (
     MobileSAMWrapper,
     SAM2Wrapper,
@@ -184,6 +193,14 @@ __all__ = [
     "PlateDetectorWrapper",
     "get_plate_detector",
     "PLATE_REGIONS",
+    # 3D Detection
+    "DETECTION_3D_CLASSES",
+    "CoordinateSystem",
+    "PointCloudLoader",
+    "PVRCNNWrapper",
+    "CenterPointWrapper",
+    "convert_coordinates",
+    "get_3d_detector",
     # Anonymization
     "AnonymizationConfig",
     "AnonymizationMode",
