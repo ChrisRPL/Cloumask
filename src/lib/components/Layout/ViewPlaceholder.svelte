@@ -9,28 +9,21 @@
 </script>
 
 <script lang="ts">
-	import {
-		MessageSquare,
-		ClipboardList,
-		Play,
-		CheckCircle,
-		Box,
-		Settings,
-	} from 'lucide-svelte';
+	import Icon from '$lib/components/ui/icons.svelte';
 
 	let { view, class: className }: ViewPlaceholderProps = $props();
 
-	// Map icon names to components
-	const iconMap: Record<string, typeof MessageSquare> = {
-		MessageSquare,
-		ClipboardList,
-		Play,
-		CheckCircle,
-		Box,
-		Settings,
+	// Map view icon names to icon component names
+	const iconNameMap: Record<string, 'message-square' | 'clipboard-list' | 'play' | 'check-circle' | 'box' | 'settings'> = {
+		MessageSquare: 'message-square',
+		ClipboardList: 'clipboard-list',
+		Play: 'play',
+		CheckCircle: 'check-circle',
+		Box: 'box',
+		Settings: 'settings',
 	};
 
-	const IconComponent = $derived(iconMap[view.icon] ?? MessageSquare);
+	const iconName = $derived(iconNameMap[view.icon] ?? 'message-square');
 </script>
 
 <div
@@ -40,7 +33,7 @@
 	)}
 >
 	<div class="p-4 rounded-full bg-muted mb-4">
-		<IconComponent class="size-12 text-muted-foreground" />
+		<Icon name={iconName} class="size-12 text-muted-foreground" />
 	</div>
 	<h2 class="text-2xl font-semibold text-foreground mb-2">{view.label}</h2>
 	<p class="text-muted-foreground max-w-md">

@@ -12,14 +12,7 @@
 </script>
 
 <script lang="ts">
-	import {
-		MessageSquare,
-		ClipboardList,
-		Play,
-		CheckCircle,
-		Box,
-		Settings,
-	} from 'lucide-svelte';
+	import Icon from '$lib/components/ui/icons.svelte';
 	import * as Tooltip from '$lib/components/ui/tooltip';
 
 	let {
@@ -30,17 +23,17 @@
 		onclick,
 	}: NavItemProps = $props();
 
-	// Map icon names to components
-	const iconMap: Record<string, typeof MessageSquare> = {
-		MessageSquare,
-		ClipboardList,
-		Play,
-		CheckCircle,
-		Box,
-		Settings,
+	// Map view icon names to icon component names
+	const iconNameMap: Record<string, 'message-square' | 'clipboard-list' | 'play' | 'check-circle' | 'box' | 'settings'> = {
+		MessageSquare: 'message-square',
+		ClipboardList: 'clipboard-list',
+		Play: 'play',
+		CheckCircle: 'check-circle',
+		Box: 'box',
+		Settings: 'settings',
 	};
 
-	const IconComponent = $derived(iconMap[view.icon] ?? MessageSquare);
+	const iconName = $derived(iconNameMap[view.icon] ?? 'message-square');
 </script>
 
 {#if collapsed}
@@ -56,7 +49,7 @@
 			)}
 			{onclick}
 		>
-			<IconComponent class="size-5" />
+			<Icon name={iconName} class="size-5" />
 		</Tooltip.Trigger>
 		<Tooltip.Content side="right" sideOffset={8}>
 			<p class="flex items-center gap-2">
@@ -83,7 +76,7 @@
 		)}
 		aria-current={active ? 'page' : undefined}
 	>
-		<IconComponent class="size-5 shrink-0" />
+		<Icon name={iconName} class="size-5 shrink-0" />
 		<span class="flex-1 text-left truncate text-sm">{view.label}</span>
 		<kbd class="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded font-mono">
 			{view.shortcut}

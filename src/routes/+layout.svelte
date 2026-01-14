@@ -1,8 +1,9 @@
 <script lang="ts">
 	import '../app.css';
 	import type { Snippet } from 'svelte';
-	import { setUIState, VIEWS } from '$lib/stores/ui';
+	import { setUIState, VIEWS } from '$lib/stores/ui.svelte';
 	import { Header, Sidebar, MainContent } from '$lib/components/Layout';
+	import * as Tooltip from '$lib/components/ui/tooltip';
 
 	interface Props {
 		children: Snippet;
@@ -50,12 +51,14 @@
 	});
 </script>
 
-<div class="h-screen flex flex-col bg-background overflow-hidden">
-	<Header />
-	<div class="flex-1 flex overflow-hidden">
-		<Sidebar />
-		<MainContent>
-			{@render children()}
-		</MainContent>
+<Tooltip.Provider>
+	<div class="h-screen flex flex-col bg-background overflow-hidden">
+		<Header />
+		<div class="flex-1 flex overflow-hidden">
+			<Sidebar />
+			<MainContent>
+				{@render children()}
+			</MainContent>
+		</div>
 	</div>
-</div>
+</Tooltip.Provider>

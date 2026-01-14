@@ -21,7 +21,7 @@
 		OllamaModelsResponse,
 		HealthStatus,
 	} from '$lib/types';
-	import { getUIState, VIEWS } from '$lib/stores/ui';
+	import { getUIState, VIEWS } from '$lib/stores/ui.svelte';
 	import { ViewPlaceholder } from '$lib/components/Layout';
 
 	// Get UI state from context
