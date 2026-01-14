@@ -19,6 +19,12 @@ export {
 	// Generic HTTP
 	callSidecarGet,
 	callSidecarPost,
+	// Window controls
+	getTauriWindow,
+	minimizeWindow,
+	toggleMaximize,
+	isWindowMaximized,
+	closeWindow,
 	// Utilities
 	isTauri,
 	waitFor,
