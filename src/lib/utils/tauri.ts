@@ -133,6 +133,52 @@ export async function callSidecarPost<T = unknown>(endpoint: string, body: unkno
 }
 
 // ============================================================================
+// Window Control Commands (Tauri 2.0)
+// ============================================================================
+
+/**
+ * Get the current Tauri window instance.
+ * Returns null if not running in Tauri.
+ */
+export async function getTauriWindow() {
+	if (!isTauri()) return null;
+	const { getCurrentWindow } = await import('@tauri-apps/api/window');
+	return getCurrentWindow();
+}
+
+/** Minimize the current window */
+export async function minimizeWindow(): Promise<void> {
+	const win = await getTauriWindow();
+	if (win) await win.minimize();
+}
+
+/** Toggle maximize/restore for the current window */
+export async function toggleMaximize(): Promise<void> {
+	const win = await getTauriWindow();
+	if (!win) return;
+
+	const isMaximized = await win.isMaximized();
+	if (isMaximized) {
+		await win.unmaximize();
+	} else {
+		await win.maximize();
+	}
+}
+
+/** Check if the current window is maximized */
+export async function isWindowMaximized(): Promise<boolean> {
+	const win = await getTauriWindow();
+	if (!win) return false;
+	return win.isMaximized();
+}
+
+/** Close the current window */
+export async function closeWindow(): Promise<void> {
+	const win = await getTauriWindow();
+	if (win) await win.close();
+}
+
+// ============================================================================
 // Utility Functions
 // ============================================================================
 
