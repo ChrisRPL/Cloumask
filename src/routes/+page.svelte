@@ -21,6 +21,14 @@
 		OllamaModelsResponse,
 		HealthStatus,
 	} from '$lib/types';
+	import { getUIState, VIEWS } from '$lib/stores/ui';
+	import { ViewPlaceholder } from '$lib/components/Layout';
+
+	// Get UI state from context
+	const ui = getUIState();
+
+	// Get current view config
+	const currentViewConfig = $derived(VIEWS.find((v) => v.id === ui.currentView) ?? VIEWS[0]);
 
 	// State with Svelte 5 runes
 	let appInfo = $state<AppInfo | null>(null);
@@ -37,7 +45,9 @@
 	// Derived status computations
 	const frontendStatus: HealthStatus = 'healthy';
 
-	const rustStatus = $derived<HealthStatus>(appInfo ? 'healthy' : loading ? 'loading' : 'unhealthy');
+	const rustStatus = $derived<HealthStatus>(
+		appInfo ? 'healthy' : loading ? 'loading' : 'unhealthy'
+	);
 
 	const pythonStatus = $derived.by<HealthStatus>(() => {
 		if (loading) return 'loading';
@@ -147,154 +157,153 @@
 	});
 </script>
 
-<main class="flex flex-col items-center justify-center min-h-screen p-8 gap-8">
-	<!-- Header -->
-	<div class="text-center">
-		<img src="/assets/icon_large.png" alt="Cloumask" class="h-16 mx-auto mb-4 object-contain" />
-		<h1 class="text-4xl font-bold text-foreground mb-2">Cloumask</h1>
-		<p class="text-muted-foreground">Local-first AI for computer vision data processing</p>
-		<div class="flex gap-2 justify-center mt-4">
-			<Badge variant="secondary">Tauri 2.0</Badge>
-			<Badge variant="secondary">Svelte 5</Badge>
-			<Badge variant="secondary">Python</Badge>
+{#if ui.currentView === 'settings'}
+	<!-- Settings View: System Status Dashboard -->
+	<div class="flex flex-col items-center justify-start min-h-full p-8 gap-8 overflow-auto">
+		<div class="text-center">
+			<h1 class="text-2xl font-bold text-foreground mb-2">Settings</h1>
+			<p class="text-muted-foreground">System status and configuration</p>
 		</div>
-	</div>
 
-	<!-- System Status Card -->
-	<Card.Root class="w-full max-w-md">
-		<Card.Header>
-			<Card.Title class="flex items-center justify-between">
-				System Status
-				<Button variant="ghost" size="sm" onclick={refreshStatus} disabled={loading}>
-					{loading ? 'Checking...' : 'Refresh'}
-				</Button>
-			</Card.Title>
-			<Card.Description>Foundation module verification</Card.Description>
-		</Card.Header>
-		<Card.Content class="space-y-4">
-			{#if !isInTauri}
-				<p class="text-muted-foreground text-sm">
-					Running outside Tauri - IPC commands unavailable.
-				</p>
-			{:else}
-				<!-- Frontend Status -->
-				<div class="flex items-center justify-between">
-					<span class="text-muted-foreground">Frontend (Svelte 5)</span>
-					<Badge variant={getBadgeVariant(frontendStatus)}>
-						{frontendStatus}
-					</Badge>
-				</div>
-
-				<!-- Rust Status -->
-				<div class="flex items-center justify-between">
-					<span class="text-muted-foreground">Rust Core (Tauri)</span>
-					<Badge variant={getBadgeVariant(rustStatus)}>
-						{rustStatus}
-					</Badge>
-				</div>
-
-				<!-- Python Status -->
-				<div class="flex items-center justify-between">
-					<span class="text-muted-foreground">Python Sidecar</span>
-					<Badge variant={getBadgeVariant(pythonStatus)}>
-						{pythonStatus}
-					</Badge>
-				</div>
-
-				<!-- Ollama Status -->
-				<div class="flex items-center justify-between">
-					<span class="text-muted-foreground">Ollama LLM</span>
-					<Badge variant={getBadgeVariant(ollamaHealthStatus)}>
-						{ollamaStatus?.available ? 'Connected' : ollamaHealthStatus}
-					</Badge>
-				</div>
-
-				<Separator />
-
-				<!-- Sidecar Details -->
-				{#if sidecarStatus}
-					<div class="text-sm text-muted-foreground space-y-1 font-mono">
-						<p>Process: {sidecarStatus.running ? 'Running' : 'Stopped'}</p>
-						<p>URL: {sidecarStatus.url}</p>
-						<p>Port: {sidecarStatus.port}</p>
-					</div>
-				{/if}
-
-				<!-- Health Details -->
-				{#if healthResponse}
-					<div class="text-sm text-muted-foreground space-y-1 font-mono">
-						<p>Version: {healthResponse.version}</p>
-						<p>Last check: {new Date(healthResponse.timestamp).toLocaleTimeString()}</p>
-					</div>
-				{/if}
-
-				<!-- Ollama Error -->
-				{#if ollamaStatus && !ollamaStatus.available && ollamaStatus.error}
-					<div class="p-3 rounded-md bg-muted/50 border border-muted-foreground/20">
-						<p class="text-sm text-muted-foreground">Ollama: {ollamaStatus.error}</p>
-					</div>
-				{/if}
-
-				<!-- Error Display -->
-				{#if error}
-					<div class="p-3 rounded-md bg-destructive/10 border border-destructive/20">
-						<p class="text-sm text-destructive">{error}</p>
-					</div>
-				{/if}
-			{/if}
-		</Card.Content>
-	</Card.Root>
-
-	<!-- Ollama Models Card -->
-	{#if ollamaModels && ollamaModels.models.length > 0}
+		<!-- System Status Card -->
 		<Card.Root class="w-full max-w-md">
 			<Card.Header>
-				<Card.Title>Ollama Models</Card.Title>
-				<Card.Description>Default: {ollamaModels.default_model}</Card.Description>
+				<Card.Title class="flex items-center justify-between">
+					System Status
+					<Button variant="ghost" size="sm" onclick={refreshStatus} disabled={loading}>
+						{loading ? 'Checking...' : 'Refresh'}
+					</Button>
+				</Card.Title>
+				<Card.Description>Foundation module verification</Card.Description>
 			</Card.Header>
-			<Card.Content>
-				<div class="space-y-2">
-					{#each ollamaModels.models as model}
-						<div class="flex justify-between text-sm">
-							<span class="font-mono text-foreground">{model.name}</span>
-							<span class="text-muted-foreground">{model.size}</span>
+			<Card.Content class="space-y-4">
+				{#if !isInTauri}
+					<p class="text-muted-foreground text-sm">
+						Running outside Tauri - IPC commands unavailable.
+					</p>
+				{:else}
+					<!-- Frontend Status -->
+					<div class="flex items-center justify-between">
+						<span class="text-muted-foreground">Frontend (Svelte 5)</span>
+						<Badge variant={getBadgeVariant(frontendStatus)}>
+							{frontendStatus}
+						</Badge>
+					</div>
+
+					<!-- Rust Status -->
+					<div class="flex items-center justify-between">
+						<span class="text-muted-foreground">Rust Core (Tauri)</span>
+						<Badge variant={getBadgeVariant(rustStatus)}>
+							{rustStatus}
+						</Badge>
+					</div>
+
+					<!-- Python Status -->
+					<div class="flex items-center justify-between">
+						<span class="text-muted-foreground">Python Sidecar</span>
+						<Badge variant={getBadgeVariant(pythonStatus)}>
+							{pythonStatus}
+						</Badge>
+					</div>
+
+					<!-- Ollama Status -->
+					<div class="flex items-center justify-between">
+						<span class="text-muted-foreground">Ollama LLM</span>
+						<Badge variant={getBadgeVariant(ollamaHealthStatus)}>
+							{ollamaStatus?.available ? 'Connected' : ollamaHealthStatus}
+						</Badge>
+					</div>
+
+					<Separator />
+
+					<!-- Sidecar Details -->
+					{#if sidecarStatus}
+						<div class="text-sm text-muted-foreground space-y-1 font-mono">
+							<p>Process: {sidecarStatus.running ? 'Running' : 'Stopped'}</p>
+							<p>URL: {sidecarStatus.url}</p>
+							<p>Port: {sidecarStatus.port}</p>
 						</div>
-					{/each}
-				</div>
+					{/if}
+
+					<!-- Health Details -->
+					{#if healthResponse}
+						<div class="text-sm text-muted-foreground space-y-1 font-mono">
+							<p>Version: {healthResponse.version}</p>
+							<p>Last check: {new Date(healthResponse.timestamp).toLocaleTimeString()}</p>
+						</div>
+					{/if}
+
+					<!-- Ollama Error -->
+					{#if ollamaStatus && !ollamaStatus.available && ollamaStatus.error}
+						<div class="p-3 rounded-md bg-muted/50 border border-muted-foreground/20">
+							<p class="text-sm text-muted-foreground">Ollama: {ollamaStatus.error}</p>
+						</div>
+					{/if}
+
+					<!-- Error Display -->
+					{#if error}
+						<div class="p-3 rounded-md bg-destructive/10 border border-destructive/20">
+							<p class="text-sm text-destructive">{error}</p>
+						</div>
+					{/if}
+				{/if}
 			</Card.Content>
 		</Card.Root>
-	{/if}
 
-	<!-- App Info Card -->
-	{#if appInfo}
-		<Card.Root class="w-full max-w-md">
-			<Card.Header>
-				<Card.Title>Application Info</Card.Title>
-			</Card.Header>
-			<Card.Content class="space-y-2 text-sm">
-				<div class="grid grid-cols-2 gap-2 font-mono">
-					<span class="text-muted-foreground">Name</span>
-					<span class="text-foreground">{appInfo.name}</span>
-					<span class="text-muted-foreground">Version</span>
-					<span class="text-foreground">{appInfo.version}</span>
-					<span class="text-muted-foreground">Platform</span>
-					<span class="text-foreground">{appInfo.platform}</span>
-					<span class="text-muted-foreground">Arch</span>
-					<span class="text-foreground">{appInfo.arch}</span>
-					<span class="text-muted-foreground">Mode</span>
-					<span class="text-foreground">{appInfo.debug ? 'Development' : 'Production'}</span>
-				</div>
-			</Card.Content>
-		</Card.Root>
-	{/if}
+		<!-- Ollama Models Card -->
+		{#if ollamaModels && ollamaModels.models.length > 0}
+			<Card.Root class="w-full max-w-md">
+				<Card.Header>
+					<Card.Title>Ollama Models</Card.Title>
+					<Card.Description>Default: {ollamaModels.default_model}</Card.Description>
+				</Card.Header>
+				<Card.Content>
+					<div class="space-y-2">
+						{#each ollamaModels.models as model}
+							<div class="flex justify-between text-sm">
+								<span class="font-mono text-foreground">{model.name}</span>
+								<span class="text-muted-foreground">{model.size}</span>
+							</div>
+						{/each}
+					</div>
+				</Card.Content>
+			</Card.Root>
+		{/if}
 
-	<!-- Actions -->
-	{#if isInTauri}
-		<div class="flex gap-4">
-			<Button onclick={handleRestartSidecar} disabled={loading}>Restart Sidecar</Button>
-			<Button variant="secondary" onclick={() => open('http://localhost:8765/docs')}
-				>API Docs</Button
-			>
-		</div>
-	{/if}
-</main>
+		<!-- App Info Card -->
+		{#if appInfo}
+			<Card.Root class="w-full max-w-md">
+				<Card.Header>
+					<Card.Title>Application Info</Card.Title>
+				</Card.Header>
+				<Card.Content class="space-y-2 text-sm">
+					<div class="grid grid-cols-2 gap-2 font-mono">
+						<span class="text-muted-foreground">Name</span>
+						<span class="text-foreground">{appInfo.name}</span>
+						<span class="text-muted-foreground">Version</span>
+						<span class="text-foreground">{appInfo.version}</span>
+						<span class="text-muted-foreground">Platform</span>
+						<span class="text-foreground">{appInfo.platform}</span>
+						<span class="text-muted-foreground">Arch</span>
+						<span class="text-foreground">{appInfo.arch}</span>
+						<span class="text-muted-foreground">Mode</span>
+						<span class="text-foreground">{appInfo.debug ? 'Development' : 'Production'}</span>
+					</div>
+				</Card.Content>
+			</Card.Root>
+		{/if}
+
+		<!-- Actions -->
+		{#if isInTauri}
+			<div class="flex gap-4">
+				<Button onclick={handleRestartSidecar} disabled={loading}>Restart Sidecar</Button>
+				<Button variant="secondary" onclick={() => open('http://localhost:8765/docs')}>
+					API Docs
+				</Button>
+			</div>
+		{/if}
+	</div>
+{:else}
+	<!-- Other Views: Show Placeholder -->
+	<ViewPlaceholder view={currentViewConfig} />
+{/if}
