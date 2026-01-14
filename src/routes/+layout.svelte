@@ -1,7 +1,7 @@
 <script lang="ts">
 	import '../app.css';
 	import type { Snippet } from 'svelte';
-	import { setUIState, VIEWS, type ViewId } from '$lib/stores/ui';
+	import { setUIState, VIEWS } from '$lib/stores/ui';
 	import { Header, Sidebar, MainContent } from '$lib/components/Layout';
 
 	interface Props {
@@ -44,10 +44,9 @@
 
 	// Setup keyboard listener
 	$effect(() => {
-		if (typeof window !== 'undefined') {
-			window.addEventListener('keydown', handleKeydown);
-			return () => window.removeEventListener('keydown', handleKeydown);
-		}
+		if (typeof window === 'undefined') return;
+		window.addEventListener('keydown', handleKeydown);
+		return () => window.removeEventListener('keydown', handleKeydown);
 	});
 </script>
 

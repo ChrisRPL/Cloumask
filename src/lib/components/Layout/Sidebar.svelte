@@ -18,7 +18,7 @@
 
 	// Separate main views from settings
 	const mainViews = VIEWS.filter((v) => v.id !== 'settings');
-	const settingsView = VIEWS.find((v) => v.id === 'settings')!;
+	const settingsView = VIEWS.find((v) => v.id === 'settings');
 </script>
 
 <aside
@@ -52,12 +52,14 @@
 	<Separator class="mx-2" />
 
 	<!-- Settings at bottom -->
-	<div class="p-2">
-		<NavItem
-			view={settingsView}
-			active={ui.currentView === 'settings'}
-			collapsed={!ui.sidebarExpanded}
-			onclick={() => ui.setView('settings')}
-		/>
-	</div>
+	{#if settingsView}
+		<div class="p-2">
+			<NavItem
+				view={settingsView}
+				active={ui.currentView === 'settings'}
+				collapsed={!ui.sidebarExpanded}
+				onclick={() => ui.setView('settings')}
+			/>
+		</div>
+	{/if}
 </aside>
