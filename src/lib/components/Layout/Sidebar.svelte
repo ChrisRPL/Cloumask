@@ -7,7 +7,7 @@
 </script>
 
 <script lang="ts">
-	import { getUIState, VIEWS } from '$lib/stores/ui';
+	import { getUIState, VIEWS } from '$lib/stores/ui.svelte';
 	import { Separator } from '$lib/components/ui/separator';
 	import NavItem from './NavItem.svelte';
 	import SidebarToggle from './SidebarToggle.svelte';

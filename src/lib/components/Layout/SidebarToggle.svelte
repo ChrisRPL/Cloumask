@@ -9,7 +9,7 @@
 </script>
 
 <script lang="ts">
-	import { PanelLeftClose, PanelLeft } from 'lucide-svelte';
+	import Icon from '$lib/components/ui/icons.svelte';
 	import * as Tooltip from '$lib/components/ui/tooltip';
 
 	let { expanded = true, class: className, onclick }: SidebarToggleProps = $props();
@@ -26,9 +26,9 @@
 		{onclick}
 	>
 		{#if expanded}
-			<PanelLeftClose class="size-5" />
+			<Icon name="panel-left-close" class="size-5" />
 		{:else}
-			<PanelLeft class="size-5" />
+			<Icon name="panel-left" class="size-5" />
 		{/if}
 	</Tooltip.Trigger>
 	<Tooltip.Content side="right" sideOffset={8}>

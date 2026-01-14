@@ -29,7 +29,7 @@
 		{#if isInTauri}
 			<WindowControls />
 		{/if}
-		<Logo size="sm" showText />
+		<Logo size="sm" />
 	</div>
 
 	<ProjectSelector class="max-w-[200px]" />
