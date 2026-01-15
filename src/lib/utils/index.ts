@@ -34,3 +34,14 @@ export {
 
 // Re-export cn from the existing utils.ts for convenience
 export { cn } from '../utils';
+
+// Storage utilities
+export {
+	createStorageAdapter,
+	isStorageAvailable,
+	getStorageItem,
+	setStorageItem,
+	removeStorageItem,
+	STORAGE_KEYS,
+} from './storage';
+export type { StorageAdapter } from './storage';
