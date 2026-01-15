@@ -2,6 +2,11 @@
 	import '../app.css';
 	import type { Snippet } from 'svelte';
 	import { setUIState, VIEWS } from '$lib/stores/ui.svelte';
+	import { setSettingsState } from '$lib/stores/settings.svelte';
+	import { setAgentState } from '$lib/stores/agent.svelte';
+	import { setPipelineState } from '$lib/stores/pipeline.svelte';
+	import { setExecutionState } from '$lib/stores/execution.svelte';
+	import { setReviewState } from '$lib/stores/review.svelte';
 	import { Header, Sidebar, MainContent } from '$lib/components/Layout';
 	import * as Tooltip from '$lib/components/ui/tooltip';
 
@@ -11,8 +16,13 @@
 
 	let { children }: Props = $props();
 
-	// Initialize UI state at root level
+	// Initialize all stores at root level (context is set by the function call)
 	const ui = setUIState();
+	setSettingsState();
+	setAgentState();
+	setPipelineState();
+	setExecutionState();
+	setReviewState();
 
 	// Keyboard shortcuts handler
 	function handleKeydown(event: KeyboardEvent) {
