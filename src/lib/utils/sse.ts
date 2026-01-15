@@ -24,9 +24,12 @@ export interface SSEManagerConfig {
 	heartbeatTimeoutMs: number;
 }
 
+/** Maximum reconnection attempts before giving up */
+export const MAX_RECONNECT_ATTEMPTS = 10;
+
 const DEFAULT_CONFIG: SSEManagerConfig = {
 	baseUrl: 'http://127.0.0.1:8765',
-	maxReconnectAttempts: 10,
+	maxReconnectAttempts: MAX_RECONNECT_ATTEMPTS,
 	initialReconnectDelayMs: 1000,
 	maxReconnectDelayMs: 30000,
 	heartbeatTimeoutMs: 60000 // 30s heartbeat interval + 30s buffer
@@ -80,7 +83,7 @@ export class SSEManager {
 	private reconnectTimeoutId: ReturnType<typeof setTimeout> | null = null;
 	private heartbeatTimeoutId: ReturnType<typeof setTimeout> | null = null;
 	private eventHandlers: Map<SSEEventType | '*', Set<SSEEventHandler>> = new Map();
-	private stateHandler: ConnectionStateHandler | null = null;
+	private stateHandlers: Set<ConnectionStateHandler> = new Set();
 	private connectionState: ConnectionState = 'disconnected';
 	private lastHeartbeat: string | null = null;
 	private lastError: string | null = null;
@@ -159,13 +162,14 @@ export class SSEManager {
 	/**
 	 * Register connection state change handler.
 	 * Immediately called with current state.
+	 * Supports multiple handlers (unlike single-handler pattern).
 	 */
 	onStateChange(handler: ConnectionStateHandler): () => void {
-		this.stateHandler = handler;
+		this.stateHandlers.add(handler);
 		// Immediately call with current state
 		handler(this.getConnectionInfo());
 		return () => {
-			this.stateHandler = null;
+			this.stateHandlers.delete(handler);
 		};
 	}
 
@@ -347,7 +351,14 @@ export class SSEManager {
 	private updateState(state: ConnectionState): void {
 		if (this.connectionState !== state) {
 			this.connectionState = state;
-			this.stateHandler?.(this.getConnectionInfo());
+			const info = this.getConnectionInfo();
+			for (const handler of this.stateHandlers) {
+				try {
+					handler(info);
+				} catch (error) {
+					console.error('[SSE] State handler error:', error);
+				}
+			}
 		}
 	}
 }

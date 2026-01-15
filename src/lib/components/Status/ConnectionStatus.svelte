@@ -10,6 +10,7 @@
 
 <script lang="ts">
 	import { getSSEState, type ConnectionState } from '$lib/stores/sse.svelte';
+	import { MAX_RECONNECT_ATTEMPTS } from '$lib/utils/sse';
 	import * as Tooltip from '$lib/components/ui/tooltip';
 
 	let { class: className, compact = false }: ConnectionStatusProps = $props();
@@ -120,7 +121,7 @@
 			{#if connectionInfo && connectionInfo.reconnectAttempts > 0}
 				<div class="flex items-center gap-2 text-muted-foreground">
 					<span class="text-[10px] uppercase tracking-wider opacity-70">Retry</span>
-					<span class="text-[11px]">{connectionInfo.reconnectAttempts}/10</span>
+					<span class="text-[11px]">{connectionInfo.reconnectAttempts}/{MAX_RECONNECT_ATTEMPTS}</span>
 				</div>
 			{/if}
 

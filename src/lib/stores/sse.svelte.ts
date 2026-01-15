@@ -5,7 +5,7 @@
  * This store acts as the central hub for real-time backend communication.
  */
 
-import { getContext, setContext, onDestroy } from 'svelte';
+import { getContext, setContext } from 'svelte';
 import type {
 	SSEConnectionInfo,
 	ConnectionState,
@@ -20,7 +20,7 @@ import type {
 	PipelineCompleteEventData,
 	ErrorEventData
 } from '$lib/types/sse';
-import { SSEManager, getSSEManager } from '$lib/utils/sse';
+import { getSSEManager } from '$lib/utils/sse';
 import type { AgentState } from './agent.svelte';
 import type { ExecutionState } from './execution.svelte';
 import type { PipelineState, PipelineStep } from './pipeline.svelte';
@@ -78,9 +78,6 @@ export function createSSEState(): SSEState {
 		pipeline: PipelineState;
 	} | null = null;
 
-	// Unsubscribe functions
-	const unsubscribes: (() => void)[] = [];
-
 	// Derived values
 	const isConnected = $derived(connectionInfo.state === 'connected');
 	const isConnecting = $derived(
@@ -89,15 +86,13 @@ export function createSSEState(): SSEState {
 	const hasError = $derived(connectionInfo.state === 'error');
 
 	// Subscribe to state changes
+	// $effect cleanup automatically handles unsubscription
 	$effect(() => {
 		const unsubscribe = manager.onStateChange((info) => {
 			connectionInfo = info;
 		});
-		unsubscribes.push(unsubscribe);
 
-		return () => {
-			unsubscribe();
-		};
+		return unsubscribe;
 	});
 
 	// Setup event routing
@@ -107,11 +102,8 @@ export function createSSEState(): SSEState {
 				routeEventToStores(event, boundStores);
 			}
 		});
-		unsubscribes.push(unsubscribe);
 
-		return () => {
-			unsubscribe();
-		};
+		return unsubscribe;
 	});
 
 	return {

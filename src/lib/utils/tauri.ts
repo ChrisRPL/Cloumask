@@ -298,6 +298,9 @@ export async function createThread(): Promise<ThreadInfo> {
  * Get information about a chat thread.
  */
 export async function getThreadInfo(threadId: string): Promise<ThreadInfo> {
+	if (!threadId) {
+		throw new Error('Invalid thread ID');
+	}
 	const response = await fetch(`${SIDECAR_URL}/api/chat/thread/${threadId}`);
 
 	if (!response.ok) {
@@ -315,6 +318,9 @@ export async function sendMessage(
 	threadId: string,
 	request: SendMessageRequest
 ): Promise<SendMessageResponse> {
+	if (!threadId) {
+		throw new Error('Invalid thread ID');
+	}
 	const response = await fetch(`${SIDECAR_URL}/api/chat/send/${threadId}`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
@@ -332,6 +338,9 @@ export async function sendMessage(
  * Close a chat thread and cleanup resources.
  */
 export async function closeThread(threadId: string): Promise<void> {
+	if (!threadId) {
+		throw new Error('Invalid thread ID');
+	}
 	const response = await fetch(`${SIDECAR_URL}/api/chat/thread/${threadId}`, {
 		method: 'DELETE'
 	});
@@ -346,5 +355,8 @@ export async function closeThread(threadId: string): Promise<void> {
  * Use with EventSource to receive real-time events.
  */
 export function getStreamUrl(threadId: string): string {
+	if (!threadId) {
+		throw new Error('Invalid thread ID');
+	}
 	return `${SIDECAR_URL}/api/chat/stream/${threadId}`;
 }
