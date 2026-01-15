@@ -74,15 +74,23 @@ class ScriptValidateRequest(BaseModel):
     )
 
 
+class ValidationIssue(BaseModel):
+    """A validation error or warning."""
+
+    message: str = Field(description="Error/warning message")
+    line: int | None = Field(default=None, description="Line number if applicable")
+    column: int | None = Field(default=None, description="Column number if applicable")
+
+
 class ScriptValidateResponse(BaseModel):
     """Response from script validation."""
 
     valid: bool = Field(description="Whether the script is valid")
-    errors: list[str] = Field(
+    errors: list[ValidationIssue] = Field(
         default_factory=list,
         description="Validation errors",
     )
-    warnings: list[str] = Field(
+    warnings: list[ValidationIssue] = Field(
         default_factory=list,
         description="Validation warnings",
     )
@@ -193,10 +201,14 @@ async def validate_script(request: ScriptValidateRequest) -> ScriptValidateRespo
     generator = get_generator()
     result = generator.validate(request.content)
 
+    # Convert string errors/warnings to structured objects
+    errors = [ValidationIssue(message=e) for e in result.errors]
+    warnings = [ValidationIssue(message=w) for w in result.warnings]
+
     return ScriptValidateResponse(
         valid=result.valid,
-        errors=result.errors,
-        warnings=result.warnings,
+        errors=errors,
+        warnings=warnings,
         has_process_function=result.has_process_function,
     )
 

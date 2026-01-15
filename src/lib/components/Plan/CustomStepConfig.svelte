@@ -368,7 +368,7 @@
 			variant="default"
 			size="sm"
 			onclick={handleSave}
-			disabled={!hasCode || !scriptName.trim() || isSaving}
+			disabled={!hasCode || !scriptName.trim() || isSaving || (validation !== null && !validation.valid)}
 		>
 			{#if isSaving}
 				<Loader2 class="h-4 w-4 mr-2 animate-spin" />

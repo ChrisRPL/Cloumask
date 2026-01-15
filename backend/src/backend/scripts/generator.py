@@ -191,6 +191,28 @@ class ScriptGeneratorService:
             })
         return sorted(scripts, key=lambda s: s["modified_at"], reverse=True)
 
+    def _safe_script_path(self, name: str) -> Path | None:
+        """
+        Get safe script path, preventing path traversal attacks.
+
+        Args:
+            name: Script name (with or without .py extension).
+
+        Returns:
+            Safe path within scripts_dir, or None if path traversal detected.
+        """
+        if not name.endswith(".py"):
+            name += ".py"
+
+        filepath = (self.scripts_dir / name).resolve()
+
+        # Ensure resolved path is within scripts directory
+        if not filepath.is_relative_to(self.scripts_dir.resolve()):
+            logger.warning("Path traversal attempt detected: %s", name)
+            return None
+
+        return filepath
+
     def load(self, name: str) -> str | None:
         """
         Load a script by name.
@@ -201,10 +223,10 @@ class ScriptGeneratorService:
         Returns:
             Script content or None if not found.
         """
-        if not name.endswith(".py"):
-            name += ".py"
+        filepath = self._safe_script_path(name)
+        if filepath is None:
+            return None
 
-        filepath = self.scripts_dir / name
         if filepath.exists():
             return filepath.read_text(encoding="utf-8")
         return None
@@ -219,10 +241,10 @@ class ScriptGeneratorService:
         Returns:
             True if deleted, False if not found.
         """
-        if not name.endswith(".py"):
-            name += ".py"
+        filepath = self._safe_script_path(name)
+        if filepath is None:
+            return False
 
-        filepath = self.scripts_dir / name
         if filepath.exists():
             filepath.unlink()
             logger.info("Deleted script: %s", filepath)
@@ -295,8 +317,12 @@ class ScriptGeneratorService:
         """
         # Remove or replace unsafe characters
         safe = re.sub(r"[^\w\-_.]", "_", name)
-        # Remove leading/trailing underscores and dots
-        safe = safe.strip("_.")
+        # Remove consecutive dots (prevents hidden files)
+        safe = re.sub(r"\.{2,}", ".", safe)
+        # Remove leading/trailing unsafe characters (including dash)
+        safe = safe.strip("_.-")
+        # Limit length to avoid filesystem issues
+        safe = safe[:100]
         # Ensure not empty
         return safe or "script"
 

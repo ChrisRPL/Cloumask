@@ -64,6 +64,8 @@ export interface ValidateScriptResponse {
 	errors: ValidationIssue[];
 	/** List of validation warnings */
 	warnings: ValidationIssue[];
+	/** Whether script has the required process() function */
+	has_process_function: boolean;
 }
 
 /**
