@@ -45,22 +45,26 @@
 
 	// Initialize thread and SSE connection
 	async function initializeChat() {
+		// Guard against concurrent initialization
+		if (isInitializing) return;
+		// Already initialized and connected
 		if (agent.threadId && sse.isConnected) return;
 
 		isInitializing = true;
 		initError = null;
 
 		try {
+			let threadId = agent.threadId;
+
 			// Create new thread if needed
-			if (!agent.threadId) {
+			if (!threadId) {
 				const thread = await createThread();
-				agent.setThreadId(thread.thread_id);
+				threadId = thread.thread_id;
+				agent.setThreadId(threadId);
 			}
 
-			// Connect SSE
-			if (agent.threadId) {
-				sse.connect(agent.threadId);
-			}
+			// Connect SSE using the local threadId to avoid race condition
+			sse.connect(threadId);
 		} catch (error) {
 			console.error('[ChatPanel] Failed to initialize:', error);
 			initError = error instanceof Error ? error.message : 'Failed to connect';
@@ -166,7 +170,6 @@
 	<ChatHeader
 		phase={agent.phase}
 		isConnected={sse.isConnected}
-		threadId={agent.threadId}
 		onClear={handleClear}
 		onExport={handleExport}
 	/>

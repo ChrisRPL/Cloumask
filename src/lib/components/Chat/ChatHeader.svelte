@@ -5,7 +5,6 @@
 	export interface ChatHeaderProps {
 		phase: AgentPhase;
 		isConnected: boolean;
-		threadId: string | null;
 		class?: string;
 		onClear: () => void;
 		onExport?: () => void;
@@ -51,7 +50,6 @@
 	let {
 		phase,
 		isConnected,
-		threadId,
 		class: className,
 		onClear,
 		onExport

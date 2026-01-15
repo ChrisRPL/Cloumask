@@ -59,12 +59,21 @@
 	$effect(() => {
 		// Trigger on message count change
 		const _ = messages.length;
+		let frameId: number | null = null;
+
 		if (shouldAutoScroll && viewport) {
 			// Use requestAnimationFrame to ensure DOM is updated
-			requestAnimationFrame(() => {
+			frameId = requestAnimationFrame(() => {
 				scrollToBottom(true);
 			});
 		}
+
+		// Cancel pending frame on cleanup to prevent memory leak
+		return () => {
+			if (frameId !== null) {
+				cancelAnimationFrame(frameId);
+			}
+		};
 	});
 </script>
 
