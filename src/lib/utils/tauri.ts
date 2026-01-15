@@ -243,3 +243,108 @@ export async function waitForSidecarReady(timeout = 10000): Promise<boolean> {
 		{ timeout }
 	);
 }
+
+// ============================================================================
+// Chat Thread API (Direct HTTP to Python Sidecar)
+// ============================================================================
+
+/** Base URL for the Python sidecar */
+const SIDECAR_URL = 'http://127.0.0.1:8765';
+
+/** Information about a chat thread */
+export interface ThreadInfo {
+	thread_id: string;
+	created: boolean;
+	awaiting_user: boolean;
+	current_step: number;
+	total_steps: number;
+}
+
+/** User decision for plan approval or checkpoint */
+export type UserDecision = 'approve' | 'edit' | 'cancel' | 'retry';
+
+/** Request to send a message to a chat thread */
+export interface SendMessageRequest {
+	content: string;
+	decision?: UserDecision;
+	plan_edits?: unknown[];
+}
+
+/** Response from sending a message */
+export interface SendMessageResponse {
+	status: string;
+	thread_id: string;
+	message_id?: string;
+}
+
+/**
+ * Create a new chat thread.
+ * Returns thread info with new thread_id.
+ */
+export async function createThread(): Promise<ThreadInfo> {
+	const response = await fetch(`${SIDECAR_URL}/api/chat/thread/new`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' }
+	});
+
+	if (!response.ok) {
+		throw new Error(`Failed to create thread: ${response.statusText}`);
+	}
+
+	return response.json();
+}
+
+/**
+ * Get information about a chat thread.
+ */
+export async function getThreadInfo(threadId: string): Promise<ThreadInfo> {
+	const response = await fetch(`${SIDECAR_URL}/api/chat/thread/${threadId}`);
+
+	if (!response.ok) {
+		throw new Error(`Failed to get thread: ${response.statusText}`);
+	}
+
+	return response.json();
+}
+
+/**
+ * Send a message to a chat thread.
+ * Triggers agent processing with SSE events streamed back.
+ */
+export async function sendMessage(
+	threadId: string,
+	request: SendMessageRequest
+): Promise<SendMessageResponse> {
+	const response = await fetch(`${SIDECAR_URL}/api/chat/send/${threadId}`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(request)
+	});
+
+	if (!response.ok) {
+		throw new Error(`Failed to send message: ${response.statusText}`);
+	}
+
+	return response.json();
+}
+
+/**
+ * Close a chat thread and cleanup resources.
+ */
+export async function closeThread(threadId: string): Promise<void> {
+	const response = await fetch(`${SIDECAR_URL}/api/chat/thread/${threadId}`, {
+		method: 'DELETE'
+	});
+
+	if (!response.ok) {
+		throw new Error(`Failed to close thread: ${response.statusText}`);
+	}
+}
+
+/**
+ * Get the SSE stream URL for a thread.
+ * Use with EventSource to receive real-time events.
+ */
+export function getStreamUrl(threadId: string): string {
+	return `${SIDECAR_URL}/api/chat/stream/${threadId}`;
+}
