@@ -15,6 +15,7 @@
 	import { X } from '@lucide/svelte';
 	import { STEP_TYPE_CONFIGS, getDefaultConfig } from './constants';
 	import ConfigField from './ConfigField.svelte';
+	import CustomStepConfig from './CustomStepConfig.svelte';
 
 	let {
 		step,
@@ -26,6 +27,9 @@
 	// Get config schema for this step type
 	const typeConfig = $derived(STEP_TYPE_CONFIGS[step.type]);
 	const schema = $derived(typeConfig?.configSchema ?? []);
+
+	// Check if this is a custom step (needs special UI)
+	const isCustomStep = $derived(step.type === 'custom');
 
 	// Local config state for editing
 	let localConfig = $state<Record<string, unknown>>({});
@@ -76,6 +80,10 @@
 	}
 </script>
 
+<!-- Render custom step builder for custom type, standard config for others -->
+{#if isCustomStep}
+	<CustomStepConfig {step} class={className} {onUpdate} {onClose} />
+{:else}
 <aside
 	class={cn(
 		'w-80 border-l border-border bg-card/50 flex flex-col',
@@ -135,3 +143,4 @@
 		</div>
 	</footer>
 </aside>
+{/if}
