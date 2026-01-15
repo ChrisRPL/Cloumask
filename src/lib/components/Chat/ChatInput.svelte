@@ -12,7 +12,7 @@
 </script>
 
 <script lang="ts">
-	import { CornerDownLeft } from 'lucide-svelte';
+	import { CornerDownLeft } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
 
 	let {

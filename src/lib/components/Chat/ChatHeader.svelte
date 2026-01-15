@@ -43,7 +43,7 @@
 </script>
 
 <script lang="ts">
-	import { Trash2, Download, Circle } from 'lucide-svelte';
+	import { Trash2, Download, Circle } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 

@@ -10,7 +10,7 @@
 </script>
 
 <script lang="ts">
-	import { ArrowDown } from 'lucide-svelte';
+	import { ArrowDown } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
 	import MessageBubble from './MessageBubble.svelte';
 

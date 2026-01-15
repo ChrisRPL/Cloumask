@@ -10,7 +10,7 @@
 </script>
 
 <script lang="ts">
-	import { ChevronRight, Circle, CheckCircle2, XCircle, Loader2 } from 'lucide-svelte';
+	import { ChevronRight, Circle, CheckCircle2, XCircle, Loader2 } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
 
 	let {

@@ -12,7 +12,7 @@
 </script>
 
 <script lang="ts">
-	import { Check, X, Pencil, Play, Square } from 'lucide-svelte';
+	import { Check, X, Pencil, Play, Square } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Label } from '$lib/components/ui/label';
