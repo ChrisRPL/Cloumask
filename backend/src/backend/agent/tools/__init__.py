@@ -39,6 +39,7 @@ Available Tools:
     - FaceDetectTool: Face detection (SCRFD, YuNet, or SAM3 quality mode)
     - Detect3DTool: 3D object detection (PV-RCNN++, CenterPoint)
     - ExportTool: Export annotations to various formats (stub)
+    - CustomScriptTool: Execute user-defined Python scripts
 """
 
 # Import tool implementations to trigger registration via @register_tool decorator
@@ -52,6 +53,7 @@ from backend.agent.tools.base import (
     error_result,
     success_result,
 )
+from backend.agent.tools.custom import CustomScriptTool
 from backend.agent.tools.detect import DetectTool
 from backend.agent.tools.detect_3d import Detect3DTool
 from backend.agent.tools.discovery import (
@@ -97,4 +99,5 @@ __all__ = [
     "FaceDetectTool",
     "Detect3DTool",
     "ExportTool",
+    "CustomScriptTool",
 ]

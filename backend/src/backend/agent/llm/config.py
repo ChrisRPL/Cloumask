@@ -22,6 +22,7 @@ class LLMUseCase(str, Enum):
     CONVERSATION = "conversation"
     PLANNING = "planning"
     JSON_OUTPUT = "json_output"
+    CODE_GENERATION = "code_generation"
 
 
 @dataclass
@@ -116,6 +117,22 @@ LLM_CONFIGS: dict[LLMUseCase, LLMConfig] = {
         temperature=0.0,  # Zero for deterministic JSON
         max_tokens=2048,
         fallback_models=["qwen3:8b"],
+    ),
+    LLMUseCase.CODE_GENERATION: LLMConfig(
+        model="devstral-2:123b-cloud",  # Best cloud coding model
+        temperature=0.2,  # Low for deterministic but creative code
+        max_tokens=4096,
+        num_ctx=16384,  # Larger context for code
+        timeout=180,  # Longer timeout for code generation
+        fallback_models=[
+            "qwen2.5-coder:32b",  # Best local coding model
+            "deepseek-coder-v2:16b",  # Good balance
+            "codestral:22b",  # Mistral specialist
+            "qwen2.5-coder:7b",  # Small coding model
+            # General-purpose fallbacks for when coding models unavailable
+            "mistral:7b-instruct",
+            "llama3.1:8b-instruct-q4_0",
+        ],
     ),
 }
 
