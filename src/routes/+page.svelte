@@ -24,6 +24,7 @@
 	import { getUIState, VIEWS } from '$lib/stores/ui.svelte';
 	import { ViewPlaceholder } from '$lib/components/Layout';
 	import { ChatPanel } from '$lib/components/Chat';
+	import { PlanEditor } from '$lib/components/Plan';
 
 	// Get UI state from context
 	const ui = getUIState();
@@ -307,6 +308,9 @@
 {:else if ui.currentView === 'chat'}
 	<!-- Chat View -->
 	<ChatPanel class="h-full" />
+{:else if ui.currentView === 'plan'}
+	<!-- Plan Editor View -->
+	<PlanEditor class="h-full" />
 {:else}
 	<!-- Other Views: Show Placeholder -->
 	<ViewPlaceholder view={currentViewConfig} />
