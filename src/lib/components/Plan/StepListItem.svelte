@@ -59,7 +59,7 @@
 	const StepIcon = $derived(iconMap[typeConfig?.icon as keyof typeof iconMap] ?? Search);
 
 	// Format config summary
-	const configSummary = $derived(() => {
+	const configSummary = $derived.by(() => {
 		const parts: string[] = [];
 		if (step.config.model) {
 			parts.push(String(step.config.model));
@@ -127,9 +127,9 @@
 		<span class="text-sm truncate block font-medium">
 			{step.description || step.toolName}
 		</span>
-		{#if configSummary()}
+		{#if configSummary}
 			<span class="text-xs text-muted-foreground/60 truncate block font-mono">
-				{configSummary()}
+				{configSummary}
 			</span>
 		{/if}
 	</div>
@@ -141,6 +141,7 @@
 
 	<!-- Config button -->
 	<button
+		type="button"
 		class={cn(
 			'p-1 rounded transition-opacity text-muted-foreground hover:text-foreground',
 			'opacity-0 group-hover:opacity-100 focus:opacity-100'
@@ -157,6 +158,7 @@
 	<!-- Delete button (edit mode only) -->
 	{#if isEditing}
 		<button
+			type="button"
 			class={cn(
 				'p-1 rounded transition-opacity text-muted-foreground hover:text-destructive',
 				'opacity-0 group-hover:opacity-100 focus:opacity-100'

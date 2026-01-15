@@ -44,7 +44,7 @@
 	);
 
 	// Estimate pipeline time (assume 100 items, no GPU for now)
-	const estimatedTime = $derived(() => {
+	const estimatedTime = $derived.by(() => {
 		if (pipeline.stepCount === 0) return undefined;
 		const ms = estimatePipelineTime(pipeline.sortedSteps, 100, false);
 		return formatDuration(ms);
@@ -89,9 +89,10 @@
 
 	// Handle edit toggle
 	function handleToggleEdit() {
-		pipeline.setEditing(!pipeline.isEditing);
+		const wasEditing = pipeline.isEditing;
+		pipeline.setEditing(!wasEditing);
 		// Close config panel when exiting edit mode
-		if (pipeline.isEditing) {
+		if (wasEditing) {
 			configPanelStepId = null;
 		}
 	}
@@ -189,6 +190,7 @@
 
 		// Enter - start execution if awaiting approval
 		if (event.key === 'Enter' && isAwaitingApproval && canStart) {
+			event.preventDefault();
 			handleStart();
 			return;
 		}
@@ -208,7 +210,7 @@
 	<PlanHeader
 		stepCount={pipeline.stepCount}
 		enabledCount={pipeline.enabledSteps.length}
-		estimatedTime={estimatedTime()}
+		estimatedTime={estimatedTime}
 		isEditing={pipeline.isEditing}
 		{isAwaitingApproval}
 		{canStart}

@@ -41,7 +41,7 @@
 	});
 
 	// Track if config has been modified
-	const isDirty = $derived(() => {
+	const isDirty = $derived.by(() => {
 		const original = {
 			...getDefaultConfig(step.type),
 			...step.config.params,
@@ -74,18 +74,7 @@
 
 		onClose?.();
 	}
-
-	// Handle keyboard shortcuts
-	function handleKeydown(event: KeyboardEvent) {
-		if (event.key === 'Escape') {
-			onClose?.();
-		} else if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-			handleApply();
-		}
-	}
 </script>
-
-<svelte:window onkeydown={handleKeydown} />
 
 <aside
 	class={cn(
@@ -139,7 +128,7 @@
 				variant="default"
 				size="sm"
 				onclick={handleApply}
-				disabled={!isDirty()}
+				disabled={!isDirty}
 			>
 				Apply
 			</Button>
