@@ -1,7 +1,7 @@
 /**
  * API client for script generation and management.
  *
- * Communicates with the Python sidecar's /api/scripts endpoints
+ * Communicates with the Python sidecar's /scripts endpoints
  * for AI-powered script generation, validation, and persistence.
  */
 
@@ -35,37 +35,56 @@ export class ScriptApiError extends Error {
 
 /**
  * Make a request to the scripts API.
+ *
+ * @param endpoint - API endpoint path (e.g., '/generate')
+ * @param options - Fetch options
+ * @param timeoutMs - Request timeout in milliseconds (default: 30s, generation uses 180s)
  */
 async function apiRequest<T>(
 	endpoint: string,
-	options: RequestInit = {}
+	options: RequestInit = {},
+	timeoutMs: number = 30000
 ): Promise<T> {
-	const url = `${API_BASE}/api/scripts${endpoint}`;
+	const url = `${API_BASE}/scripts${endpoint}`;
 
-	const response = await fetch(url, {
-		...options,
-		headers: {
-			'Content-Type': 'application/json',
-			...options.headers
-		}
-	});
+	// Create abort controller for timeout
+	const controller = new AbortController();
+	const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-	if (!response.ok) {
-		let detail: string | undefined;
-		try {
-			const errorData = await response.json();
-			detail = errorData.detail || errorData.message;
-		} catch {
-			// Response wasn't JSON
+	try {
+		const response = await fetch(url, {
+			...options,
+			signal: controller.signal,
+			headers: {
+				'Content-Type': 'application/json',
+				...options.headers
+			}
+		});
+
+		if (!response.ok) {
+			let detail: string | undefined;
+			try {
+				const errorData = await response.json();
+				detail = errorData.detail || errorData.message;
+			} catch {
+				// Response wasn't JSON
+			}
+			throw new ScriptApiError(
+				`API request failed: ${response.statusText}`,
+				response.status,
+				detail
+			);
 		}
-		throw new ScriptApiError(
-			`API request failed: ${response.statusText}`,
-			response.status,
-			detail
-		);
+
+		return response.json();
+	} catch (err) {
+		if (err instanceof Error && err.name === 'AbortError') {
+			throw new ScriptApiError('Request timed out', 408, 'The AI model took too long to respond');
+		}
+		throw err;
+	} finally {
+		clearTimeout(timeoutId);
 	}
-
-	return response.json();
 }
 
 /**
@@ -87,10 +106,15 @@ async function apiRequest<T>(
 export async function generateScript(
 	request: GenerateScriptRequest
 ): Promise<GenerateScriptResponse> {
-	return apiRequest<GenerateScriptResponse>('/generate', {
-		method: 'POST',
-		body: JSON.stringify(request)
-	});
+	// Use 180s timeout for AI generation (cloud models can be slow)
+	return apiRequest<GenerateScriptResponse>(
+		'/generate',
+		{
+			method: 'POST',
+			body: JSON.stringify(request)
+		},
+		180000 // 3 minute timeout
+	);
 }
 
 /**

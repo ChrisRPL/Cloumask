@@ -15,7 +15,6 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { Label } from '$lib/components/ui/label';
-	import { MonacoEditor } from '$lib/components/CodeEditor';
 	import {
 		X,
 		Sparkles,
@@ -271,13 +270,14 @@
 					</div>
 				</div>
 
-				<MonacoEditor
+				<!-- Simple code textarea (Monaco had loading issues in Tauri) -->
+				<textarea
 					bind:value={code}
-					language="python"
-					theme="vs-dark"
-					height="300px"
-					onValueChange={handleCodeChange}
-				/>
+					oninput={(e) => handleCodeChange(e.currentTarget.value)}
+					class="w-full h-[300px] p-3 font-mono text-sm bg-[#1e1e1e] text-[#d4d4d4] border border-border rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+					spellcheck="false"
+					placeholder="# Generated Python code will appear here..."
+				></textarea>
 
 				<!-- Validation Errors -->
 				{#if hasValidationErrors && validation}

@@ -125,10 +125,13 @@ LLM_CONFIGS: dict[LLMUseCase, LLMConfig] = {
         num_ctx=16384,  # Larger context for code
         timeout=180,  # Longer timeout for code generation
         fallback_models=[
-            "qwen2.5-coder:32b",  # Best local
+            "qwen2.5-coder:32b",  # Best local coding model
             "deepseek-coder-v2:16b",  # Good balance
             "codestral:22b",  # Mistral specialist
-            "qwen2.5-coder:7b",  # Fallback
+            "qwen2.5-coder:7b",  # Small coding model
+            # General-purpose fallbacks for when coding models unavailable
+            "mistral:7b-instruct",
+            "llama3.1:8b-instruct-q4_0",
         ],
     ),
 }
