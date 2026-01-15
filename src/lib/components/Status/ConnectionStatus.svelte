@@ -101,32 +101,32 @@
 
 	<Tooltip.Content side="bottom" class="max-w-[220px] font-mono text-xs">
 		<div class="space-y-1.5">
-			<p class="font-medium text-foreground">{config.label}</p>
+			<p class="font-medium">{config.label}</p>
 
 			{#if connectionInfo?.threadId}
-				<div class="flex items-center gap-2 text-muted-foreground">
+				<div class="flex items-center gap-2 opacity-80">
 					<span class="text-[10px] uppercase tracking-wider opacity-70">Thread</span>
-					<code class="text-[11px] bg-secondary/50 px-1 rounded">
+					<code class="text-[11px] bg-background/20 px-1 rounded">
 						{connectionInfo.threadId.slice(0, 8)}
 					</code>
 				</div>
 			{/if}
 
 			{#if connectionInfo?.error}
-				<div class="text-destructive text-[11px] leading-tight">
+				<div class="text-red-300 text-[11px] leading-tight">
 					{connectionInfo.error}
 				</div>
 			{/if}
 
 			{#if connectionInfo && connectionInfo.reconnectAttempts > 0}
-				<div class="flex items-center gap-2 text-muted-foreground">
+				<div class="flex items-center gap-2 opacity-80">
 					<span class="text-[10px] uppercase tracking-wider opacity-70">Retry</span>
 					<span class="text-[11px]">{connectionInfo.reconnectAttempts}/{MAX_RECONNECT_ATTEMPTS}</span>
 				</div>
 			{/if}
 
 			{#if connectionInfo?.lastHeartbeat}
-				<div class="flex items-center gap-2 text-muted-foreground">
+				<div class="flex items-center gap-2 opacity-80">
 					<span class="text-[10px] uppercase tracking-wider opacity-70">Last ping</span>
 					<span class="text-[11px]">
 						{new Date(connectionInfo.lastHeartbeat).toLocaleTimeString()}
