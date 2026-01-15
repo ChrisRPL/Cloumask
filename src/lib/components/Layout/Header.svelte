@@ -7,15 +7,11 @@
 </script>
 
 <script lang="ts">
-	import { isTauri } from '$lib/utils/tauri';
 	import Logo from './Logo.svelte';
 	import ProjectSelector from './ProjectSelector.svelte';
-	import WindowControls from './WindowControls.svelte';
 	import { ConnectionStatus } from '$lib/components/Status';
 
 	let { class: className }: HeaderProps = $props();
-
-	const isInTauri = isTauri();
 </script>
 
 <header
@@ -27,9 +23,6 @@
 	data-tauri-drag-region
 >
 	<div class="flex items-center gap-4">
-		{#if isInTauri}
-			<WindowControls />
-		{/if}
 		<Logo size="sm" />
 	</div>
 
