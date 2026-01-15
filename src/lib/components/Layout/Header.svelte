@@ -11,6 +11,7 @@
 	import Logo from './Logo.svelte';
 	import ProjectSelector from './ProjectSelector.svelte';
 	import WindowControls from './WindowControls.svelte';
+	import { ConnectionStatus } from '$lib/components/Status';
 
 	let { class: className }: HeaderProps = $props();
 
@@ -32,5 +33,8 @@
 		<Logo size="sm" />
 	</div>
 
-	<ProjectSelector class="max-w-[200px]" />
+	<div class="flex items-center gap-3">
+		<ConnectionStatus compact />
+		<ProjectSelector class="max-w-[200px]" />
+	</div>
 </header>

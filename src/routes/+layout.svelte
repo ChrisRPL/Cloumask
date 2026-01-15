@@ -7,6 +7,7 @@
 	import { setPipelineState } from '$lib/stores/pipeline.svelte';
 	import { setExecutionState } from '$lib/stores/execution.svelte';
 	import { setReviewState } from '$lib/stores/review.svelte';
+	import { setSSEState } from '$lib/stores/sse.svelte';
 	import { Header, Sidebar, MainContent } from '$lib/components/Layout';
 	import * as Tooltip from '$lib/components/ui/tooltip';
 
@@ -19,10 +20,14 @@
 	// Initialize all stores at root level (context is set by the function call)
 	const ui = setUIState();
 	setSettingsState();
-	setAgentState();
-	setPipelineState();
-	setExecutionState();
+	const agent = setAgentState();
+	const pipeline = setPipelineState();
+	const execution = setExecutionState();
 	setReviewState();
+
+	// Initialize SSE state and bind stores for event routing
+	const sse = setSSEState();
+	sse.bindStores({ agent, execution, pipeline });
 
 	// Keyboard shortcuts handler
 	function handleKeydown(event: KeyboardEvent) {

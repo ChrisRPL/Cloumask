@@ -12,3 +12,6 @@ export * from "./pipeline";
 export * from "./execution";
 export * from "./review";
 export * from "./settings";
+
+// SSE types
+export * from "./sse";
