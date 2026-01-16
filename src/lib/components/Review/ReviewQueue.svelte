@@ -1,6 +1,6 @@
 <script lang="ts" module>
 	export interface ReviewQueueProps {
-		executionId: string;
+		executionId?: string;
 		onDone?: () => void;
 		class?: string;
 	}
@@ -24,7 +24,7 @@
 	import AnnotationDetails from './details/AnnotationDetails.svelte';
 	import ActionBar from './actions/ActionBar.svelte';
 
-	let { executionId, onDone, class: className }: ReviewQueueProps = $props();
+	let { executionId = 'current', onDone, class: className }: ReviewQueueProps = $props();
 
 	// Review state from context
 	const reviewState = getReviewState();
