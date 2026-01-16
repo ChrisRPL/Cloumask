@@ -26,6 +26,7 @@
 	import { ChatPanel } from '$lib/components/Chat';
 	import { PlanEditor } from '$lib/components/Plan';
 	import { ExecutionView } from '$lib/components/Execution';
+	import { ReviewQueue } from '$lib/components/Review';
 
 	// Get UI state from context
 	const ui = getUIState();
@@ -315,6 +316,9 @@
 {:else if ui.currentView === 'execute'}
 	<!-- Execution View -->
 	<ExecutionView class="h-full" />
+{:else if ui.currentView === 'review'}
+	<!-- Review Queue View -->
+	<ReviewQueue onDone={() => ui.setView('execute')} class="h-full" />
 {:else}
 	<!-- Other Views: Show Placeholder -->
 	<ViewPlaceholder view={currentViewConfig} />
