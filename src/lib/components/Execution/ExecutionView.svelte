@@ -33,6 +33,7 @@
 	// Local state
 	let showErrorLog = $state(false);
 	let confirmCancelOpen = $state(false);
+	let userDismissedErrors = $state(false);
 
 	// Derived state
 	const currentStep = $derived(
@@ -118,17 +119,24 @@
 		execution.cancel();
 	}
 
-	// Set up keyboard listener
+	function toggleErrorLog() {
+		showErrorLog = !showErrorLog;
+		if (!showErrorLog) {
+			userDismissedErrors = true;
+		}
+	}
+
+	// Auto-show error log when new errors occur (unless user dismissed)
 	$effect(() => {
-		if (typeof window === 'undefined') return;
-		window.addEventListener('keydown', handleKeydown);
-		return () => window.removeEventListener('keydown', handleKeydown);
+		if (execution.hasErrors && !showErrorLog && !userDismissedErrors) {
+			showErrorLog = true;
+		}
 	});
 
-	// Auto-show error log when errors occur
+	// Reset dismissal flag when errors are cleared
 	$effect(() => {
-		if (execution.hasErrors && !showErrorLog) {
-			showErrorLog = true;
+		if (!execution.hasErrors) {
+			userDismissedErrors = false;
 		}
 	});
 
@@ -139,6 +147,8 @@
 		}
 	});
 </script>
+
+<svelte:window onkeydown={handleKeydown} />
 
 <div class={cn('flex flex-col h-full bg-background', className)}>
 	<!-- Header with controls -->
@@ -178,7 +188,7 @@
 		<ErrorLog
 			errors={execution.errors}
 			isExpanded={showErrorLog}
-			onToggle={() => (showErrorLog = !showErrorLog)}
+			onToggle={toggleErrorLog}
 			onClear={() => execution.clearErrors()}
 		/>
 	{/if}

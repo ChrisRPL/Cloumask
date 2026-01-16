@@ -30,7 +30,7 @@
 	}
 
 	// Calculate remaining time
-	const remaining = $derived(() => {
+	const remaining = $derived.by(() => {
 		if (!estimatedCompletion) return null;
 		const estimated = new Date(estimatedCompletion).getTime();
 		const now = Date.now();
@@ -58,9 +58,9 @@
 <div class={cn('flex items-center gap-2 text-xs font-mono text-muted-foreground', className)}>
 	<Clock class="h-3 w-3" />
 	<span class="tabular-nums">{formatDuration(elapsed)}</span>
-	{#if remaining() !== null && remaining()! > 0}
+	{#if remaining !== null && remaining > 0}
 		<span class="text-muted-foreground/60">
-			~{formatDuration(remaining()!)} left
+			~{formatDuration(remaining)} left
 		</span>
 	{/if}
 </div>

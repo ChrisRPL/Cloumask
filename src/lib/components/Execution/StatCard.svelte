@@ -15,7 +15,7 @@
 
 	let { label, value, icon: Icon, variant = 'default', class: className }: StatCardProps = $props();
 
-	const variantClasses = $derived(() => {
+	const variantClasses = $derived.by(() => {
 		if (value === 0) return '';
 		switch (variant) {
 			case 'destructive':
@@ -27,7 +27,7 @@
 		}
 	});
 
-	const valueClasses = $derived(() => {
+	const valueClasses = $derived.by(() => {
 		if (value === 0) return 'text-foreground';
 		switch (variant) {
 			case 'destructive':
@@ -43,7 +43,7 @@
 <div
 	class={cn(
 		'flex items-center gap-3 p-3 rounded-md bg-muted/30 border border-transparent transition-colors',
-		variantClasses(),
+		variantClasses,
 		className
 	)}
 >
@@ -51,7 +51,7 @@
 		<Icon class="h-4 w-4 text-muted-foreground" />
 	</div>
 	<div class="flex-1 min-w-0">
-		<div class={cn('text-xl font-mono tabular-nums font-semibold', valueClasses())}>
+		<div class={cn('text-xl font-mono tabular-nums font-semibold', valueClasses)}>
 			{value.toLocaleString()}
 		</div>
 		<div class="text-xs text-muted-foreground font-mono truncate">{label}</div>

@@ -17,7 +17,7 @@
 	let { current, total, percentage, status, class: className }: ProgressBarProps = $props();
 
 	// Color based on status
-	const progressColor = $derived(() => {
+	const progressColor = $derived.by(() => {
 		switch (status) {
 			case 'running':
 				return 'bg-primary';
@@ -43,7 +43,7 @@
 		<div
 			class={cn(
 				'absolute inset-0 h-2 rounded-full transition-all duration-300',
-				progressColor()
+				progressColor
 			)}
 			style="width: {percentage}%"
 		></div>

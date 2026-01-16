@@ -30,7 +30,7 @@
 
 	let { preview, class: className, onClick }: PreviewThumbnailProps = $props();
 
-	const statusDotClasses = $derived(() => {
+	const statusDotClasses = $derived.by(() => {
 		switch (preview.status) {
 			case 'flagged':
 				return 'bg-amber-500';
@@ -78,7 +78,7 @@
 	<div
 		class={cn(
 			'absolute top-1 right-1 w-2 h-2 rounded-full ring-1 ring-background',
-			statusDotClasses()
+			statusDotClasses
 		)}
 	></div>
 
