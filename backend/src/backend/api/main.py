@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend import __version__
-from backend.api.routes import health, ollama, scripts
+from backend.api.routes import health, ollama, review, scripts
 from backend.api.streaming import endpoints as streaming
 
 
@@ -50,6 +50,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router, tags=["Health"])
     app.include_router(ollama.router)
     app.include_router(scripts.router)
+    app.include_router(review.router)
     app.include_router(streaming.router)
 
     return app
