@@ -25,6 +25,7 @@
 	import { ViewPlaceholder } from '$lib/components/Layout';
 	import { ChatPanel } from '$lib/components/Chat';
 	import { PlanEditor } from '$lib/components/Plan';
+	import { ExecutionView } from '$lib/components/Execution';
 
 	// Get UI state from context
 	const ui = getUIState();
@@ -311,6 +312,9 @@
 {:else if ui.currentView === 'plan'}
 	<!-- Plan Editor View -->
 	<PlanEditor class="h-full" />
+{:else if ui.currentView === 'execute'}
+	<!-- Execution View -->
+	<ExecutionView class="h-full" />
 {:else}
 	<!-- Other Views: Show Placeholder -->
 	<ViewPlaceholder view={currentViewConfig} />
