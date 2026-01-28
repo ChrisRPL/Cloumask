@@ -75,6 +75,27 @@ class ExecutionConfig:
     environment: dict[str, str] = field(default_factory=dict)
     """Additional environment variables."""
 
+    def __post_init__(self) -> None:
+        """Validate configuration values."""
+        import re
+
+        # Validate memory limit format (e.g., '2g', '512m', '1024k')
+        if not re.match(r"^\d+[kmgKMG]?$", self.memory_limit):
+            raise ValueError(f"Invalid memory limit format: {self.memory_limit}")
+
+        # Validate CPU limit format (e.g., '2', '0.5', '1.5')
+        if not re.match(r"^\d+(\.\d+)?$", self.cpu_limit):
+            raise ValueError(f"Invalid CPU limit format: {self.cpu_limit}")
+
+        # Validate timeout is positive
+        if self.timeout <= 0:
+            raise ValueError(f"Timeout must be positive: {self.timeout}")
+
+        # Validate environment variable names
+        for key in self.environment:
+            if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", key):
+                raise ValueError(f"Invalid environment variable name: {key}")
+
 
 class DockerScriptExecutor:
     """
@@ -218,7 +239,7 @@ class DockerScriptExecutor:
         if execution_config is None:
             execution_config = ExecutionConfig()
 
-        # Validate paths
+        # Validate paths - prevent path traversal and symlink attacks
         if not script_path.exists():
             return ExecutionResult(
                 success=False,
@@ -229,6 +250,19 @@ class DockerScriptExecutor:
             return ExecutionResult(
                 success=False,
                 error=f"Input not found: {input_path}",
+            )
+
+        # Security: Reject symlinks to prevent escape attacks
+        if script_path.is_symlink():
+            return ExecutionResult(
+                success=False,
+                error="Script path cannot be a symlink",
+            )
+
+        if input_path.is_symlink():
+            return ExecutionResult(
+                success=False,
+                error="Input path cannot be a symlink",
             )
 
         # Ensure output directory exists
