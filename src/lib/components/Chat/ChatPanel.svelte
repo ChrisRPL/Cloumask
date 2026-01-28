@@ -12,8 +12,9 @@
 	import { getSSEState } from '$lib/stores/sse.svelte';
 	import { getPipelineState } from '$lib/stores/pipeline.svelte';
 	import { getUIState } from '$lib/stores/ui.svelte';
-	import { createThread, sendMessage } from '$lib/utils/tauri';
+	import { createThread, sendMessage, checkLLMReady, ensureLLMReady } from '$lib/utils/tauri';
 	import type { UserDecision } from '$lib/types/agent';
+	import type { LLMReadyResponse } from '$lib/types/commands';
 
 	import ChatHeader from './ChatHeader.svelte';
 	import MessageList from './MessageList.svelte';
@@ -34,14 +35,51 @@
 	let inputValue = $state('');
 	let isInitializing = $state(false);
 	let initError = $state<string | null>(null);
+	let llmStatus = $state<LLMReadyResponse | null>(null);
+	let isCheckingLLM = $state(false);
+	let isPullingModel = $state(false);
 
 	// Derived state
-	const isInputDisabled = $derived(agent.isBusy || !sse.isConnected || isInitializing);
+	const llmNotReady = $derived(llmStatus !== null && !llmStatus.ready);
+	const isInputDisabled = $derived(agent.isBusy || !sse.isConnected || isInitializing || llmNotReady);
 	const showClarification = $derived(agent.pendingClarification !== null);
 	const showPlanPreview = $derived(
 		pipeline.steps.length > 0 &&
 		['planning', 'awaiting_approval'].includes(agent.phase)
 	);
+
+	// Check LLM service readiness
+	async function checkLLM() {
+		isCheckingLLM = true;
+		try {
+			llmStatus = await checkLLMReady();
+		} catch (error) {
+			console.error('[ChatPanel] Failed to check LLM service:', error);
+			llmStatus = {
+				ready: false,
+				service_running: false,
+				required_model: 'qwen3:14b',
+				model_available: false,
+				error: 'Failed to connect to backend'
+			};
+		} finally {
+			isCheckingLLM = false;
+		}
+	}
+
+	// Pull the required model
+	async function handlePullModel() {
+		if (!llmStatus || isPullingModel) return;
+
+		isPullingModel = true;
+		try {
+			llmStatus = await ensureLLMReady();
+		} catch (error) {
+			console.error('[ChatPanel] Failed to download model:', error);
+		} finally {
+			isPullingModel = false;
+		}
+	}
 
 	// Initialize thread and SSE connection
 	async function initializeChat() {
@@ -156,6 +194,9 @@
 
 	// Initialize on mount
 	onMount(() => {
+		// Check LLM service readiness first
+		checkLLM();
+		// Initialize chat connection
 		initializeChat();
 
 		// Cleanup on unmount - don't disconnect, just let SSE continue
@@ -225,6 +266,48 @@
 			>
 				Retry
 			</button>
+		</div>
+	{/if}
+
+	<!-- AI service not ready warning -->
+	{#if llmNotReady && llmStatus}
+		<div class="px-4 py-3 mx-4 mb-2 rounded bg-amber-500/10 border border-amber-500/20 text-amber-700 text-sm">
+			<div class="flex items-start gap-3">
+				<div class="flex-1">
+					{#if !llmStatus.service_running}
+						<p class="font-medium">AI service is starting...</p>
+						<p class="text-xs mt-1 text-amber-600">
+							The language model is initializing. This may take a moment on first launch.
+						</p>
+					{:else if !llmStatus.model_available}
+						<p class="font-medium">Downloading AI model...</p>
+						<p class="text-xs mt-1 text-amber-600">
+							First-time setup requires downloading the AI model (~9GB).
+						</p>
+					{:else}
+						<p class="font-medium">AI service not ready</p>
+						<p class="text-xs mt-1 text-amber-600">{llmStatus.error}</p>
+					{/if}
+				</div>
+				<div class="flex gap-2">
+					{#if llmStatus.service_running && !llmStatus.model_available}
+						<button
+							class="px-3 py-1 text-xs rounded bg-forest text-white hover:bg-forest-dark disabled:opacity-50"
+							onclick={handlePullModel}
+							disabled={isPullingModel}
+						>
+							{isPullingModel ? 'Downloading...' : 'Download Model'}
+						</button>
+					{/if}
+					<button
+						class="px-2 py-1 text-xs underline"
+						onclick={checkLLM}
+						disabled={isCheckingLLM}
+					>
+						{isCheckingLLM ? 'Checking...' : 'Refresh'}
+					</button>
+				</div>
+			</div>
 		</div>
 	{/if}
 

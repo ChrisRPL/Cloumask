@@ -1,5 +1,6 @@
 """FastAPI application entry point for Cloumask sidecar."""
 
+import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -7,8 +8,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend import __version__
-from backend.api.routes import health, ollama, scripts
+from backend.agent.llm.config import REQUIRED_MODEL
+from backend.api.routes import health, llm, review, scripts
+from backend.api.routes.llm import check_llm_ready_on_startup
 from backend.api.streaming import endpoints as streaming
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -16,6 +21,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan handler for startup/shutdown."""
     # Startup
     print(f"Cloumask Backend v{__version__} starting...")
+
+    # Check LLM service availability
+    llm_ready = await check_llm_ready_on_startup(max_retries=5, delay=2.0)
+    if llm_ready:
+        logger.info("✓ LLM service is ready")
+    else:
+        logger.warning(
+            f"⚠ LLM service is not ready. Chat features require model '{REQUIRED_MODEL}'. "
+            "The model will be downloaded automatically when the AI service starts."
+        )
+
     yield
     # Shutdown
     print("Cloumask Backend shutting down...")
@@ -48,8 +64,9 @@ def create_app() -> FastAPI:
 
     # Include routers
     app.include_router(health.router, tags=["Health"])
-    app.include_router(ollama.router)
+    app.include_router(llm.router)
     app.include_router(scripts.router)
+    app.include_router(review.router)
     app.include_router(streaming.router)
 
     return app

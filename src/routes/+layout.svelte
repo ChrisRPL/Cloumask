@@ -7,6 +7,7 @@
 	import { setPipelineState } from '$lib/stores/pipeline.svelte';
 	import { setExecutionState } from '$lib/stores/execution.svelte';
 	import { setReviewState } from '$lib/stores/review.svelte';
+	import { setSetupState } from '$lib/stores/setup.svelte';
 	import { setSSEState } from '$lib/stores/sse.svelte';
 	import { Header, Sidebar, MainContent } from '$lib/components/Layout';
 	import * as Tooltip from '$lib/components/ui/tooltip';
@@ -20,6 +21,7 @@
 	// Initialize all stores at root level (context is set by the function call)
 	const ui = setUIState();
 	setSettingsState();
+	setSetupState();
 	const agent = setAgentState();
 	const pipeline = setPipelineState();
 	const execution = setExecutionState();
