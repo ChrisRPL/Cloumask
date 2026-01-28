@@ -106,13 +106,18 @@
 		</div>
 	{/if}
 
-	<!-- Enable/disable checkbox -->
-	<Checkbox
-		checked={isEnabled}
-		onCheckedChange={handleCheckChange}
-		disabled={!isEditing}
-		class="shrink-0"
-	/>
+	<!-- Enable/disable checkbox - wrapper prevents drag initiation -->
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div
+		class="shrink-0 pointer-events-auto relative z-10"
+		onmousedown={(e) => e.stopPropagation()}
+	>
+		<Checkbox
+			checked={isEnabled}
+			onCheckedChange={handleCheckChange}
+			disabled={!isEditing}
+		/>
+	</div>
 
 	<!-- Step number + type icon -->
 	<div class="flex items-center gap-2 min-w-0 shrink-0">
@@ -139,15 +144,18 @@
 		{statusLabel}
 	</span>
 
-	<!-- Config button -->
+	<!-- Config button - onmousedown stops drag initiation -->
 	<button
 		type="button"
 		class={cn(
 			'p-1 rounded transition-opacity text-muted-foreground hover:text-foreground',
-			'opacity-0 group-hover:opacity-100 focus:opacity-100'
+			'opacity-0 group-hover:opacity-100 focus:opacity-100',
+			'pointer-events-auto relative z-10'
 		)}
+		onmousedown={(e) => e.stopPropagation()}
 		onclick={(e) => {
 			e.stopPropagation();
+			e.preventDefault();
 			onOpenConfig?.();
 		}}
 		title="Configure step"
@@ -155,16 +163,19 @@
 		<Settings class="h-4 w-4" />
 	</button>
 
-	<!-- Delete button (edit mode only) -->
+	<!-- Delete button (edit mode only) - onmousedown stops drag initiation -->
 	{#if isEditing}
 		<button
 			type="button"
 			class={cn(
 				'p-1 rounded transition-opacity text-muted-foreground hover:text-destructive',
-				'opacity-0 group-hover:opacity-100 focus:opacity-100'
+				'opacity-0 group-hover:opacity-100 focus:opacity-100',
+				'pointer-events-auto relative z-10'
 			)}
+			onmousedown={(e) => e.stopPropagation()}
 			onclick={(e) => {
 				e.stopPropagation();
+				e.preventDefault();
 				onDelete?.();
 			}}
 			title="Delete step"

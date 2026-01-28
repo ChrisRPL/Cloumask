@@ -22,6 +22,8 @@ reqwest = { version = "0.12", features = ["json", "blocking"] }
 thiserror = "1"
 log = "0.4"
 env_logger = "0.11"
+bollard = "0.17"
+futures-util = "0.3"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

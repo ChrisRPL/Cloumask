@@ -92,19 +92,22 @@ class LLMConfig:
         )
 
 
-# Default configurations by use case
+# Required model for the app to function
+REQUIRED_MODEL = "qwen3:14b"
+
+# Default configurations by use case (all local Ollama models only)
 LLM_CONFIGS: dict[LLMUseCase, LLMConfig] = {
     LLMUseCase.TOOL_CALLING: LLMConfig(
         model="qwen3:14b",
         temperature=0.1,  # Low for deterministic tool selection
         max_tokens=2048,
-        fallback_models=["qwen3:8b", "llama4:8b"],
+        fallback_models=["qwen3:8b"],
     ),
     LLMUseCase.CONVERSATION: LLMConfig(
         model="qwen3:14b",
         temperature=0.7,  # Higher for natural conversation
         max_tokens=4096,
-        fallback_models=["qwen3:8b", "llama4:8b"],
+        fallback_models=["qwen3:8b"],
     ),
     LLMUseCase.PLANNING: LLMConfig(
         model="qwen3:14b",
@@ -119,19 +122,15 @@ LLM_CONFIGS: dict[LLMUseCase, LLMConfig] = {
         fallback_models=["qwen3:8b"],
     ),
     LLMUseCase.CODE_GENERATION: LLMConfig(
-        model="devstral-2:123b-cloud",  # Best cloud coding model
+        model="qwen2.5-coder:14b",  # Best local coding model
         temperature=0.2,  # Low for deterministic but creative code
         max_tokens=4096,
         num_ctx=16384,  # Larger context for code
         timeout=180,  # Longer timeout for code generation
         fallback_models=[
-            "qwen2.5-coder:32b",  # Best local coding model
-            "deepseek-coder-v2:16b",  # Good balance
-            "codestral:22b",  # Mistral specialist
-            "qwen2.5-coder:7b",  # Small coding model
-            # General-purpose fallbacks for when coding models unavailable
-            "mistral:7b-instruct",
-            "llama3.1:8b-instruct-q4_0",
+            "qwen2.5-coder:7b",  # Smaller coding model
+            "qwen3:14b",  # General-purpose fallback
+            "qwen3:8b",  # Smaller general-purpose
         ],
     ),
 }
@@ -164,6 +163,7 @@ __all__ = [
     "LLMConfig",
     "LLMUseCase",
     "LLM_CONFIGS",
+    "REQUIRED_MODEL",
     "get_config_for_use_case",
     "get_default_config",
 ]

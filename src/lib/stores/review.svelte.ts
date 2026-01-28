@@ -14,6 +14,11 @@ import type {
   Annotation,
   AnnotationType,
   BoundingBox,
+  Point,
+  ImageDimensions,
+  CanvasTransform,
+  BoxInteractionMode,
+  ResizeHandle,
 } from "$lib/types/review";
 
 // Re-export types for convenience
@@ -25,6 +30,11 @@ export type {
   Annotation,
   AnnotationType,
   BoundingBox,
+  Point,
+  ImageDimensions,
+  CanvasTransform,
+  BoxInteractionMode,
+  ResizeHandle,
 };
 
 // ============================================================================
