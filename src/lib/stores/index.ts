@@ -94,3 +94,15 @@ export type {
   AnnotationType,
   BoundingBox,
 } from "./review.svelte";
+
+// Setup Store
+export {
+  createSetupState,
+  setSetupState,
+  getSetupState,
+} from "./setup.svelte";
+export type {
+  SetupState,
+  SetupStep,
+  SetupProgress,
+} from "./setup.svelte";
