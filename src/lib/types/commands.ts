@@ -53,26 +53,26 @@ export interface ReadyResponse {
 }
 
 // ============================================================================
-// Ollama Types
+// LLM Service Types
 // ============================================================================
 
 /**
- * Ollama service status.
- * Returned by `get_ollama_status` command.
+ * LLM service status.
+ * Returned by `get_llm_status` command.
  */
-export interface OllamaStatus {
-  /** Whether Ollama is reachable. */
+export interface LLMStatus {
+  /** Whether LLM service is reachable. */
   available: boolean;
-  /** Ollama API URL. */
+  /** LLM service API URL. */
   url: string;
   /** Error message if unavailable. */
   error: string | null;
 }
 
 /**
- * Information about an Ollama model.
+ * Information about an LLM model.
  */
-export interface OllamaModel {
+export interface LLMModel {
   /** Model name (e.g., "qwen3:14b"). */
   name: string;
   /** Model size on disk. */
@@ -82,14 +82,31 @@ export interface OllamaModel {
 }
 
 /**
- * Response containing available Ollama models.
- * Returned by `list_ollama_models` command.
+ * Response containing available LLM models.
+ * Returned by `list_llm_models` command.
  */
-export interface OllamaModelsResponse {
+export interface LLMModelsResponse {
   /** List of available models. */
-  models: OllamaModel[];
+  models: LLMModel[];
   /** Configured default model. */
   default_model: string;
+}
+
+/**
+ * Response from LLM ensure-ready check.
+ * Returned by `/llm/ensure-ready` endpoint.
+ */
+export interface LLMReadyResponse {
+  /** Whether LLM is ready with required model. */
+  ready: boolean;
+  /** Whether LLM service is running. */
+  service_running: boolean;
+  /** The required model name. */
+  required_model: string;
+  /** Whether the required model is available. */
+  model_available: boolean;
+  /** Error message if not ready. */
+  error: string | null;
 }
 
 // ============================================================================
@@ -132,9 +149,9 @@ export type CommandName =
   // Generic sidecar HTTP commands
   | "call_sidecar_get"
   | "call_sidecar_post"
-  // Ollama commands
-  | "get_ollama_status"
-  | "list_ollama_models"
+  // LLM commands
+  | "get_llm_status"
+  | "list_llm_models"
   // System commands
   | "get_app_info"
   | "ping"
@@ -157,9 +174,9 @@ export interface CommandReturnTypes {
   // Generic sidecar HTTP
   call_sidecar_get: unknown;
   call_sidecar_post: unknown;
-  // Ollama
-  get_ollama_status: OllamaStatus;
-  list_ollama_models: OllamaModelsResponse;
+  // LLM
+  get_llm_status: LLMStatus;
+  list_llm_models: LLMModelsResponse;
   // System
   get_app_info: AppInfo;
   ping: string;
@@ -182,9 +199,9 @@ export interface CommandArgs {
   // Generic sidecar HTTP
   call_sidecar_get: { endpoint: string };
   call_sidecar_post: { endpoint: string; body: unknown };
-  // Ollama
-  get_ollama_status: Record<string, never>;
-  list_ollama_models: Record<string, never>;
+  // LLM
+  get_llm_status: Record<string, never>;
+  list_llm_models: Record<string, never>;
   // System
   get_app_info: Record<string, never>;
   ping: Record<string, never>;

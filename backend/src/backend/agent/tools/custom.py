@@ -3,6 +3,10 @@ Custom script execution tool for user-defined processing.
 
 Allows users to run custom Python scripts that conform to the
 Cloumask script interface as pipeline steps.
+
+Supports two execution modes:
+1. Docker execution (secure, isolated) - preferred when Docker is available
+2. Local execution (fallback) - for development or when Docker is unavailable
 """
 
 from __future__ import annotations
@@ -23,6 +27,7 @@ from backend.agent.tools.base import (
     success_result,
 )
 from backend.agent.tools.registry import register_tool
+from backend.scripts.docker_executor import DockerScriptExecutor, ExecutionConfig
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +68,26 @@ Use this for custom transformations not covered by built-in tools."""
             required=False,
             default=None,
         ),
+        ToolParameter(
+            name="use_docker",
+            type=bool,
+            description="Whether to use Docker for isolated execution (default: True)",
+            required=False,
+            default=True,
+        ),
     ]
+
+    def __init__(self) -> None:
+        """Initialize with Docker executor."""
+        super().__init__()
+        self._docker_executor: DockerScriptExecutor | None = None
+
+    @property
+    def docker_executor(self) -> DockerScriptExecutor:
+        """Get or create Docker executor (lazy initialization)."""
+        if self._docker_executor is None:
+            self._docker_executor = DockerScriptExecutor()
+        return self._docker_executor
 
     async def execute(
         self,
@@ -71,12 +95,23 @@ Use this for custom transformations not covered by built-in tools."""
         input_path: str,
         output_path: str,
         config: dict[str, Any] | None = None,
+        use_docker: bool = True,
     ) -> ToolResult:
         """
         Execute the custom script.
 
-        Loads the script as a module, verifies it has the required
-        process() function, and executes it with the provided parameters.
+        Tries Docker execution first (if enabled and available), then falls
+        back to local execution. Docker provides isolated, secure execution.
+
+        Args:
+            script_path: Path to Python script.
+            input_path: Path to input file/directory.
+            output_path: Path for output.
+            config: Script configuration.
+            use_docker: Whether to try Docker execution (default: True).
+
+        Returns:
+            ToolResult with execution status and output.
         """
         script_p = Path(script_path)
         input_p = Path(input_path)
@@ -101,7 +136,16 @@ Use this for custom transformations not covered by built-in tools."""
             # output_path is a directory
             output_p.mkdir(parents=True, exist_ok=True)
 
-        # Execute script in thread pool to avoid blocking
+        # Try Docker execution first (preferred for security)
+        if use_docker:
+            docker_result = await self._execute_in_docker(
+                script_p, input_p, output_p, config
+            )
+            if docker_result is not None:
+                return docker_result
+            logger.info("Docker unavailable, falling back to local execution")
+
+        # Fall back to local execution
         try:
             result = await asyncio.to_thread(
                 self._execute_script,
@@ -115,6 +159,60 @@ Use this for custom transformations not covered by built-in tools."""
         except Exception as e:
             logger.exception("Custom script execution failed: %s", e)
             return error_result(f"Script execution failed: {e}")
+
+    async def _execute_in_docker(
+        self,
+        script_path: Path,
+        input_path: Path,
+        output_path: Path,
+        config: dict[str, Any] | None,
+    ) -> ToolResult | None:
+        """
+        Execute script in Docker container.
+
+        Returns:
+            ToolResult if Docker execution succeeded or failed definitively.
+            None if Docker is unavailable (caller should fall back to local).
+        """
+        # Check if Docker is available
+        if not await self.docker_executor.check_docker_available():
+            return None
+
+        self.report_progress(0, 100, "Starting script in Docker...")
+
+        exec_config = ExecutionConfig(
+            memory_limit="2g",
+            cpu_limit="2",
+            timeout=300,
+        )
+
+        result = await self.docker_executor.execute(
+            script_path=script_path,
+            input_path=input_path,
+            output_path=output_path,
+            config=config,
+            execution_config=exec_config,
+        )
+
+        self.report_progress(100, 100, "Docker execution completed")
+
+        if result.success:
+            return success_result(
+                {
+                    "output": result.output,
+                    "script_name": script_path.name,
+                    "input_path": str(input_path),
+                    "output_path": str(output_path),
+                    "execution_time": result.execution_time,
+                    "execution_mode": "docker",
+                },
+                script=script_path.name,
+            )
+        else:
+            return error_result(
+                f"Docker execution failed: {result.error}"
+                + (f"\nstderr: {result.stderr}" if result.stderr else "")
+            )
 
     def _execute_script(
         self,

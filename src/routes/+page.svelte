@@ -8,8 +8,8 @@
 		getSidecarStatus,
 		checkHealth,
 		restartSidecar,
-		getOllamaStatus,
-		listOllamaModels,
+		getLLMStatus,
+		listLLMModels,
 		isTauri,
 	} from '$lib/utils/tauri';
 	import { open } from '@tauri-apps/plugin-shell';
@@ -17,19 +17,22 @@
 		AppInfo,
 		HealthResponse,
 		SidecarStatus,
-		OllamaStatus,
-		OllamaModelsResponse,
+		LLMStatus,
+		LLMModelsResponse,
 		HealthStatus,
 	} from '$lib/types';
 	import { getUIState, VIEWS } from '$lib/stores/ui.svelte';
+	import { getSetupState } from '$lib/stores/setup.svelte';
 	import { ViewPlaceholder } from '$lib/components/Layout';
 	import { ChatPanel } from '$lib/components/Chat';
 	import { PlanEditor } from '$lib/components/Plan';
 	import { ExecutionView } from '$lib/components/Execution';
 	import { ReviewQueue } from '$lib/components/Review';
+	import { SetupWizard } from '$lib/components/Setup';
 
-	// Get UI state from context
+	// Get state from context
 	const ui = getUIState();
+	const setup = getSetupState();
 
 	// Get current view config
 	const currentViewConfig = $derived(VIEWS.find((v) => v.id === ui.currentView) ?? VIEWS[0]);
@@ -38,8 +41,8 @@
 	let appInfo = $state<AppInfo | null>(null);
 	let sidecarStatus = $state<SidecarStatus | null>(null);
 	let healthResponse = $state<HealthResponse | null>(null);
-	let ollamaStatus = $state<OllamaStatus | null>(null);
-	let ollamaModels = $state<OllamaModelsResponse | null>(null);
+	let llmStatus = $state<LLMStatus | null>(null);
+	let llmModels = $state<LLMModelsResponse | null>(null);
 	let error = $state<string | null>(null);
 	let loading = $state(true);
 
@@ -60,10 +63,10 @@
 		return healthResponse.status;
 	});
 
-	const ollamaHealthStatus = $derived.by<HealthStatus>(() => {
+	const llmHealthStatus = $derived.by<HealthStatus>(() => {
 		if (loading) return 'loading';
-		if (!ollamaStatus) return 'not_loaded';
-		return ollamaStatus.available ? 'healthy' : 'unhealthy';
+		if (!llmStatus) return 'not_loaded';
+		return llmStatus.available ? 'healthy' : 'unhealthy';
 	});
 
 	// Badge variant mapping
@@ -92,13 +95,13 @@
 		error = null;
 
 		try {
-			const [appResult, sidecarResult, healthResult, ollamaResult, modelsResult] =
+			const [appResult, sidecarResult, healthResult, llmResult, modelsResult] =
 				await Promise.allSettled([
 					getAppInfo(),
 					getSidecarStatus(),
 					checkHealth(),
-					getOllamaStatus(),
-					listOllamaModels(),
+					getLLMStatus(),
+					listLLMModels(),
 				]);
 
 			if (appResult.status === 'fulfilled') {
@@ -116,12 +119,12 @@
 				error = sidecarStatus?.running ? 'Sidecar is starting...' : 'Python sidecar not running';
 			}
 
-			if (ollamaResult.status === 'fulfilled') {
-				ollamaStatus = ollamaResult.value;
+			if (llmResult.status === 'fulfilled') {
+				llmStatus = llmResult.value;
 			}
 
 			if (modelsResult.status === 'fulfilled') {
-				ollamaModels = modelsResult.value;
+				llmModels = modelsResult.value;
 			}
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Unknown error';
@@ -161,7 +164,10 @@
 	});
 </script>
 
-{#if ui.currentView === 'settings'}
+{#if !setup.isComplete}
+	<!-- First-Time Setup Wizard -->
+	<SetupWizard onComplete={() => setup.markComplete()} />
+{:else if ui.currentView === 'settings'}
 	<!-- Settings View: System Status Dashboard -->
 	<div class="flex flex-col items-center justify-start min-h-full p-8 gap-8 overflow-auto">
 		<div class="text-center">
@@ -210,11 +216,11 @@
 						</Badge>
 					</div>
 
-					<!-- Ollama Status -->
+					<!-- LLM Status -->
 					<div class="flex items-center justify-between">
-						<span class="text-muted-foreground">Ollama LLM</span>
-						<Badge variant={getBadgeVariant(ollamaHealthStatus)}>
-							{ollamaStatus?.available ? 'Connected' : ollamaHealthStatus}
+						<span class="text-muted-foreground">AI Service</span>
+						<Badge variant={getBadgeVariant(llmHealthStatus)}>
+							{llmStatus?.available ? 'Connected' : llmHealthStatus}
 						</Badge>
 					</div>
 
@@ -237,10 +243,10 @@
 						</div>
 					{/if}
 
-					<!-- Ollama Error -->
-					{#if ollamaStatus && !ollamaStatus.available && ollamaStatus.error}
+					<!-- LLM Error -->
+					{#if llmStatus && !llmStatus.available && llmStatus.error}
 						<div class="p-3 rounded-md bg-muted/50 border border-muted-foreground/20">
-							<p class="text-sm text-muted-foreground">Ollama: {ollamaStatus.error}</p>
+							<p class="text-sm text-muted-foreground">AI Service: {llmStatus.error}</p>
 						</div>
 					{/if}
 
@@ -254,16 +260,16 @@
 			</Card.Content>
 		</Card.Root>
 
-		<!-- Ollama Models Card -->
-		{#if ollamaModels && ollamaModels.models.length > 0}
+		<!-- AI Models Card -->
+		{#if llmModels && llmModels.models.length > 0}
 			<Card.Root class="w-full max-w-md">
 				<Card.Header>
-					<Card.Title>Ollama Models</Card.Title>
-					<Card.Description>Default: {ollamaModels.default_model}</Card.Description>
+					<Card.Title>AI Models</Card.Title>
+					<Card.Description>Default: {llmModels.default_model}</Card.Description>
 				</Card.Header>
 				<Card.Content>
 					<div class="space-y-2">
-						{#each ollamaModels.models as model}
+						{#each llmModels.models as model}
 							<div class="flex justify-between text-sm">
 								<span class="font-mono text-foreground">{model.name}</span>
 								<span class="text-muted-foreground">{model.size}</span>

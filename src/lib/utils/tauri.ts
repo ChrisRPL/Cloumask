@@ -14,8 +14,9 @@ import type {
 	HealthResponse,
 	ReadyResponse,
 	SidecarStatus,
-	OllamaStatus,
-	OllamaModelsResponse,
+	LLMStatus,
+	LLMModelsResponse,
+	LLMReadyResponse,
 	IPCError,
 } from '$lib/types/commands';
 
@@ -105,17 +106,17 @@ export async function checkReady(): Promise<ReadyResponse> {
 }
 
 // ============================================================================
-// Ollama Commands
+// LLM Commands
 // ============================================================================
 
-/** Get the status of Ollama LLM service. */
-export async function getOllamaStatus(): Promise<OllamaStatus> {
-	return invokeCommand('get_ollama_status');
+/** Get the status of LLM service. */
+export async function getLLMStatus(): Promise<LLMStatus> {
+	return invokeCommand('get_llm_status');
 }
 
-/** List available Ollama models. */
-export async function listOllamaModels(): Promise<OllamaModelsResponse> {
-	return invokeCommand('list_ollama_models');
+/** List available LLM models. */
+export async function listLLMModels(): Promise<LLMModelsResponse> {
+	return invokeCommand('list_llm_models');
 }
 
 // ============================================================================
@@ -359,4 +360,86 @@ export function getStreamUrl(threadId: string): string {
 		throw new Error('Invalid thread ID');
 	}
 	return `${SIDECAR_URL}/api/chat/stream/${threadId}`;
+}
+
+// ============================================================================
+// LLM Readiness API (Direct HTTP to Python Sidecar)
+// ============================================================================
+
+/**
+ * Check if LLM service is ready with the required model.
+ * Does NOT automatically pull the model.
+ */
+export async function checkLLMReady(): Promise<LLMReadyResponse> {
+	const response = await fetch(`${SIDECAR_URL}/llm/ensure-ready`);
+
+	if (!response.ok) {
+		throw new Error(`Failed to check LLM service: ${response.statusText}`);
+	}
+
+	return response.json();
+}
+
+/**
+ * Ensure LLM service is ready, pulling the required model if needed.
+ * WARNING: This may take several minutes for large models.
+ */
+export async function ensureLLMReady(): Promise<LLMReadyResponse> {
+	const response = await fetch(`${SIDECAR_URL}/llm/ensure-ready`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' }
+	});
+
+	if (!response.ok) {
+		throw new Error(`Failed to ensure LLM ready: ${response.statusText}`);
+	}
+
+	return response.json();
+}
+
+/**
+ * Pull a specific model.
+ * @param model - Model name (e.g., "qwen3:14b")
+ */
+export async function pullLLMModel(model: string): Promise<{ status: string; message: string }> {
+	const response = await fetch(`${SIDECAR_URL}/llm/pull`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ model })
+	});
+
+	if (!response.ok) {
+		throw new Error(`Failed to pull model: ${response.statusText}`);
+	}
+
+	return response.json();
+}
+
+/**
+ * Wait for LLM service to be ready with the required model.
+ * Polls checkLLMReady() until ready or timeout.
+ */
+export async function waitForLLMReady(timeout = 15000): Promise<LLMReadyResponse> {
+	const start = Date.now();
+	let lastResult: LLMReadyResponse | null = null;
+
+	while (Date.now() - start < timeout) {
+		try {
+			lastResult = await checkLLMReady();
+			if (lastResult.ready) {
+				return lastResult;
+			}
+		} catch {
+			// Keep trying
+		}
+		await new Promise((resolve) => setTimeout(resolve, 1000));
+	}
+
+	return lastResult ?? {
+		ready: false,
+		service_running: false,
+		required_model: 'qwen3:14b',
+		model_available: false,
+		error: 'Timeout waiting for LLM service'
+	};
 }
