@@ -130,21 +130,12 @@ export function createScene(canvas: HTMLCanvasElement, config: SceneConfig = {})
 	axes.visible = showAxes;
 	scene.add(axes);
 
-	// Render loop
-	let animationId: number;
+	// Disposed state flag
 	let isDisposed = false;
 
-	function animate() {
-		if (isDisposed) return;
-		animationId = requestAnimationFrame(animate);
-		controls.update();
-		renderer.render(scene, camera);
-	}
-	animate();
-
-	// Resize handler
+	// Resize handler with DOM state verification
 	const resizeObserver = new ResizeObserver(() => {
-		if (isDisposed) return;
+		if (isDisposed || !canvas.isConnected) return;
 		const width = canvas.clientWidth;
 		const height = canvas.clientHeight;
 
@@ -156,14 +147,39 @@ export function createScene(canvas: HTMLCanvasElement, config: SceneConfig = {})
 	});
 	resizeObserver.observe(canvas);
 
-	// Dispose function
+	// Dispose function for cleanup
 	const dispose = () => {
 		isDisposed = true;
-		cancelAnimationFrame(animationId);
+
+		// Stop animation loop if active
+		renderer.setAnimationLoop(null);
+
+		// Disconnect resize observer
 		resizeObserver.disconnect();
+
+		// Dispose controls
 		controls.dispose();
 
-		// Dispose all objects in scene
+		// Explicitly dispose grid and axes helpers
+		grid.geometry?.dispose();
+		if (grid.material) {
+			if (Array.isArray(grid.material)) {
+				grid.material.forEach((m) => m.dispose());
+			} else {
+				(grid.material as THREE.Material).dispose();
+			}
+		}
+
+		axes.geometry?.dispose();
+		if (axes.material) {
+			if (Array.isArray(axes.material)) {
+				axes.material.forEach((m) => m.dispose());
+			} else {
+				(axes.material as THREE.Material).dispose();
+			}
+		}
+
+		// Dispose all other objects in scene
 		scene.traverse((object) => {
 			if (object instanceof THREE.Mesh || object instanceof THREE.Points || object instanceof THREE.Line) {
 				object.geometry?.dispose();
