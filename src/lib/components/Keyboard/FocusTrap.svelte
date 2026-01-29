@@ -84,8 +84,8 @@
 		}
 
 		return () => {
-			// Return focus when deactivated
-			if (previouslyFocused && previouslyFocused.focus) {
+			// Return focus when deactivated (only if element still exists in DOM)
+			if (previouslyFocused && previouslyFocused.isConnected && previouslyFocused.focus) {
 				previouslyFocused.focus();
 			}
 		};

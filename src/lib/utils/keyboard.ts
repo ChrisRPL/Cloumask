@@ -157,11 +157,14 @@ export function matchesCombo(event: KeyboardEvent, combo: KeyCombo): boolean {
     return false;
   }
 
-  // On Mac, Cmd (metaKey) is used for shortcuts that are Ctrl on other platforms
+  // On Mac, Cmd (metaKey) OR Ctrl can satisfy a Ctrl shortcut
+  // This allows users to use either Cmd+K or Ctrl+K on Mac
   const ctrlMatch =
     platform === "mac"
-      ? (event.metaKey === combo.ctrl) // On Mac, Cmd = Ctrl for shortcuts
-      : (event.ctrlKey === combo.ctrl);
+      ? combo.ctrl
+        ? event.metaKey || event.ctrlKey // Either Cmd or Ctrl satisfies ctrl combo on Mac
+        : !event.metaKey && !event.ctrlKey // Neither should be pressed if combo doesn't need ctrl
+      : event.ctrlKey === combo.ctrl;
 
   // Alt/Option
   const altMatch = event.altKey === combo.alt;
@@ -229,9 +232,13 @@ export function normalizeCombo(combo: string): string {
   return parts.join("+");
 }
 
+/** Keys that are modifiers and shouldn't start sequences */
+const MODIFIER_KEYS = ["shift", "control", "alt", "meta"];
+
 /**
  * Check if a combo is a potential sequence start.
  * Single-character combos without modifiers can start sequences.
+ * Excludes modifier keys themselves (Shift, Ctrl, Alt, Meta).
  */
 export function isSequenceStartCandidate(combo: KeyCombo): boolean {
   return (
@@ -239,7 +246,8 @@ export function isSequenceStartCandidate(combo: KeyCombo): boolean {
     !combo.alt &&
     !combo.shift &&
     !combo.meta &&
-    combo.key.length === 1
+    combo.key.length === 1 &&
+    !MODIFIER_KEYS.includes(combo.key)
   );
 }
 
