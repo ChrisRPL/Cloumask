@@ -15,3 +15,6 @@ export * from "./settings";
 
 // SSE types
 export * from "./sse";
+
+// Keyboard navigation types
+export * from "./keyboard";

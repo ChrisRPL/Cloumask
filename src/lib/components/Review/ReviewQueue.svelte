@@ -7,10 +7,11 @@
 </script>
 
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, untrack } from 'svelte';
 	import { convertFileSrc } from '@tauri-apps/api/core';
 	import { cn } from '$lib/utils.js';
 	import { getReviewState } from '$lib/stores/review.svelte.js';
+	import { getKeyboardState } from '$lib/stores/keyboard.svelte.js';
 	import type { Annotation, ReviewItem } from '$lib/types/review';
 
 	// Components
@@ -28,6 +29,7 @@
 
 	// Review state from context
 	const reviewState = getReviewState();
+	const keyboard = getKeyboardState();
 
 	// Local UI state
 	let isEditMode = $state(false);
@@ -303,133 +305,272 @@
 	}
 
 	// ============================================================================
-	// Keyboard Shortcuts
+	// Keyboard Shortcuts (registered with keyboard store for scope awareness)
 	// ============================================================================
 
-	function isInputFocused(target: EventTarget | null): boolean {
-		if (!target || !(target instanceof HTMLElement)) return false;
-		const tagName = target.tagName.toLowerCase();
-		return (
-			tagName === 'input' ||
-			tagName === 'textarea' ||
-			tagName === 'select' ||
-			target.isContentEditable
-		);
-	}
+	// NOTE: We use untrack() to prevent this effect from tracking registeredShortcuts reads
+	// inside keyboard.register(). Without untrack, register() reads the shortcuts map,
+	// which would cause an infinite loop (effect_update_depth_exceeded error).
+	$effect(() => {
+		const unregisterFns: (() => void)[] = [];
 
-	function handleKeydown(e: KeyboardEvent) {
-		if (isInputFocused(e.target)) return;
+		untrack(() => {
+			// Approve current item (with undo support)
+			unregisterFns.push(
+				(() => {
+					const id = keyboard.register({
+						combo: 'a',
+						action: approveCurrentItem,
+						scope: 'review',
+						description: 'Approve and advance',
+						category: 'Review',
+					});
+					return () => keyboard.unregister(id);
+				})()
+			);
 
-		const key = e.key.toLowerCase();
-		const ctrl = e.ctrlKey || e.metaKey;
+			// Reject current item (with undo support)
+			unregisterFns.push(
+				(() => {
+					const id = keyboard.register({
+						combo: 'r',
+						action: rejectCurrentItem,
+						scope: 'review',
+						description: 'Reject and advance',
+						category: 'Review',
+					});
+					return () => keyboard.unregister(id);
+				})()
+			);
 
-		switch (key) {
-			// Navigation
-			case 'j':
-			case 'arrowdown':
-				e.preventDefault();
-				reviewState.nextItem();
-				break;
-			case 'k':
-			case 'arrowup':
-				e.preventDefault();
-				reviewState.previousItem();
-				break;
+			// Toggle edit mode
+			unregisterFns.push(
+				(() => {
+					const id = keyboard.register({
+						combo: 'e',
+						action: toggleEditMode,
+						scope: 'review',
+						description: 'Toggle edit mode',
+						category: 'Review',
+					});
+					return () => keyboard.unregister(id);
+				})()
+			);
 
-			// Actions
-			case 'a':
-				if (!ctrl) {
-					e.preventDefault();
-					approveCurrentItem();
-				}
-				break;
-			case 'r':
-				if (!ctrl) {
-					e.preventDefault();
-					rejectCurrentItem();
-				}
-				break;
-			case 'e':
-				e.preventDefault();
-				toggleEditMode();
-				break;
+			// Tool shortcuts (when in edit mode)
+			unregisterFns.push(
+				(() => {
+					const id = keyboard.register({
+						combo: 'v',
+						action: () => {
+							if (isEditMode) drawingTool = 'select';
+						},
+						scope: 'review',
+						description: 'Select tool',
+						category: 'Review',
+					});
+					return () => keyboard.unregister(id);
+				})()
+			);
 
-			// Tools (when in edit mode)
-			case 'v':
-				if (isEditMode) {
-					e.preventDefault();
-					drawingTool = 'select';
-				}
-				break;
-			case 'b':
-				if (isEditMode) {
-					e.preventDefault();
-					drawingTool = 'rectangle';
-				}
-				break;
-			case 'p':
-				if (isEditMode) {
-					e.preventDefault();
-					drawingTool = 'polygon';
-				}
-				break;
+			unregisterFns.push(
+				(() => {
+					const id = keyboard.register({
+						combo: 'b',
+						action: () => {
+							if (isEditMode) drawingTool = 'rectangle';
+						},
+						scope: 'review',
+						description: 'Rectangle tool',
+						category: 'Review',
+					});
+					return () => keyboard.unregister(id);
+				})()
+			);
+
+			unregisterFns.push(
+				(() => {
+					const id = keyboard.register({
+						combo: 'p',
+						action: () => {
+							if (isEditMode) drawingTool = 'polygon';
+						},
+						scope: 'review',
+						description: 'Polygon tool',
+						category: 'Review',
+					});
+					return () => keyboard.unregister(id);
+				})()
+			);
 
 			// Undo/Redo
-			case 'z':
-				if (ctrl && !e.shiftKey) {
-					e.preventDefault();
-					undo();
-				} else if (ctrl && e.shiftKey) {
-					e.preventDefault();
-					redo();
-				}
-				break;
-			case 'y':
-				if (ctrl) {
-					e.preventDefault();
-					redo();
-				}
-				break;
+			unregisterFns.push(
+				(() => {
+					const id = keyboard.register({
+						combo: 'ctrl+z',
+						action: undo,
+						scope: 'review',
+						description: 'Undo',
+						category: 'Review',
+					});
+					return () => keyboard.unregister(id);
+				})()
+			);
 
-			// Delete
-			case 'delete':
-			case 'backspace':
-				if (selectedAnnotationId && isEditMode) {
-					e.preventDefault();
-					handleAnnotationDelete(selectedAnnotationId);
-				}
-				break;
+			// Redo (Ctrl+Shift+Z)
+			unregisterFns.push(
+				(() => {
+					const id = keyboard.register({
+						combo: 'ctrl+shift+z',
+						action: redo,
+						scope: 'review',
+						description: 'Redo',
+						category: 'Review',
+					});
+					return () => keyboard.unregister(id);
+				})()
+			);
 
-			// Escape
-			case 'escape':
-				e.preventDefault();
-				if (isEditMode) {
-					isEditMode = false;
-					drawingTool = 'select';
-				}
-				selectedAnnotationId = null;
-				break;
+			// Redo (Ctrl+Y - alternative)
+			unregisterFns.push(
+				(() => {
+					const id = keyboard.register({
+						combo: 'ctrl+y',
+						action: redo,
+						scope: 'review',
+						description: 'Redo',
+						category: 'Review',
+					});
+					return () => keyboard.unregister(id);
+				})()
+			);
 
-			// Zoom
-			case '+':
-			case '=':
-				e.preventDefault();
-				zoom = Math.min(zoom * 1.25, 5);
-				break;
-			case '-':
-				e.preventDefault();
-				zoom = Math.max(zoom / 1.25, 0.1);
-				break;
-			case '0':
-				e.preventDefault();
-				zoom = 1; // Fit to view
-				break;
-			case '1':
-				e.preventDefault();
-				zoom = 1; // 100%
-				break;
-		}
-	}
+			// Delete annotation (Delete key)
+			unregisterFns.push(
+				(() => {
+					const id = keyboard.register({
+						combo: 'delete',
+						action: () => {
+							if (selectedAnnotationId && isEditMode) {
+								handleAnnotationDelete(selectedAnnotationId);
+							}
+						},
+						scope: 'review',
+						description: 'Delete annotation',
+						category: 'Review',
+					});
+					return () => keyboard.unregister(id);
+				})()
+			);
+
+			// Delete annotation (Backspace - alternative)
+			unregisterFns.push(
+				(() => {
+					const id = keyboard.register({
+						combo: 'backspace',
+						action: () => {
+							if (selectedAnnotationId && isEditMode) {
+								handleAnnotationDelete(selectedAnnotationId);
+							}
+						},
+						scope: 'review',
+						description: 'Delete annotation',
+						category: 'Review',
+					});
+					return () => keyboard.unregister(id);
+				})()
+			);
+
+			// Escape - exit edit mode
+			unregisterFns.push(
+				(() => {
+					const id = keyboard.register({
+						combo: 'escape',
+						action: () => {
+							if (isEditMode) {
+								isEditMode = false;
+								drawingTool = 'select';
+							}
+							selectedAnnotationId = null;
+						},
+						scope: 'review',
+						description: 'Exit edit mode',
+						category: 'Review',
+						priority: 10, // Lower than global escape
+					});
+					return () => keyboard.unregister(id);
+				})()
+			);
+
+			// Zoom in (+)
+			unregisterFns.push(
+				(() => {
+					const id = keyboard.register({
+						combo: '+',
+						action: () => {
+							zoom = Math.min(zoom * 1.25, 5);
+						},
+						scope: 'review',
+						description: 'Zoom in',
+						category: 'Review',
+					});
+					return () => keyboard.unregister(id);
+				})()
+			);
+
+			// Zoom in (= - alternative for keyboards where + requires shift)
+			unregisterFns.push(
+				(() => {
+					const id = keyboard.register({
+						combo: '=',
+						action: () => {
+							zoom = Math.min(zoom * 1.25, 5);
+						},
+						scope: 'review',
+						description: 'Zoom in',
+						category: 'Review',
+					});
+					return () => keyboard.unregister(id);
+				})()
+			);
+
+			unregisterFns.push(
+				(() => {
+					const id = keyboard.register({
+						combo: '-',
+						action: () => {
+							zoom = Math.max(zoom / 1.25, 0.1);
+						},
+						scope: 'review',
+						description: 'Zoom out',
+						category: 'Review',
+					});
+					return () => keyboard.unregister(id);
+				})()
+			);
+
+			unregisterFns.push(
+				(() => {
+					const id = keyboard.register({
+						combo: '0',
+						action: () => {
+							zoom = 1;
+						},
+						scope: 'review',
+						description: 'Reset zoom',
+						category: 'Review',
+					});
+					return () => keyboard.unregister(id);
+				})()
+			);
+		}); // end untrack
+
+		return () => {
+			untrack(() => {
+				for (const fn of unregisterFns) fn();
+			});
+		};
+	});
 
 	// ============================================================================
 	// Data Loading
@@ -459,8 +600,6 @@
 		loadReviewItems();
 	});
 </script>
-
-<svelte:window on:keydown={handleKeydown} />
 
 <div
 	class={cn(

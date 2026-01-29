@@ -8,10 +8,12 @@
 
 <script lang="ts">
 	import { cn } from '$lib/utils.js';
+	import { untrack } from 'svelte';
 	import { getExecutionState } from '$lib/stores/execution.svelte';
 	import { getPipelineState } from '$lib/stores/pipeline.svelte';
 	import { getAgentState } from '$lib/stores/agent.svelte';
 	import { getUIState } from '$lib/stores/ui.svelte';
+	import { getKeyboardState } from '$lib/stores/keyboard.svelte';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Button } from '$lib/components/ui/button';
 	import ExecutionHeader from './ExecutionHeader.svelte';
@@ -29,6 +31,7 @@
 	const pipeline = getPipelineState();
 	const agent = getAgentState();
 	const ui = getUIState();
+	const keyboard = getKeyboardState();
 
 	// Local state
 	let showErrorLog = $state(false);
@@ -46,47 +49,62 @@
 	const canResume = $derived(execution.isPaused || execution.status === 'checkpoint');
 	const isCheckpoint = $derived(execution.status === 'checkpoint');
 
-	// Keyboard handler
-	function handleKeydown(event: KeyboardEvent) {
-		// Ignore if typing in an input
-		if (
-			event.target instanceof HTMLInputElement ||
-			event.target instanceof HTMLTextAreaElement
-		) {
-			return;
-		}
+	// ============================================================================
+	// Keyboard Shortcuts (registered with keyboard store for scope awareness)
+	// ============================================================================
 
-		switch (event.code) {
-			case 'Space':
-				event.preventDefault();
-				if (canPause) {
-					execution.pause();
-				} else if (canResume) {
-					execution.resume();
-				}
-				break;
-			case 'Escape':
-				event.preventDefault();
-				if (execution.isRunning || execution.isPaused) {
-					confirmCancelOpen = true;
-				}
-				break;
-			case 'KeyR':
-				event.preventDefault();
-				ui.setView('review');
-				break;
-			case 'Enter':
-				event.preventDefault();
-				if (isCheckpoint) {
-					handleContinue();
-				}
-				break;
-			case 'KeyE':
-				event.preventDefault();
-				showErrorLog = !showErrorLog;
-				break;
-		}
-	}
+	// NOTE: We use untrack() to prevent this effect from tracking registeredShortcuts reads
+	// inside keyboard.register(). Without untrack, register() reads the shortcuts map,
+	// which would cause an infinite loop (effect_update_depth_exceeded error).
+	$effect(() => {
+		const unregisterFns: (() => void)[] = [];
+
+		untrack(() => {
+			// Escape - show cancel confirmation
+			unregisterFns.push(
+				(() => {
+					const id = keyboard.register({
+						combo: 'escape',
+						action: () => {
+							if (execution.isRunning || execution.isPaused) {
+								confirmCancelOpen = true;
+							}
+						},
+						scope: 'execution',
+						description: 'Cancel execution',
+						category: 'Execution',
+						priority: 10, // Lower than global escape
+					});
+					return () => keyboard.unregister(id);
+				})()
+			);
+
+			// E - toggle error log
+			unregisterFns.push(
+				(() => {
+					const id = keyboard.register({
+						combo: 'e',
+						action: () => {
+							showErrorLog = !showErrorLog;
+						},
+						scope: 'execution',
+						description: 'Toggle error log',
+						category: 'Execution',
+					});
+					return () => keyboard.unregister(id);
+				})()
+			);
+		}); // end untrack
+
+		// Note: Space (pause/resume), Enter (continue), and R (review)
+		// are registered globally in +layout.svelte
+
+		return () => {
+			untrack(() => {
+				for (const fn of unregisterFns) fn();
+			});
+		};
+	});
 
 	// Actions
 	function handlePause() {
@@ -147,8 +165,6 @@
 		}
 	});
 </script>
-
-<svelte:window onkeydown={handleKeydown} />
 
 <div class={cn('flex flex-col h-full bg-background', className)}>
 	<!-- Header with controls -->
