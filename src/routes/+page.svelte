@@ -29,6 +29,7 @@
 	import { ExecutionView } from '$lib/components/Execution';
 	import { ReviewQueue } from '$lib/components/Review';
 	import { SetupWizard } from '$lib/components/Setup';
+	import { PointCloudViewer } from '$lib/components/PointCloud';
 
 	// Get state from context
 	const ui = getUIState();
@@ -325,6 +326,9 @@
 {:else if ui.currentView === 'review'}
 	<!-- Review Queue View -->
 	<ReviewQueue onDone={() => ui.setView('execute')} class="h-full" />
+{:else if ui.currentView === 'pointcloud'}
+	<!-- Point Cloud Viewer -->
+	<PointCloudViewer class="h-full" />
 {:else}
 	<!-- Other Views: Show Placeholder -->
 	<ViewPlaceholder view={currentViewConfig} />
