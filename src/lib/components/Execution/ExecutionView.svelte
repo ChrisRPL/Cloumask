@@ -8,6 +8,7 @@
 
 <script lang="ts">
 	import { cn } from '$lib/utils.js';
+	import { untrack } from 'svelte';
 	import { getExecutionState } from '$lib/stores/execution.svelte';
 	import { getPipelineState } from '$lib/stores/pipeline.svelte';
 	import { getAgentState } from '$lib/stores/agent.svelte';
@@ -52,49 +53,56 @@
 	// Keyboard Shortcuts (registered with keyboard store for scope awareness)
 	// ============================================================================
 
+	// NOTE: We use untrack() to prevent this effect from tracking registeredShortcuts reads
+	// inside keyboard.register(). Without untrack, register() reads the shortcuts map,
+	// which would cause an infinite loop (effect_update_depth_exceeded error).
 	$effect(() => {
 		const unregisterFns: (() => void)[] = [];
 
-		// Escape - show cancel confirmation
-		unregisterFns.push(
-			(() => {
-				const id = keyboard.register({
-					combo: 'escape',
-					action: () => {
-						if (execution.isRunning || execution.isPaused) {
-							confirmCancelOpen = true;
-						}
-					},
-					scope: 'execution',
-					description: 'Cancel execution',
-					category: 'Execution',
-					priority: 10, // Lower than global escape
-				});
-				return () => keyboard.unregister(id);
-			})()
-		);
+		untrack(() => {
+			// Escape - show cancel confirmation
+			unregisterFns.push(
+				(() => {
+					const id = keyboard.register({
+						combo: 'escape',
+						action: () => {
+							if (execution.isRunning || execution.isPaused) {
+								confirmCancelOpen = true;
+							}
+						},
+						scope: 'execution',
+						description: 'Cancel execution',
+						category: 'Execution',
+						priority: 10, // Lower than global escape
+					});
+					return () => keyboard.unregister(id);
+				})()
+			);
 
-		// E - toggle error log
-		unregisterFns.push(
-			(() => {
-				const id = keyboard.register({
-					combo: 'e',
-					action: () => {
-						showErrorLog = !showErrorLog;
-					},
-					scope: 'execution',
-					description: 'Toggle error log',
-					category: 'Execution',
-				});
-				return () => keyboard.unregister(id);
-			})()
-		);
+			// E - toggle error log
+			unregisterFns.push(
+				(() => {
+					const id = keyboard.register({
+						combo: 'e',
+						action: () => {
+							showErrorLog = !showErrorLog;
+						},
+						scope: 'execution',
+						description: 'Toggle error log',
+						category: 'Execution',
+					});
+					return () => keyboard.unregister(id);
+				})()
+			);
+		}); // end untrack
 
 		// Note: Space (pause/resume), Enter (continue), and R (review)
 		// are registered globally in +layout.svelte
 
 		return () => {
-			for (const fn of unregisterFns) fn();
+			untrack(() => {
+				for (const fn of unregisterFns) fn();
+			});
 		};
 	});
 

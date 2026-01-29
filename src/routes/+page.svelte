@@ -35,6 +35,9 @@
 	const ui = getUIState();
 	const setup = getSetupState();
 
+	// Track setup completion reactively (forces Svelte to re-evaluate)
+	const isSetupComplete = $derived(setup.isComplete);
+
 	// Get current view config
 	const currentViewConfig = $derived(VIEWS.find((v) => v.id === ui.currentView) ?? VIEWS[0]);
 
@@ -165,7 +168,7 @@
 	});
 </script>
 
-{#if !setup.isComplete}
+{#if !isSetupComplete}
 	<!-- First-Time Setup Wizard -->
 	<SetupWizard onComplete={() => setup.markComplete()} />
 {:else if ui.currentView === 'settings'}

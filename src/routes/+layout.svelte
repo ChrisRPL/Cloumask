@@ -1,6 +1,7 @@
 <script lang="ts">
 	import '../app.css';
 	import type { Snippet } from 'svelte';
+	import { untrack } from 'svelte';
 	import { setUIState, VIEWS, type ViewId } from '$lib/stores/ui.svelte';
 	import { setSettingsState } from '$lib/stores/settings.svelte';
 	import { setAgentState } from '$lib/stores/agent.svelte';
@@ -47,260 +48,273 @@
 	};
 
 	// Auto-update keyboard scope when view changes
+	// NOTE: We read ui.currentView (tracked) but use untrack for setScope
+	// because setScope reads and writes scopeStack internally, which would
+	// cause an infinite loop if tracked.
 	$effect(() => {
 		const scope = viewToScope[ui.currentView] ?? 'global';
-		keyboard.setScope(scope);
+		untrack(() => {
+			keyboard.setScope(scope);
+		});
 	});
 
 	// Register global shortcuts
+	// NOTE: We use untrack() to prevent this effect from tracking registeredShortcuts reads
+	// inside keyboard.register(). Without untrack, register() reads the shortcuts map,
+	// which would make this effect re-run every time a shortcut is registered, causing
+	// an infinite loop (effect_update_depth_exceeded error).
 	$effect(() => {
 		const unregisterFns: (() => void)[] = [];
 
-		// View switching shortcuts (1-5, comma)
-		for (const view of VIEWS) {
-			const id = keyboard.register({
-				combo: view.shortcutKey,
-				action: () => ui.setView(view.id),
+		untrack(() => {
+			// View switching shortcuts (1-5, comma)
+			for (const view of VIEWS) {
+				const id = keyboard.register({
+					combo: view.shortcutKey,
+					action: () => ui.setView(view.id),
+					scope: 'global',
+					description: `Switch to ${view.label} view`,
+					category: 'Navigation',
+				});
+				unregisterFns.push(() => keyboard.unregister(id));
+			}
+
+			// Sidebar toggle (Ctrl+B)
+			const sidebarId = keyboard.register({
+				combo: 'ctrl+b',
+				action: () => ui.toggleSidebar(),
 				scope: 'global',
-				description: `Switch to ${view.label} view`,
+				description: 'Toggle sidebar',
 				category: 'Navigation',
 			});
-			unregisterFns.push(() => keyboard.unregister(id));
-		}
+			unregisterFns.push(() => keyboard.unregister(sidebarId));
 
-		// Sidebar toggle (Ctrl+B)
-		const sidebarId = keyboard.register({
-			combo: 'ctrl+b',
-			action: () => ui.toggleSidebar(),
-			scope: 'global',
-			description: 'Toggle sidebar',
-			category: 'Navigation',
-		});
-		unregisterFns.push(() => keyboard.unregister(sidebarId));
+			// Command palette (Ctrl+K)
+			const paletteId = keyboard.register({
+				combo: 'ctrl+k',
+				action: () => keyboard.toggleCommandPalette(),
+				scope: 'global',
+				description: 'Open command palette',
+				category: 'Navigation',
+				priority: 100, // High priority
+			});
+			unregisterFns.push(() => keyboard.unregister(paletteId));
 
-		// Command palette (Ctrl+K)
-		const paletteId = keyboard.register({
-			combo: 'ctrl+k',
-			action: () => keyboard.toggleCommandPalette(),
-			scope: 'global',
-			description: 'Open command palette',
-			category: 'Navigation',
-			priority: 100, // High priority
-		});
-		unregisterFns.push(() => keyboard.unregister(paletteId));
+			// Help overlay (?)
+			const helpId = keyboard.register({
+				combo: '?',
+				action: () => keyboard.toggleHelpOverlay(),
+				scope: 'global',
+				description: 'Show keyboard shortcuts',
+				category: 'Help',
+			});
+			unregisterFns.push(() => keyboard.unregister(helpId));
 
-		// Help overlay (?)
-		const helpId = keyboard.register({
-			combo: '?',
-			action: () => keyboard.toggleHelpOverlay(),
-			scope: 'global',
-			description: 'Show keyboard shortcuts',
-			category: 'Help',
-		});
-		unregisterFns.push(() => keyboard.unregister(helpId));
+			// Escape (close overlays)
+			const escapeId = keyboard.register({
+				combo: 'escape',
+				action: () => {
+					if (keyboard.isCommandPaletteOpen) {
+						keyboard.closeCommandPalette();
+					} else if (keyboard.isHelpOverlayOpen) {
+						keyboard.closeHelpOverlay();
+					}
+				},
+				scope: 'global',
+				description: 'Close overlay / Cancel',
+				category: 'Navigation',
+				priority: 50,
+			});
+			unregisterFns.push(() => keyboard.unregister(escapeId));
 
-		// Escape (close overlays)
-		const escapeId = keyboard.register({
-			combo: 'escape',
-			action: () => {
-				if (keyboard.isCommandPaletteOpen) {
-					keyboard.closeCommandPalette();
-				} else if (keyboard.isHelpOverlayOpen) {
-					keyboard.closeHelpOverlay();
+			// ====================================================================
+			// Review View Shortcuts
+			// ====================================================================
+
+			// j - Next item
+			const reviewNextJId = keyboard.register({
+				combo: 'j',
+				action: () => review.nextItem(),
+				scope: 'review',
+				description: 'Next item',
+				category: 'Review',
+			});
+			unregisterFns.push(() => keyboard.unregister(reviewNextJId));
+
+			// ↓ - Next item (same action as j)
+			const reviewNextArrowId = keyboard.register({
+				combo: 'arrowdown',
+				action: () => review.nextItem(),
+				scope: 'review',
+				description: 'Next item',
+				category: 'Review',
+			});
+			unregisterFns.push(() => keyboard.unregister(reviewNextArrowId));
+
+			// k - Previous item
+			const reviewPrevKId = keyboard.register({
+				combo: 'k',
+				action: () => review.previousItem(),
+				scope: 'review',
+				description: 'Previous item',
+				category: 'Review',
+			});
+			unregisterFns.push(() => keyboard.unregister(reviewPrevKId));
+
+			// ↑ - Previous item (same action as k)
+			const reviewPrevArrowId = keyboard.register({
+				combo: 'arrowup',
+				action: () => review.previousItem(),
+				scope: 'review',
+				description: 'Previous item',
+				category: 'Review',
+			});
+			unregisterFns.push(() => keyboard.unregister(reviewPrevArrowId));
+
+			// Note: Approve (a) and Reject (r) are handled by ReviewQueue component
+			// because they need undo/redo support via the command pattern
+
+			// ====================================================================
+			// Execution View Shortcuts
+			// ====================================================================
+
+			// Space - Pause/Resume
+			const execToggleId = keyboard.register({
+				combo: 'space',
+				action: () => {
+					if (execution.isPaused) {
+						execution.resume();
+					} else if (execution.isRunning) {
+						execution.pause();
+					}
+				},
+				scope: 'execution',
+				description: 'Pause / Resume',
+				category: 'Execution',
+			});
+			unregisterFns.push(() => keyboard.unregister(execToggleId));
+
+			// Enter - Continue at checkpoint
+			const execContinueId = keyboard.register({
+				combo: 'enter',
+				action: () => {
+					if (execution.checkpoint) {
+						execution.resume();
+					}
+				},
+				scope: 'execution',
+				description: 'Continue at checkpoint',
+				category: 'Execution',
+			});
+			unregisterFns.push(() => keyboard.unregister(execContinueId));
+
+			// r - Open review (navigate to review view)
+			const execReviewId = keyboard.register({
+				combo: 'r',
+				action: () => ui.setView('review'),
+				scope: 'execution',
+				description: 'Open review queue',
+				category: 'Execution',
+			});
+			unregisterFns.push(() => keyboard.unregister(execReviewId));
+
+			// ====================================================================
+			// Plan View Shortcuts
+			// ====================================================================
+
+			// e - Toggle edit mode
+			const planEditId = keyboard.register({
+				combo: 'e',
+				action: () => pipeline.setEditing(!pipeline.isEditing),
+				scope: 'plan',
+				description: 'Toggle edit mode',
+				category: 'Plan Editor',
+			});
+			unregisterFns.push(() => keyboard.unregister(planEditId));
+
+			// Helper function for plan navigation
+			function navigateToNextStep() {
+				const steps = pipeline.sortedSteps;
+				const currentIdx = steps.findIndex((s) => s.id === pipeline.selectedStepId);
+				if (currentIdx < steps.length - 1) {
+					pipeline.selectStep(steps[currentIdx + 1].id);
+				} else if (currentIdx === -1 && steps.length > 0) {
+					pipeline.selectStep(steps[0].id);
 				}
-			},
-			scope: 'global',
-			description: 'Close overlay / Cancel',
-			category: 'Navigation',
-			priority: 50,
-		});
-		unregisterFns.push(() => keyboard.unregister(escapeId));
-
-		// ====================================================================
-		// Review View Shortcuts
-		// ====================================================================
-
-		// j - Next item
-		const reviewNextJId = keyboard.register({
-			combo: 'j',
-			action: () => review.nextItem(),
-			scope: 'review',
-			description: 'Next item',
-			category: 'Review',
-		});
-		unregisterFns.push(() => keyboard.unregister(reviewNextJId));
-
-		// ↓ - Next item (same action as j)
-		const reviewNextArrowId = keyboard.register({
-			combo: 'arrowdown',
-			action: () => review.nextItem(),
-			scope: 'review',
-			description: 'Next item',
-			category: 'Review',
-		});
-		unregisterFns.push(() => keyboard.unregister(reviewNextArrowId));
-
-		// k - Previous item
-		const reviewPrevKId = keyboard.register({
-			combo: 'k',
-			action: () => review.previousItem(),
-			scope: 'review',
-			description: 'Previous item',
-			category: 'Review',
-		});
-		unregisterFns.push(() => keyboard.unregister(reviewPrevKId));
-
-		// ↑ - Previous item (same action as k)
-		const reviewPrevArrowId = keyboard.register({
-			combo: 'arrowup',
-			action: () => review.previousItem(),
-			scope: 'review',
-			description: 'Previous item',
-			category: 'Review',
-		});
-		unregisterFns.push(() => keyboard.unregister(reviewPrevArrowId));
-
-		// Note: Approve (a) and Reject (r) are handled by ReviewQueue component
-		// because they need undo/redo support via the command pattern
-
-		// ====================================================================
-		// Execution View Shortcuts
-		// ====================================================================
-
-		// Space - Pause/Resume
-		const execToggleId = keyboard.register({
-			combo: 'space',
-			action: () => {
-				if (execution.isPaused) {
-					execution.resume();
-				} else if (execution.isRunning) {
-					execution.pause();
-				}
-			},
-			scope: 'execution',
-			description: 'Pause / Resume',
-			category: 'Execution',
-		});
-		unregisterFns.push(() => keyboard.unregister(execToggleId));
-
-		// Enter - Continue at checkpoint
-		const execContinueId = keyboard.register({
-			combo: 'enter',
-			action: () => {
-				if (execution.checkpoint) {
-					execution.resume();
-				}
-			},
-			scope: 'execution',
-			description: 'Continue at checkpoint',
-			category: 'Execution',
-		});
-		unregisterFns.push(() => keyboard.unregister(execContinueId));
-
-		// r - Open review (navigate to review view)
-		const execReviewId = keyboard.register({
-			combo: 'r',
-			action: () => ui.setView('review'),
-			scope: 'execution',
-			description: 'Open review queue',
-			category: 'Execution',
-		});
-		unregisterFns.push(() => keyboard.unregister(execReviewId));
-
-		// ====================================================================
-		// Plan View Shortcuts
-		// ====================================================================
-
-		// e - Toggle edit mode
-		const planEditId = keyboard.register({
-			combo: 'e',
-			action: () => pipeline.setEditing(!pipeline.isEditing),
-			scope: 'plan',
-			description: 'Toggle edit mode',
-			category: 'Plan Editor',
-		});
-		unregisterFns.push(() => keyboard.unregister(planEditId));
-
-		// Helper function for plan navigation
-		function navigateToNextStep() {
-			const steps = pipeline.sortedSteps;
-			const currentIdx = steps.findIndex((s) => s.id === pipeline.selectedStepId);
-			if (currentIdx < steps.length - 1) {
-				pipeline.selectStep(steps[currentIdx + 1].id);
-			} else if (currentIdx === -1 && steps.length > 0) {
-				pipeline.selectStep(steps[0].id);
 			}
-		}
 
-		function navigateToPrevStep() {
-			const steps = pipeline.sortedSteps;
-			const currentIdx = steps.findIndex((s) => s.id === pipeline.selectedStepId);
-			if (currentIdx > 0) {
-				pipeline.selectStep(steps[currentIdx - 1].id);
-			}
-		}
-
-		// j - Navigate to next step
-		const planNextJId = keyboard.register({
-			combo: 'j',
-			action: navigateToNextStep,
-			scope: 'plan',
-			description: 'Next step',
-			category: 'Plan Editor',
-		});
-		unregisterFns.push(() => keyboard.unregister(planNextJId));
-
-		// ↓ - Navigate to next step (same action as j)
-		const planNextArrowId = keyboard.register({
-			combo: 'arrowdown',
-			action: navigateToNextStep,
-			scope: 'plan',
-			description: 'Next step',
-			category: 'Plan Editor',
-		});
-		unregisterFns.push(() => keyboard.unregister(planNextArrowId));
-
-		// k - Navigate to previous step
-		const planPrevKId = keyboard.register({
-			combo: 'k',
-			action: navigateToPrevStep,
-			scope: 'plan',
-			description: 'Previous step',
-			category: 'Plan Editor',
-		});
-		unregisterFns.push(() => keyboard.unregister(planPrevKId));
-
-		// ↑ - Navigate to previous step (same action as k)
-		const planPrevArrowId = keyboard.register({
-			combo: 'arrowup',
-			action: navigateToPrevStep,
-			scope: 'plan',
-			description: 'Previous step',
-			category: 'Plan Editor',
-		});
-		unregisterFns.push(() => keyboard.unregister(planPrevArrowId));
-
-		// Space - Toggle step enabled/skipped
-		const planToggleId = keyboard.register({
-			combo: 'space',
-			action: () => {
-				const stepId = pipeline.selectedStepId;
-				if (!stepId) return;
-				const step = pipeline.steps.find((s) => s.id === stepId);
-				if (step) {
-					pipeline.updateStep(stepId, {
-						status: step.status === 'skipped' ? 'pending' : 'skipped',
-					});
+			function navigateToPrevStep() {
+				const steps = pipeline.sortedSteps;
+				const currentIdx = steps.findIndex((s) => s.id === pipeline.selectedStepId);
+				if (currentIdx > 0) {
+					pipeline.selectStep(steps[currentIdx - 1].id);
 				}
-			},
-			scope: 'plan',
-			description: 'Toggle step enabled',
-			category: 'Plan Editor',
-		});
-		unregisterFns.push(() => keyboard.unregister(planToggleId));
+			}
+
+			// j - Navigate to next step
+			const planNextJId = keyboard.register({
+				combo: 'j',
+				action: navigateToNextStep,
+				scope: 'plan',
+				description: 'Next step',
+				category: 'Plan Editor',
+			});
+			unregisterFns.push(() => keyboard.unregister(planNextJId));
+
+			// ↓ - Navigate to next step (same action as j)
+			const planNextArrowId = keyboard.register({
+				combo: 'arrowdown',
+				action: navigateToNextStep,
+				scope: 'plan',
+				description: 'Next step',
+				category: 'Plan Editor',
+			});
+			unregisterFns.push(() => keyboard.unregister(planNextArrowId));
+
+			// k - Navigate to previous step
+			const planPrevKId = keyboard.register({
+				combo: 'k',
+				action: navigateToPrevStep,
+				scope: 'plan',
+				description: 'Previous step',
+				category: 'Plan Editor',
+			});
+			unregisterFns.push(() => keyboard.unregister(planPrevKId));
+
+			// ↑ - Navigate to previous step (same action as k)
+			const planPrevArrowId = keyboard.register({
+				combo: 'arrowup',
+				action: navigateToPrevStep,
+				scope: 'plan',
+				description: 'Previous step',
+				category: 'Plan Editor',
+			});
+			unregisterFns.push(() => keyboard.unregister(planPrevArrowId));
+
+			// Space - Toggle step enabled/skipped
+			const planToggleId = keyboard.register({
+				combo: 'space',
+				action: () => {
+					const stepId = pipeline.selectedStepId;
+					if (!stepId) return;
+					const step = pipeline.steps.find((s) => s.id === stepId);
+					if (step) {
+						pipeline.updateStep(stepId, {
+							status: step.status === 'skipped' ? 'pending' : 'skipped',
+						});
+					}
+				},
+				scope: 'plan',
+				description: 'Toggle step enabled',
+				category: 'Plan Editor',
+			});
+			unregisterFns.push(() => keyboard.unregister(planToggleId));
+		}); // end untrack
 
 		return () => {
-			for (const fn of unregisterFns) fn();
+			untrack(() => {
+				for (const fn of unregisterFns) fn();
+			});
 		};
 	});
 

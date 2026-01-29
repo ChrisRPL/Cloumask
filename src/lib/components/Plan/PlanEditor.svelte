@@ -9,6 +9,7 @@
 </script>
 
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { getPipelineState } from '$lib/stores/pipeline.svelte';
 	import { getAgentState } from '$lib/stores/agent.svelte';
 	import { getUIState } from '$lib/stores/ui.svelte';
@@ -175,53 +176,60 @@
 	// Keyboard Shortcuts (registered with keyboard store for scope awareness)
 	// ============================================================================
 
+	// NOTE: We use untrack() to prevent this effect from tracking registeredShortcuts reads
+	// inside keyboard.register(). Without untrack, register() reads the shortcuts map,
+	// which would cause an infinite loop (effect_update_depth_exceeded error).
 	$effect(() => {
 		const unregisterFns: (() => void)[] = [];
 
-		// Escape - close config panel or exit edit mode
-		unregisterFns.push(
-			(() => {
-				const id = keyboard.register({
-					combo: 'escape',
-					action: () => {
-						if (configPanelOpen) {
-							configPanelStepId = null;
-						} else if (pipeline.isEditing) {
-							pipeline.setEditing(false);
-						}
-					},
-					scope: 'plan',
-					description: 'Close panel / Exit edit mode',
-					category: 'Plan Editor',
-					priority: 10, // Lower than global escape
-				});
-				return () => keyboard.unregister(id);
-			})()
-		);
+		untrack(() => {
+			// Escape - close config panel or exit edit mode
+			unregisterFns.push(
+				(() => {
+					const id = keyboard.register({
+						combo: 'escape',
+						action: () => {
+							if (configPanelOpen) {
+								configPanelStepId = null;
+							} else if (pipeline.isEditing) {
+								pipeline.setEditing(false);
+							}
+						},
+						scope: 'plan',
+						description: 'Close panel / Exit edit mode',
+						category: 'Plan Editor',
+						priority: 10, // Lower than global escape
+					});
+					return () => keyboard.unregister(id);
+				})()
+			);
 
-		// Enter - start execution if awaiting approval
-		unregisterFns.push(
-			(() => {
-				const id = keyboard.register({
-					combo: 'enter',
-					action: () => {
-						if (isAwaitingApproval && canStart) {
-							handleStart();
-						}
-					},
-					scope: 'plan',
-					description: 'Start execution',
-					category: 'Plan Editor',
-				});
-				return () => keyboard.unregister(id);
-			})()
-		);
+			// Enter - start execution if awaiting approval
+			unregisterFns.push(
+				(() => {
+					const id = keyboard.register({
+						combo: 'enter',
+						action: () => {
+							if (isAwaitingApproval && canStart) {
+								handleStart();
+							}
+						},
+						scope: 'plan',
+						description: 'Start execution',
+						category: 'Plan Editor',
+					});
+					return () => keyboard.unregister(id);
+				})()
+			);
+		}); // end untrack
 
 		// Note: 'e' for toggle edit, 'j/k' for navigation, and 'space' for toggle step
 		// are registered globally in +layout.svelte
 
 		return () => {
-			for (const fn of unregisterFns) fn();
+			untrack(() => {
+				for (const fn of unregisterFns) fn();
+			});
 		};
 	});
 </script>
