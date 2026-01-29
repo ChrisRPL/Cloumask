@@ -106,3 +106,17 @@ export type {
   SetupStep,
   SetupProgress,
 } from "./setup.svelte";
+
+// Keyboard Store
+export {
+  createKeyboardState,
+  setKeyboardState,
+  getKeyboardState,
+  CATEGORY_ORDER,
+} from "./keyboard.svelte";
+export type {
+  KeyboardScope,
+  KeyboardState,
+  Shortcut,
+  Command,
+} from "./keyboard.svelte";

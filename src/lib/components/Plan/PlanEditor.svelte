@@ -12,6 +12,7 @@
 	import { getPipelineState } from '$lib/stores/pipeline.svelte';
 	import { getAgentState } from '$lib/stores/agent.svelte';
 	import { getUIState } from '$lib/stores/ui.svelte';
+	import { getKeyboardState } from '$lib/stores/keyboard.svelte';
 	import { sendMessage } from '$lib/utils/tauri';
 	import type { StepType, StepConfig as StepConfigType } from '$lib/types/pipeline';
 
@@ -31,6 +32,7 @@
 	const pipeline = getPipelineState();
 	const agent = getAgentState();
 	const ui = getUIState();
+	const keyboard = getKeyboardState();
 
 	// Local state
 	let configPanelStepId = $state<string | null>(null);
@@ -169,41 +171,60 @@
 		});
 	}
 
-	// Handle keyboard shortcuts
-	function handleKeydown(event: KeyboardEvent) {
-		const target = event.target as HTMLElement;
+	// ============================================================================
+	// Keyboard Shortcuts (registered with keyboard store for scope awareness)
+	// ============================================================================
 
-		// Don't handle if typing in input
-		if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
-			return;
-		}
+	$effect(() => {
+		const unregisterFns: (() => void)[] = [];
 
 		// Escape - close config panel or exit edit mode
-		if (event.key === 'Escape') {
-			if (configPanelOpen) {
-				configPanelStepId = null;
-			} else if (pipeline.isEditing) {
-				pipeline.setEditing(false);
-			}
-			return;
-		}
+		unregisterFns.push(
+			(() => {
+				const id = keyboard.register({
+					combo: 'escape',
+					action: () => {
+						if (configPanelOpen) {
+							configPanelStepId = null;
+						} else if (pipeline.isEditing) {
+							pipeline.setEditing(false);
+						}
+					},
+					scope: 'plan',
+					description: 'Close panel / Exit edit mode',
+					category: 'Plan Editor',
+					priority: 10, // Lower than global escape
+				});
+				return () => keyboard.unregister(id);
+			})()
+		);
 
 		// Enter - start execution if awaiting approval
-		if (event.key === 'Enter' && isAwaitingApproval && canStart) {
-			event.preventDefault();
-			handleStart();
-			return;
-		}
+		unregisterFns.push(
+			(() => {
+				const id = keyboard.register({
+					combo: 'enter',
+					action: () => {
+						if (isAwaitingApproval && canStart) {
+							handleStart();
+						}
+					},
+					scope: 'plan',
+					description: 'Start execution',
+					category: 'Plan Editor',
+				});
+				return () => keyboard.unregister(id);
+			})()
+		);
 
-		// E - toggle edit mode
-		if (event.key === 'e' && !event.metaKey && !event.ctrlKey) {
-			handleToggleEdit();
-			return;
-		}
-	}
+		// Note: 'e' for toggle edit, 'j/k' for navigation, and 'space' for toggle step
+		// are registered globally in +layout.svelte
+
+		return () => {
+			for (const fn of unregisterFns) fn();
+		};
+	});
 </script>
-
-<svelte:window onkeydown={handleKeydown} />
 
 <div class={cn('flex flex-col h-full bg-background', className)}>
 	<!-- Header -->

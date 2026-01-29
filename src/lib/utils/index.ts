@@ -45,3 +45,21 @@ export {
 	STORAGE_KEYS,
 } from './storage';
 export type { StorageAdapter } from './storage';
+
+// Keyboard utilities
+export {
+	SEQUENCE_TIMEOUT,
+	getPlatform,
+	parseCombo,
+	formatCombo,
+	formatComboString,
+	formatSequence,
+	matchesCombo,
+	isInputElement,
+	generateShortcutId,
+	normalizeCombo,
+	isSequenceStartCandidate,
+	eventToCombo,
+	comboToString,
+	fuzzyScore,
+} from './keyboard';
