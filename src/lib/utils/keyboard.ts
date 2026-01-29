@@ -154,13 +154,7 @@ export function matchesCombo(event: KeyboardEvent, combo: KeyCombo): boolean {
 
   // Key must match
   if (eventKey !== combo.key) {
-    // Handle special cases
-    if (combo.key === "escape" && eventKey !== "escape") return false;
-    if (combo.key === "enter" && eventKey !== "enter") return false;
-    if (combo.key === " " && eventKey !== " ") return false;
-    if (combo.key !== "escape" && combo.key !== "enter" && combo.key !== " ") {
-      return false;
-    }
+    return false;
   }
 
   // On Mac, Cmd (metaKey) is used for shortcuts that are Ctrl on other platforms
