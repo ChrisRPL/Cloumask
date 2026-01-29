@@ -413,10 +413,11 @@
 			})()
 		);
 
+		// Redo (Ctrl+Shift+Z)
 		unregisterFns.push(
 			(() => {
 				const id = keyboard.register({
-					combo: ['ctrl+shift+z', 'ctrl+y'],
+					combo: 'ctrl+shift+z',
 					action: redo,
 					scope: 'review',
 					description: 'Redo',
@@ -426,11 +427,43 @@
 			})()
 		);
 
-		// Delete annotation
+		// Redo (Ctrl+Y - alternative)
 		unregisterFns.push(
 			(() => {
 				const id = keyboard.register({
-					combo: ['delete', 'backspace'],
+					combo: 'ctrl+y',
+					action: redo,
+					scope: 'review',
+					description: 'Redo',
+					category: 'Review',
+				});
+				return () => keyboard.unregister(id);
+			})()
+		);
+
+		// Delete annotation (Delete key)
+		unregisterFns.push(
+			(() => {
+				const id = keyboard.register({
+					combo: 'delete',
+					action: () => {
+						if (selectedAnnotationId && isEditMode) {
+							handleAnnotationDelete(selectedAnnotationId);
+						}
+					},
+					scope: 'review',
+					description: 'Delete annotation',
+					category: 'Review',
+				});
+				return () => keyboard.unregister(id);
+			})()
+		);
+
+		// Delete annotation (Backspace - alternative)
+		unregisterFns.push(
+			(() => {
+				const id = keyboard.register({
+					combo: 'backspace',
 					action: () => {
 						if (selectedAnnotationId && isEditMode) {
 							handleAnnotationDelete(selectedAnnotationId);
@@ -465,11 +498,27 @@
 			})()
 		);
 
-		// Zoom controls
+		// Zoom in (+)
 		unregisterFns.push(
 			(() => {
 				const id = keyboard.register({
-					combo: ['+', '='],
+					combo: '+',
+					action: () => {
+						zoom = Math.min(zoom * 1.25, 5);
+					},
+					scope: 'review',
+					description: 'Zoom in',
+					category: 'Review',
+				});
+				return () => keyboard.unregister(id);
+			})()
+		);
+
+		// Zoom in (= - alternative for keyboards where + requires shift)
+		unregisterFns.push(
+			(() => {
+				const id = keyboard.register({
+					combo: '=',
 					action: () => {
 						zoom = Math.min(zoom * 1.25, 5);
 					},

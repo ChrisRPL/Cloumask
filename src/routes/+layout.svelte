@@ -120,25 +120,45 @@
 		// Review View Shortcuts
 		// ====================================================================
 
-		// j/↓ - Next item
-		const reviewNextId = keyboard.register({
-			combo: ['j', 'arrowdown'],
+		// j - Next item
+		const reviewNextJId = keyboard.register({
+			combo: 'j',
 			action: () => review.nextItem(),
 			scope: 'review',
 			description: 'Next item',
 			category: 'Review',
 		});
-		unregisterFns.push(() => keyboard.unregister(reviewNextId));
+		unregisterFns.push(() => keyboard.unregister(reviewNextJId));
 
-		// k/↑ - Previous item
-		const reviewPrevId = keyboard.register({
-			combo: ['k', 'arrowup'],
+		// ↓ - Next item (same action as j)
+		const reviewNextArrowId = keyboard.register({
+			combo: 'arrowdown',
+			action: () => review.nextItem(),
+			scope: 'review',
+			description: 'Next item',
+			category: 'Review',
+		});
+		unregisterFns.push(() => keyboard.unregister(reviewNextArrowId));
+
+		// k - Previous item
+		const reviewPrevKId = keyboard.register({
+			combo: 'k',
 			action: () => review.previousItem(),
 			scope: 'review',
 			description: 'Previous item',
 			category: 'Review',
 		});
-		unregisterFns.push(() => keyboard.unregister(reviewPrevId));
+		unregisterFns.push(() => keyboard.unregister(reviewPrevKId));
+
+		// ↑ - Previous item (same action as k)
+		const reviewPrevArrowId = keyboard.register({
+			combo: 'arrowup',
+			action: () => review.previousItem(),
+			scope: 'review',
+			description: 'Previous item',
+			category: 'Review',
+		});
+		unregisterFns.push(() => keyboard.unregister(reviewPrevArrowId));
 
 		// Note: Approve (a) and Reject (r) are handled by ReviewQueue component
 		// because they need undo/redo support via the command pattern
@@ -201,39 +221,64 @@
 		});
 		unregisterFns.push(() => keyboard.unregister(planEditId));
 
-		// j/↓ - Navigate to next step
-		const planNextId = keyboard.register({
-			combo: ['j', 'arrowdown'],
-			action: () => {
-				const steps = pipeline.sortedSteps;
-				const currentIdx = steps.findIndex((s) => s.id === pipeline.selectedStepId);
-				if (currentIdx < steps.length - 1) {
-					pipeline.selectStep(steps[currentIdx + 1].id);
-				} else if (currentIdx === -1 && steps.length > 0) {
-					pipeline.selectStep(steps[0].id);
-				}
-			},
+		// Helper function for plan navigation
+		function navigateToNextStep() {
+			const steps = pipeline.sortedSteps;
+			const currentIdx = steps.findIndex((s) => s.id === pipeline.selectedStepId);
+			if (currentIdx < steps.length - 1) {
+				pipeline.selectStep(steps[currentIdx + 1].id);
+			} else if (currentIdx === -1 && steps.length > 0) {
+				pipeline.selectStep(steps[0].id);
+			}
+		}
+
+		function navigateToPrevStep() {
+			const steps = pipeline.sortedSteps;
+			const currentIdx = steps.findIndex((s) => s.id === pipeline.selectedStepId);
+			if (currentIdx > 0) {
+				pipeline.selectStep(steps[currentIdx - 1].id);
+			}
+		}
+
+		// j - Navigate to next step
+		const planNextJId = keyboard.register({
+			combo: 'j',
+			action: navigateToNextStep,
 			scope: 'plan',
 			description: 'Next step',
 			category: 'Plan Editor',
 		});
-		unregisterFns.push(() => keyboard.unregister(planNextId));
+		unregisterFns.push(() => keyboard.unregister(planNextJId));
 
-		// k/↑ - Navigate to previous step
-		const planPrevId = keyboard.register({
-			combo: ['k', 'arrowup'],
-			action: () => {
-				const steps = pipeline.sortedSteps;
-				const currentIdx = steps.findIndex((s) => s.id === pipeline.selectedStepId);
-				if (currentIdx > 0) {
-					pipeline.selectStep(steps[currentIdx - 1].id);
-				}
-			},
+		// ↓ - Navigate to next step (same action as j)
+		const planNextArrowId = keyboard.register({
+			combo: 'arrowdown',
+			action: navigateToNextStep,
+			scope: 'plan',
+			description: 'Next step',
+			category: 'Plan Editor',
+		});
+		unregisterFns.push(() => keyboard.unregister(planNextArrowId));
+
+		// k - Navigate to previous step
+		const planPrevKId = keyboard.register({
+			combo: 'k',
+			action: navigateToPrevStep,
 			scope: 'plan',
 			description: 'Previous step',
 			category: 'Plan Editor',
 		});
-		unregisterFns.push(() => keyboard.unregister(planPrevId));
+		unregisterFns.push(() => keyboard.unregister(planPrevKId));
+
+		// ↑ - Navigate to previous step (same action as k)
+		const planPrevArrowId = keyboard.register({
+			combo: 'arrowup',
+			action: navigateToPrevStep,
+			scope: 'plan',
+			description: 'Previous step',
+			category: 'Plan Editor',
+		});
+		unregisterFns.push(() => keyboard.unregister(planPrevArrowId));
 
 		// Space - Toggle step enabled/skipped
 		const planToggleId = keyboard.register({
