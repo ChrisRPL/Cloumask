@@ -122,38 +122,40 @@
 	onMount(() => {
 		if (!canvasRef) return;
 
-		// Create scene
-		sceneCtx = createScene(canvasRef, {
+		// Create scene - capture in local const for closure safety
+		const ctx = createScene(canvasRef, {
 			showGrid: pcState.showGrid,
 			showAxes: pcState.showAxes,
 		});
+		sceneCtx = ctx;
 
 		// Add demo point cloud
 		pointsMesh = createDemoPointCloud();
-		sceneCtx.scene.add(pointsMesh);
+		ctx.scene.add(pointsMesh);
 
 		// Focus camera on point cloud
 		if (pointsMesh.geometry.boundingBox) {
 			const center = pointsMesh.geometry.boundingBox.getCenter(new THREE.Vector3());
-			sceneCtx.controls.target.copy(center);
-			sceneCtx.camera.position.set(center.x + 50, center.y + 30, center.z + 50);
+			ctx.controls.target.copy(center);
+			ctx.camera.position.set(center.x + 50, center.y + 30, center.z + 50);
 		}
 
-		// Set up FPS tracking
-		const originalAnimate = sceneCtx.renderer.setAnimationLoop;
-		sceneCtx.renderer.setAnimationLoop(() => {
+		// Set up render loop with FPS tracking
+		// Use captured ctx to avoid stale references in animation callback
+		ctx.renderer.setAnimationLoop(() => {
 			trackFps();
-			sceneCtx!.controls.update();
-			sceneCtx!.renderer.render(sceneCtx!.scene, sceneCtx!.camera);
+			ctx.controls.update();
+			ctx.renderer.render(ctx.scene, ctx.camera);
 		});
 
 		// Notify parent
-		onReady?.(sceneCtx);
+		onReady?.(ctx);
 	});
 
-	// Cleanup
+	// Cleanup - properly stop animation loop before disposal
 	onDestroy(() => {
 		if (sceneCtx) {
+			sceneCtx.renderer.setAnimationLoop(null);
 			sceneCtx.dispose();
 		}
 	});
