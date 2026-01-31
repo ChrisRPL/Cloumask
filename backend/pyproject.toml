@@ -68,7 +68,7 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "PTH"]
-ignore = ["E501"]
+ignore = ["E501", "B008"]  # B008: FastAPI Query/Path/Body in defaults is acceptable
 
 [tool.mypy]
 python_version = "3.11"

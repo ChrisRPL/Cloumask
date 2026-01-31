@@ -6,6 +6,7 @@
 //! - Application state management
 
 mod commands;
+mod docker;
 mod sidecar;
 mod state;
 
@@ -131,9 +132,9 @@ pub fn run() {
             // Generic sidecar HTTP commands
             commands::call_sidecar_get,
             commands::call_sidecar_post,
-            // Ollama commands
-            commands::get_ollama_status,
-            commands::list_ollama_models,
+            // LLM commands
+            commands::get_llm_status,
+            commands::list_llm_models,
             // System commands
             commands::get_app_info,
             commands::ping,

@@ -1,0 +1,28 @@
+# Cloumask LLM Service
+# Self-contained AI environment with persistent model storage
+
+services:
+  cloumask-llm:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cloumask-llm
+    ports:
+      - "11434:11434"
+    volumes:
+      # Persist models across container restarts
+      - cloumask-models:/root/.ollama
+    environment:
+      - CLOUMASK_MODEL=${CLOUMASK_MODEL:-qwen3:14b}
+    restart: unless-stopped
+    # Resource limits to prevent runaway usage
+    deploy:
+      resources:
+        limits:
+          memory: 16G
+        reservations:
+          memory: 8G
+
+volumes:
+  cloumask-models:
+    name: cloumask-models
