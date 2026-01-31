@@ -136,12 +136,54 @@ See [docs/plan/](docs/plan/) for detailed implementation plans.
 
 | Module | Status |
 |--------|--------|
-| Foundation | 🟢 Complete |
-| Agent System | 🔴 Not Started |
-| CV Models | 🔴 Not Started |
-| Frontend UI | 🔴 Not Started |
-| Point Cloud | 🔴 Not Started |
-| Data Pipeline | 🔴 Not Started |
+| Foundation (Tauri + FastAPI) | 🟢 Complete |
+| Chat Interface | 🟢 Complete |
+| Plan Editor | 🟢 Complete |
+| Execution View | 🟢 Complete |
+| Review Queue | 🟢 Complete |
+| LangGraph Agent | 🟡 In Progress |
+| CV Model Integration | 🟡 In Progress |
+| Custom Script Builder | 🟡 In Progress |
+| Point Cloud Viewer | 🔴 Not Started |
+
+## Roadmap
+
+### v0.2 — Local MVP (Current)
+- [x] Chat-based interface with LLM (Ollama)
+- [x] Visual plan editor with drag-and-drop
+- [x] Live execution monitoring
+- [x] Review queue with annotation editing
+- [ ] Behavior cards for custom scripts (no code visible)
+- [ ] Docker-based script execution (isolated)
+- [ ] First-time setup wizard
+
+### v0.3 — CV Integration
+- [ ] SAM2/SAM3 segmentation
+- [ ] YOLO11 detection
+- [ ] Face anonymization (SCRFD + blur)
+- [ ] Batch processing with progress
+- [ ] Export to COCO/YOLO formats
+
+### v0.4 — 3D Support
+- [ ] Point cloud viewer (Three.js)
+- [ ] LAS/LAZ/PCD file support
+- [ ] 3D bounding box annotation
+- [ ] 2D-3D fusion (camera calibration)
+
+### v1.0 — Team Edition
+- [ ] Multi-user support (PostgreSQL)
+- [ ] Organization management
+- [ ] Role-based permissions
+- [ ] vLLM backend option (high throughput)
+- [ ] Docker Compose deployment
+
+### v2.0 — Cloud Edition (Future)
+- [ ] Kubernetes deployment
+- [ ] S3/GCS storage backend
+- [ ] API keys & billing
+- [ ] Webhook integrations
+
+See [ARCHITECTURE_MULTI_USER.md](docs/ARCHITECTURE_MULTI_USER.md) for detailed multi-user design.
 
 ## Requirements
 

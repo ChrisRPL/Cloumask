@@ -54,11 +54,11 @@ class SQLiteCheckpointSaver:
     def _init_db(self) -> None:
         """Initialize database schema for thread management."""
         schema_path = Path(__file__).parent / "schema.sql"
-        if schema_path.exists():
-            schema_sql = schema_path.read_text()
-        else:
-            # Fallback inline schema for thread management
-            schema_sql = self._get_inline_schema()
+        schema_sql = (
+            schema_path.read_text()
+            if schema_path.exists()
+            else self._get_inline_schema()
+        )
 
         with self._get_conn() as conn:
             conn.executescript(schema_sql)

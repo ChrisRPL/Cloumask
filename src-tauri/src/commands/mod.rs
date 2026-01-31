@@ -1,9 +1,9 @@
 //! Tauri IPC command handlers.
 
-mod ollama;
+mod llm;
 mod sidecar;
 mod system;
 
-pub use ollama::*;
+pub use llm::*;
 pub use sidecar::*;
 pub use system::*;

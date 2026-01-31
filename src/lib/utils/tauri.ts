@@ -14,8 +14,9 @@ import type {
 	HealthResponse,
 	ReadyResponse,
 	SidecarStatus,
-	OllamaStatus,
-	OllamaModelsResponse,
+	LLMStatus,
+	LLMModelsResponse,
+	LLMReadyResponse,
 	IPCError,
 } from '$lib/types/commands';
 
@@ -105,17 +106,17 @@ export async function checkReady(): Promise<ReadyResponse> {
 }
 
 // ============================================================================
-// Ollama Commands
+// LLM Commands
 // ============================================================================
 
-/** Get the status of Ollama LLM service. */
-export async function getOllamaStatus(): Promise<OllamaStatus> {
-	return invokeCommand('get_ollama_status');
+/** Get the status of LLM service. */
+export async function getLLMStatus(): Promise<LLMStatus> {
+	return invokeCommand('get_llm_status');
 }
 
-/** List available Ollama models. */
-export async function listOllamaModels(): Promise<OllamaModelsResponse> {
-	return invokeCommand('list_ollama_models');
+/** List available LLM models. */
+export async function listLLMModels(): Promise<LLMModelsResponse> {
+	return invokeCommand('list_llm_models');
 }
 
 // ============================================================================
@@ -130,6 +131,52 @@ export async function callSidecarGet<T = unknown>(endpoint: string): Promise<T> 
 /** Call a generic sidecar POST endpoint. */
 export async function callSidecarPost<T = unknown>(endpoint: string, body: unknown): Promise<T> {
 	return invokeCommand('call_sidecar_post', { endpoint, body }) as Promise<T>;
+}
+
+// ============================================================================
+// Window Control Commands (Tauri 2.0)
+// ============================================================================
+
+/**
+ * Get the current Tauri window instance.
+ * Returns null if not running in Tauri.
+ */
+export async function getTauriWindow() {
+	if (!isTauri()) return null;
+	const { getCurrentWindow } = await import('@tauri-apps/api/window');
+	return getCurrentWindow();
+}
+
+/** Minimize the current window */
+export async function minimizeWindow(): Promise<void> {
+	const win = await getTauriWindow();
+	if (win) await win.minimize();
+}
+
+/** Toggle maximize/restore for the current window */
+export async function toggleMaximize(): Promise<void> {
+	const win = await getTauriWindow();
+	if (!win) return;
+
+	const isMaximized = await win.isMaximized();
+	if (isMaximized) {
+		await win.unmaximize();
+	} else {
+		await win.maximize();
+	}
+}
+
+/** Check if the current window is maximized */
+export async function isWindowMaximized(): Promise<boolean> {
+	const win = await getTauriWindow();
+	if (!win) return false;
+	return win.isMaximized();
+}
+
+/** Close the current window */
+export async function closeWindow(): Promise<void> {
+	const win = await getTauriWindow();
+	if (win) await win.close();
 }
 
 // ============================================================================
@@ -196,4 +243,203 @@ export async function waitForSidecarReady(timeout = 10000): Promise<boolean> {
 		},
 		{ timeout }
 	);
+}
+
+// ============================================================================
+// Chat Thread API (Direct HTTP to Python Sidecar)
+// ============================================================================
+
+/** Base URL for the Python sidecar */
+const SIDECAR_URL = 'http://127.0.0.1:8765';
+
+/** Information about a chat thread */
+export interface ThreadInfo {
+	thread_id: string;
+	created: boolean;
+	awaiting_user: boolean;
+	current_step: number;
+	total_steps: number;
+}
+
+/** User decision for plan approval or checkpoint */
+export type UserDecision = 'approve' | 'edit' | 'cancel' | 'retry';
+
+/** Request to send a message to a chat thread */
+export interface SendMessageRequest {
+	content: string;
+	decision?: UserDecision;
+	plan_edits?: unknown[];
+}
+
+/** Response from sending a message */
+export interface SendMessageResponse {
+	status: string;
+	thread_id: string;
+	message_id?: string;
+}
+
+/**
+ * Create a new chat thread.
+ * Returns thread info with new thread_id.
+ */
+export async function createThread(): Promise<ThreadInfo> {
+	const response = await fetch(`${SIDECAR_URL}/api/chat/thread/new`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' }
+	});
+
+	if (!response.ok) {
+		throw new Error(`Failed to create thread: ${response.statusText}`);
+	}
+
+	return response.json();
+}
+
+/**
+ * Get information about a chat thread.
+ */
+export async function getThreadInfo(threadId: string): Promise<ThreadInfo> {
+	if (!threadId) {
+		throw new Error('Invalid thread ID');
+	}
+	const response = await fetch(`${SIDECAR_URL}/api/chat/thread/${threadId}`);
+
+	if (!response.ok) {
+		throw new Error(`Failed to get thread: ${response.statusText}`);
+	}
+
+	return response.json();
+}
+
+/**
+ * Send a message to a chat thread.
+ * Triggers agent processing with SSE events streamed back.
+ */
+export async function sendMessage(
+	threadId: string,
+	request: SendMessageRequest
+): Promise<SendMessageResponse> {
+	if (!threadId) {
+		throw new Error('Invalid thread ID');
+	}
+	const response = await fetch(`${SIDECAR_URL}/api/chat/send/${threadId}`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(request)
+	});
+
+	if (!response.ok) {
+		throw new Error(`Failed to send message: ${response.statusText}`);
+	}
+
+	return response.json();
+}
+
+/**
+ * Close a chat thread and cleanup resources.
+ */
+export async function closeThread(threadId: string): Promise<void> {
+	if (!threadId) {
+		throw new Error('Invalid thread ID');
+	}
+	const response = await fetch(`${SIDECAR_URL}/api/chat/thread/${threadId}`, {
+		method: 'DELETE'
+	});
+
+	if (!response.ok) {
+		throw new Error(`Failed to close thread: ${response.statusText}`);
+	}
+}
+
+/**
+ * Get the SSE stream URL for a thread.
+ * Use with EventSource to receive real-time events.
+ */
+export function getStreamUrl(threadId: string): string {
+	if (!threadId) {
+		throw new Error('Invalid thread ID');
+	}
+	return `${SIDECAR_URL}/api/chat/stream/${threadId}`;
+}
+
+// ============================================================================
+// LLM Readiness API (Direct HTTP to Python Sidecar)
+// ============================================================================
+
+/**
+ * Check if LLM service is ready with the required model.
+ * Does NOT automatically pull the model.
+ */
+export async function checkLLMReady(): Promise<LLMReadyResponse> {
+	const response = await fetch(`${SIDECAR_URL}/llm/ensure-ready`);
+
+	if (!response.ok) {
+		throw new Error(`Failed to check LLM service: ${response.statusText}`);
+	}
+
+	return response.json();
+}
+
+/**
+ * Ensure LLM service is ready, pulling the required model if needed.
+ * WARNING: This may take several minutes for large models.
+ */
+export async function ensureLLMReady(): Promise<LLMReadyResponse> {
+	const response = await fetch(`${SIDECAR_URL}/llm/ensure-ready`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' }
+	});
+
+	if (!response.ok) {
+		throw new Error(`Failed to ensure LLM ready: ${response.statusText}`);
+	}
+
+	return response.json();
+}
+
+/**
+ * Pull a specific model.
+ * @param model - Model name (e.g., "qwen3:14b")
+ */
+export async function pullLLMModel(model: string): Promise<{ status: string; message: string }> {
+	const response = await fetch(`${SIDECAR_URL}/llm/pull`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ model })
+	});
+
+	if (!response.ok) {
+		throw new Error(`Failed to pull model: ${response.statusText}`);
+	}
+
+	return response.json();
+}
+
+/**
+ * Wait for LLM service to be ready with the required model.
+ * Polls checkLLMReady() until ready or timeout.
+ */
+export async function waitForLLMReady(timeout = 15000): Promise<LLMReadyResponse> {
+	const start = Date.now();
+	let lastResult: LLMReadyResponse | null = null;
+
+	while (Date.now() - start < timeout) {
+		try {
+			lastResult = await checkLLMReady();
+			if (lastResult.ready) {
+				return lastResult;
+			}
+		} catch {
+			// Keep trying
+		}
+		await new Promise((resolve) => setTimeout(resolve, 1000));
+	}
+
+	return lastResult ?? {
+		ready: false,
+		service_running: false,
+		required_model: 'qwen3:14b',
+		model_available: false,
+		error: 'Timeout waiting for LLM service'
+	};
 }
