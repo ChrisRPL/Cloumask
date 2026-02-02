@@ -280,8 +280,8 @@ async def convert_format(request: ConvertRequest) -> PointCloudProcessingResult:
     """
     Convert a point cloud to a different format.
 
-    Supports conversion between PCD, PLY, LAS, LAZ, and BIN formats.
-    Output format is determined by the output_path file extension.
+    Reads from PCD, PLY, LAS, LAZ, or BIN formats.
+    Writes to PCD or PLY format (determined by output_path extension).
     """
     import time
 
@@ -290,6 +290,14 @@ async def convert_format(request: ConvertRequest) -> PointCloudProcessingResult:
         if not Path(request.input_path).exists():
             raise HTTPException(
                 status_code=404, detail=f"Input file not found: {request.input_path}"
+            )
+
+        # Validate output format
+        output_ext = Path(request.output_path).suffix.lower()
+        if output_ext not in {".pcd", ".ply"}:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Output format '{output_ext}' not supported. Supported: .pcd, .ply",
             )
 
         processor = PointCloudProcessor()

@@ -21,8 +21,11 @@ from backend.agent.tools.base import (
     error_result,
     success_result,
 )
-from backend.agent.tools.constants import POINTCLOUD_EXTENSIONS
 from backend.agent.tools.registry import register_tool
+
+# Use processor's supported formats to avoid mismatch with constants
+SUPPORTED_INPUT_FORMATS: frozenset[str] = frozenset({".pcd", ".ply", ".las", ".laz", ".bin"})
+SUPPORTED_OUTPUT_FORMATS: frozenset[str] = frozenset({".pcd", ".ply"})
 
 logger = logging.getLogger(__name__)
 
@@ -185,17 +188,17 @@ Examples:
         if not input_p.is_file():
             return error_result("Input must be a file, not a directory")
 
-        if input_p.suffix.lower() not in POINTCLOUD_EXTENSIONS:
+        if input_p.suffix.lower() not in SUPPORTED_INPUT_FORMATS:
             return error_result(
                 f"Unsupported input format: {input_p.suffix}. "
-                f"Supported: {', '.join(sorted(POINTCLOUD_EXTENSIONS))}"
+                f"Supported: {', '.join(sorted(SUPPORTED_INPUT_FORMATS))}"
             )
 
         # Validate output format
-        if output_p.suffix.lower() not in {".pcd", ".ply"}:
+        if output_p.suffix.lower() not in SUPPORTED_OUTPUT_FORMATS:
             return error_result(
                 f"Unsupported output format: {output_p.suffix}. "
-                "Supported for writing: .pcd, .ply"
+                f"Supported for writing: {', '.join(sorted(SUPPORTED_OUTPUT_FORMATS))}"
             )
 
         # Validate operation
@@ -326,10 +329,10 @@ Examples:
         if not file_path.is_file():
             return error_result("Path must be a file, not a directory")
 
-        if file_path.suffix.lower() not in POINTCLOUD_EXTENSIONS:
+        if file_path.suffix.lower() not in SUPPORTED_INPUT_FORMATS:
             return error_result(
                 f"Unsupported format: {file_path.suffix}. "
-                f"Supported: {', '.join(sorted(POINTCLOUD_EXTENSIONS))}"
+                f"Supported: {', '.join(sorted(SUPPORTED_INPUT_FORMATS))}"
             )
 
         try:

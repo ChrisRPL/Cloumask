@@ -165,8 +165,11 @@ class PointCloudProcessor:
             bounds_min = (0.0, 0.0, 0.0)
             bounds_max = (0.0, 0.0, 0.0)
 
-        # Check for intensity in colors (we store intensity in red channel for some formats)
-        has_intensity = pcd.has_colors()
+        # Determine if intensity is available based on format
+        # LAS/LAZ and BIN formats typically have intensity data
+        # For PCD/PLY, we check if colors exist (may be RGB or grayscale intensity)
+        ext = path.suffix.lower()
+        has_intensity = ext in {".las", ".laz", ".bin"} or pcd.has_colors()
 
         return PointCloudStats(
             point_count=len(points),
@@ -549,8 +552,10 @@ class PointCloudProcessor:
         # Store intensity as grayscale colors
         intensity = points[:, 3:4]
         # Normalize intensity to [0, 1] if needed
-        if intensity.max() > 1.0:
-            intensity = intensity / intensity.max()
+        max_intensity = intensity.max()
+        if max_intensity > 1.0:
+            intensity = intensity / max_intensity
+        # Handle edge case where all intensities are 0 (valid data)
         colors = np.hstack([intensity, intensity, intensity]).astype(np.float64)
         pcd.colors = o3d.utility.Vector3dVector(colors)
 
