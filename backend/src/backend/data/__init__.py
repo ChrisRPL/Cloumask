@@ -21,6 +21,11 @@ from backend.data.ros_types import (
     TopicInfo,
     TopicInfoResponse,
 )
+from backend.data.rosbag_parser import (
+    RosbagParseError,
+    RosbagParser,
+    get_parser,
+)
 
 __all__ = [
     # Enums
@@ -40,4 +45,8 @@ __all__ = [
     "ExtractSyncedRequest",
     "ExtractionResult",
     "SyncedExtractionResult",
+    # Parser
+    "RosbagParser",
+    "RosbagParseError",
+    "get_parser",
 ]
