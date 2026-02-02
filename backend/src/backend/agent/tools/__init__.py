@@ -38,6 +38,8 @@ Available Tools:
     - AnonymizeTool: Anonymize faces and plates (blur, blackbox, pixelate, mask)
     - FaceDetectTool: Face detection (SCRFD, YuNet, or SAM3 quality mode)
     - Detect3DTool: 3D object detection (PV-RCNN++, CenterPoint)
+    - ProcessPointCloudTool: Point cloud processing (downsample, filter, normals)
+    - PointCloudStatsTool: Get point cloud metadata and statistics
     - ExportTool: Export annotations to various formats (stub)
     - CustomScriptTool: Execute user-defined Python scripts
 """
@@ -56,6 +58,7 @@ from backend.agent.tools.base import (
 from backend.agent.tools.custom import CustomScriptTool
 from backend.agent.tools.detect import DetectTool
 from backend.agent.tools.detect_3d import Detect3DTool
+from backend.agent.tools.pointcloud_process import PointCloudStatsTool, ProcessPointCloudTool
 from backend.agent.tools.discovery import (
     discover_tools,
     initialize_tools,
@@ -100,4 +103,6 @@ __all__ = [
     "Detect3DTool",
     "ExportTool",
     "CustomScriptTool",
+    "ProcessPointCloudTool",
+    "PointCloudStatsTool",
 ]
