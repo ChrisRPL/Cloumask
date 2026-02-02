@@ -1,6 +1,6 @@
 # Cloumask Development Plan
 
-> **Status:** 🟡 In Progress (Phase 1-3 Complete)
+> **Status:** 🟡 In Progress (Phase 1-4 Complete)
 > **Last Updated:** January 2026
 
 *From cloud to canvas — Local-first agentic CV data processing*
@@ -71,7 +71,7 @@ Cloumask replaces complex CLI tools, fragmented scripts, and cloud-dependent pla
 | **Foundation** | 🟢 Complete | P0 | [SPEC](./01-foundation/SPEC.md) |
 | **Agent System** | 🟢 Complete | P0 | [SPEC](./02-agent-system/SPEC.md) |
 | **CV Models** | 🟢 Complete | P0 | [SPEC](./03-cv-models/SPEC.md) |
-| **Frontend UI** | 🔴 Not Started | P1 | [SPEC](./04-frontend-ui/SPEC.md) |
+| **Frontend UI** | 🟢 Complete | P1 | [SPEC](./04-frontend-ui/SPEC.md) |
 | **Point Cloud** | 🔴 Not Started | P1 | [SPEC](./05-point-cloud/SPEC.md) |
 | **Data Pipeline** | 🔴 Not Started | P1 | [SPEC](./06-data-pipeline/SPEC.md) |
 
