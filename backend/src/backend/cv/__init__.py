@@ -58,6 +58,10 @@ from backend.cv.detection_3d import (
     convert_coordinates,
     get_3d_detector,
 )
+from backend.cv.pointcloud import (
+    PointCloudProcessor,
+    get_processor,
+)
 from backend.cv.device import (
     CUDAOOMHandler,
     DeviceInfo,
@@ -120,6 +124,8 @@ from backend.cv.types import (
     Mask,
     PlateDetection,
     PlateDetectionResult,
+    PointCloudProcessingResult,
+    PointCloudStats,
     SegmentationResult,
 )
 
@@ -136,6 +142,8 @@ __all__ = [
     "Detection3DResult",
     "PlateDetection",
     "PlateDetectionResult",
+    "PointCloudStats",
+    "PointCloudProcessingResult",
     # Base
     "BaseModelWrapper",
     "ModelInfo",
@@ -201,6 +209,9 @@ __all__ = [
     "CenterPointWrapper",
     "convert_coordinates",
     "get_3d_detector",
+    # Point Cloud Processing
+    "PointCloudProcessor",
+    "get_processor",
     # Anonymization
     "AnonymizationConfig",
     "AnonymizationMode",
