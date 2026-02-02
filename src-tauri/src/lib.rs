@@ -7,6 +7,7 @@
 
 mod commands;
 mod docker;
+mod pointcloud;
 mod sidecar;
 mod state;
 
@@ -139,6 +140,12 @@ pub fn run() {
             commands::get_app_info,
             commands::ping,
             commands::echo,
+            // Point cloud commands
+            commands::read_pointcloud_metadata,
+            commands::read_pointcloud,
+            commands::stream_pointcloud,
+            commands::convert_pointcloud,
+            commands::decimate_pointcloud,
         ])
         .run(tauri::generate_context!())
         .unwrap_or_else(|e| {
