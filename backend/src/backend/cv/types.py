@@ -379,6 +379,59 @@ class Detection3D(BaseModel):
         """Volume of the 3D bounding box in cubic meters."""
         return self.dimensions[0] * self.dimensions[1] * self.dimensions[2]
 
+    def to_corners(self) -> "NDArray[np.float64]":
+        """
+        Get 8 corner points of the 3D bounding box.
+
+        Computes corners by applying yaw rotation around z-axis to the
+        box dimensions centered at the detection center.
+
+        Returns:
+            (8, 3) array of corner coordinates in world frame.
+            Corner order: [front-left-bottom, front-right-bottom,
+            front-right-top, front-left-top, rear-left-bottom,
+            rear-right-bottom, rear-right-top, rear-left-top]
+        """
+        cx, cy, cz = self.center
+        length, width, height = self.dimensions  # l=x, w=y, h=z
+        yaw = self.rotation
+
+        # Half dimensions
+        hl, hw, hh = length / 2, width / 2, height / 2
+
+        # Corner offsets in object frame (before rotation)
+        # Front = +x, Left = +y, Top = +z (KITTI convention)
+        corners_local = np.array(
+            [
+                [hl, hw, -hh],  # front-left-bottom
+                [hl, -hw, -hh],  # front-right-bottom
+                [hl, -hw, hh],  # front-right-top
+                [hl, hw, hh],  # front-left-top
+                [-hl, hw, -hh],  # rear-left-bottom
+                [-hl, -hw, -hh],  # rear-right-bottom
+                [-hl, -hw, hh],  # rear-right-top
+                [-hl, hw, hh],  # rear-left-top
+            ],
+            dtype=np.float64,
+        )
+
+        # Rotation matrix around z-axis (yaw)
+        cos_yaw = np.cos(yaw)
+        sin_yaw = np.sin(yaw)
+        rotation_matrix = np.array(
+            [
+                [cos_yaw, -sin_yaw, 0],
+                [sin_yaw, cos_yaw, 0],
+                [0, 0, 1],
+            ],
+            dtype=np.float64,
+        )
+
+        # Rotate corners and translate to world frame
+        corners_world = (rotation_matrix @ corners_local.T).T + np.array([cx, cy, cz])
+
+        return corners_world
+
 
 class Detection3DResult(BaseModel):
     """
