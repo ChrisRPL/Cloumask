@@ -33,7 +33,11 @@
 		updateHeightRange,
 		applyClassificationColors,
 		focusOnBounds,
+		createBoundingBoxes,
+		updateBoxSelection,
+		raycastBoundingBox,
 		type ColorMode,
+		type BoundingBox3D,
 	} from '$lib/utils/three';
 	import { getPointCloudState } from '$lib/stores/pointcloud.svelte';
 
@@ -62,6 +66,13 @@
 
 	// Point cloud mesh
 	let pointsMesh: THREE.Points | null = null;
+
+	// Bounding boxes group
+	let bboxGroup: THREE.Group | null = null;
+
+	// Raycaster for box selection
+	const raycaster = new THREE.Raycaster();
+	const mouse = new THREE.Vector2();
 
 	// Create material based on color mode and available data
 	function createMaterialForMode(
@@ -205,6 +216,48 @@
 		}
 	}
 
+	// Remove existing bounding boxes from scene
+	function removeBoundingBoxes() {
+		if (bboxGroup && sceneCtx) {
+			sceneCtx.scene.remove(bboxGroup);
+			bboxGroup.traverse((obj) => {
+				if (obj instanceof THREE.Mesh || obj instanceof THREE.LineSegments) {
+					obj.geometry?.dispose();
+					if (obj.material) {
+						if (Array.isArray(obj.material)) {
+							obj.material.forEach((m) => m.dispose());
+						} else {
+							(obj.material as THREE.Material).dispose();
+						}
+					}
+				}
+			});
+			bboxGroup = null;
+		}
+	}
+
+	// Handle click for bounding box selection
+	function handleClick(event: MouseEvent) {
+		if (!sceneCtx || !bboxGroup || !canvasRef) return;
+
+		// Calculate mouse position in normalized device coordinates
+		const rect = canvasRef.getBoundingClientRect();
+		mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+		mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+		// Update raycaster
+		raycaster.setFromCamera(mouse, sceneCtx.camera);
+
+		// Check for intersection with bounding boxes
+		const hitBox = raycastBoundingBox(raycaster, bboxGroup);
+
+		if (hitBox) {
+			pcState.setSelectedBoxId(hitBox.id);
+		} else {
+			pcState.setSelectedBoxId(null);
+		}
+	}
+
 	// Update helpers visibility
 	$effect(() => {
 		if (sceneCtx) {
@@ -282,6 +335,36 @@
 		pointsMesh.material = createMaterialForMode(pcState.colorMode, geometry, heightMin, heightMax);
 	});
 
+	// React to bounding boxes changes
+	$effect(() => {
+		if (!sceneCtx) return;
+
+		// Remove existing boxes
+		removeBoundingBoxes();
+
+		// Add new boxes if visible and available
+		if (pcState.showBoundingBoxes && pcState.boundingBoxes.length > 0) {
+			bboxGroup = createBoundingBoxes(
+				pcState.boundingBoxes,
+				pcState.selectedBoxId ?? undefined,
+			);
+			sceneCtx.scene.add(bboxGroup);
+		}
+	});
+
+	// React to selected box changes - update selection styling
+	$effect(() => {
+		if (!bboxGroup) return;
+
+		// Update selection state on all boxes
+		bboxGroup.children.forEach((child) => {
+			if (child instanceof THREE.Group && child.userData.boxId) {
+				const isSelected = child.userData.boxId === pcState.selectedBoxId;
+				updateBoxSelection(child, isSelected);
+			}
+		});
+	});
+
 	// FPS tracking
 	let frameCount = 0;
 	let lastTime = performance.now();
@@ -341,4 +424,5 @@
 	bind:this={canvasRef}
 	class={cn('w-full h-full block', className)}
 	oncontextmenu={handleContextMenu}
+	onclick={handleClick}
 ></canvas>
