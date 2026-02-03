@@ -1,11 +1,22 @@
 <script lang="ts" module>
+	import type { SceneContext } from '$lib/utils/three';
+	import type { Bounds3D } from '$lib/types/pointcloud';
+
 	export interface ThreeCanvasProps {
 		class?: string;
 		onReady?: (context: SceneContext) => void;
 		onFpsUpdate?: (fps: number) => void;
+		/** Point positions as flat array [x,y,z,x,y,z,...] */
+		positions?: Float32Array | null;
+		/** Intensity values (normalized 0-1) */
+		intensities?: Float32Array | null;
+		/** RGB colors (normalized 0-1) [r,g,b,r,g,b,...] */
+		colors?: Float32Array | null;
+		/** Classification values (LAS-specific) */
+		classifications?: Uint8Array | null;
+		/** 3D bounding box */
+		bounds?: Bounds3D | null;
 	}
-
-	import type { SceneContext } from '$lib/utils/three';
 </script>
 
 <script lang="ts">
@@ -15,14 +26,30 @@
 	import {
 		createScene,
 		createHeightMaterial,
+		createIntensityMaterial,
+		createRGBMaterial,
 		createSimpleMaterial,
 		updatePointSize,
 		updateHeightRange,
+		applyClassificationColors,
+		focusOnBounds,
 		type ColorMode,
 	} from '$lib/utils/three';
 	import { getPointCloudState } from '$lib/stores/pointcloud.svelte';
 
-	let { class: className, onReady, onFpsUpdate }: ThreeCanvasProps = $props();
+	let {
+		class: className,
+		onReady,
+		onFpsUpdate,
+		positions = null,
+		intensities = null,
+		colors = null,
+		classifications = null,
+		bounds = null,
+	}: ThreeCanvasProps = $props();
+
+	// Track if we have real data or should show demo
+	const hasData = $derived(positions !== null && positions.length > 0);
 
 	// Get state from context
 	const pcState = getPointCloudState();
@@ -36,13 +63,92 @@
 	// Point cloud mesh
 	let pointsMesh: THREE.Points | null = null;
 
-	// Demo point cloud data
+	// Create material based on color mode and available data
+	function createMaterialForMode(
+		mode: ColorMode,
+		geometry: THREE.BufferGeometry,
+		heightMin: number,
+		heightMax: number,
+	): THREE.Material {
+		const config = { colorMode: mode, pointSize: pcState.pointSize };
+
+		switch (mode) {
+			case 'height':
+				return createHeightMaterial({
+					...config,
+					heightMin,
+					heightMax,
+				});
+			case 'intensity':
+				if (intensities) {
+					// Add intensity attribute
+					geometry.setAttribute('intensity', new THREE.BufferAttribute(intensities, 1));
+					return createIntensityMaterial(config);
+				}
+				// Fallback to height if no intensity
+				return createHeightMaterial({ ...config, heightMin, heightMax });
+			case 'rgb':
+				if (colors) {
+					// Colors should already be set
+					return createRGBMaterial(config);
+				}
+				// Fallback to height if no colors
+				return createHeightMaterial({ ...config, heightMin, heightMax });
+			case 'classification':
+				if (classifications) {
+					applyClassificationColors(geometry, classifications);
+					return createSimpleMaterial({ ...config, colorMode: 'rgb' });
+				}
+				// Fallback to height if no classification
+				return createHeightMaterial({ ...config, heightMin, heightMax });
+			default:
+				return createHeightMaterial({ ...config, heightMin, heightMax });
+		}
+	}
+
+	// Create point cloud from loaded data
+	function createPointCloudFromData(): THREE.Points {
+		if (!positions) throw new Error('No positions data');
+
+		const geometry = new THREE.BufferGeometry();
+
+		// Set positions
+		geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+		// Set colors if available
+		if (colors) {
+			geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+		}
+
+		geometry.computeBoundingBox();
+
+		// Calculate height range from bounds or geometry
+		let heightMin = 0;
+		let heightMax = 100;
+		if (bounds) {
+			heightMin = bounds.min[2];
+			heightMax = bounds.max[2];
+		} else if (geometry.boundingBox) {
+			heightMin = geometry.boundingBox.min.z;
+			heightMax = geometry.boundingBox.max.z;
+		}
+
+		// Create material based on current color mode
+		const material = createMaterialForMode(pcState.colorMode, geometry, heightMin, heightMax);
+
+		const points = new THREE.Points(geometry, material);
+		points.name = 'point-cloud';
+
+		return points;
+	}
+
+	// Demo point cloud data (shown when no data is loaded)
 	function createDemoPointCloud(): THREE.Points {
 		const geometry = new THREE.BufferGeometry();
 		const count = 100000;
 
-		const positions = new Float32Array(count * 3);
-		const colors = new Float32Array(count * 3);
+		const demoPositions = new Float32Array(count * 3);
+		const demoColors = new Float32Array(count * 3);
 
 		// Generate terrain-like point cloud
 		for (let i = 0; i < count; i++) {
@@ -56,19 +162,19 @@
 				Math.sin(x * 0.1 + z * 0.1) * 2 +
 				Math.random() * 2;
 
-			positions[i * 3] = x;
-			positions[i * 3 + 1] = y;
-			positions[i * 3 + 2] = z;
+			demoPositions[i * 3] = x;
+			demoPositions[i * 3 + 1] = y;
+			demoPositions[i * 3 + 2] = z;
 
 			// Color based on height (forest green gradient)
 			const t = (y + 10) / 25;
-			colors[i * 3] = 0.086 + t * 0.4; // R
-			colors[i * 3 + 1] = 0.329 + t * 0.5; // G
-			colors[i * 3 + 2] = 0.2 + t * 0.3; // B
+			demoColors[i * 3] = 0.086 + t * 0.4; // R
+			demoColors[i * 3 + 1] = 0.329 + t * 0.5; // G
+			demoColors[i * 3 + 2] = 0.2 + t * 0.3; // B
 		}
 
-		geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-		geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+		geometry.setAttribute('position', new THREE.BufferAttribute(demoPositions, 3));
+		geometry.setAttribute('color', new THREE.BufferAttribute(demoColors, 3));
 		geometry.computeBoundingBox();
 
 		// Create material based on current color mode
@@ -83,6 +189,20 @@
 		points.name = 'point-cloud';
 
 		return points;
+	}
+
+	// Remove existing point cloud from scene
+	function removePointCloud() {
+		if (pointsMesh && sceneCtx) {
+			sceneCtx.scene.remove(pointsMesh);
+			pointsMesh.geometry.dispose();
+			if (Array.isArray(pointsMesh.material)) {
+				pointsMesh.material.forEach((m) => m.dispose());
+			} else {
+				pointsMesh.material.dispose();
+			}
+			pointsMesh = null;
+		}
 	}
 
 	// Update helpers visibility
@@ -101,6 +221,65 @@
 				updatePointSize(material, pcState.pointSize);
 			}
 		}
+	});
+
+	// React to data changes - create or update point cloud
+	$effect(() => {
+		if (!sceneCtx) return;
+
+		// Remove existing point cloud
+		removePointCloud();
+
+		// Create new point cloud
+		if (hasData && positions) {
+			pointsMesh = createPointCloudFromData();
+		} else {
+			// Show demo if no data
+			pointsMesh = createDemoPointCloud();
+		}
+
+		sceneCtx.scene.add(pointsMesh);
+
+		// Focus camera on new point cloud
+		if (bounds && hasData) {
+			const box = new THREE.Box3(
+				new THREE.Vector3(bounds.min[0], bounds.min[1], bounds.min[2]),
+				new THREE.Vector3(bounds.max[0], bounds.max[1], bounds.max[2]),
+			);
+			focusOnBounds(sceneCtx.camera, sceneCtx.controls, box);
+		} else if (pointsMesh.geometry.boundingBox) {
+			const center = pointsMesh.geometry.boundingBox.getCenter(new THREE.Vector3());
+			sceneCtx.controls.target.copy(center);
+			sceneCtx.camera.position.set(center.x + 50, center.y + 30, center.z + 50);
+			sceneCtx.controls.update();
+		}
+	});
+
+	// React to color mode changes - update material
+	$effect(() => {
+		if (!pointsMesh || !sceneCtx) return;
+
+		const geometry = pointsMesh.geometry;
+		let heightMin = 0;
+		let heightMax = 100;
+
+		if (bounds) {
+			heightMin = bounds.min[2];
+			heightMax = bounds.max[2];
+		} else if (geometry.boundingBox) {
+			heightMin = geometry.boundingBox.min.z;
+			heightMax = geometry.boundingBox.max.z;
+		}
+
+		// Dispose old material
+		if (Array.isArray(pointsMesh.material)) {
+			pointsMesh.material.forEach((m) => m.dispose());
+		} else {
+			pointsMesh.material.dispose();
+		}
+
+		// Create new material
+		pointsMesh.material = createMaterialForMode(pcState.colorMode, geometry, heightMin, heightMax);
 	});
 
 	// FPS tracking
@@ -129,16 +308,8 @@
 		});
 		sceneCtx = ctx;
 
-		// Add demo point cloud
-		pointsMesh = createDemoPointCloud();
-		ctx.scene.add(pointsMesh);
-
-		// Focus camera on point cloud
-		if (pointsMesh.geometry.boundingBox) {
-			const center = pointsMesh.geometry.boundingBox.getCenter(new THREE.Vector3());
-			ctx.controls.target.copy(center);
-			ctx.camera.position.set(center.x + 50, center.y + 30, center.z + 50);
-		}
+		// Point cloud will be created by the $effect when data changes
+		// or with demo data if no data is provided
 
 		// Set up render loop with FPS tracking
 		// Use captured ctx to avoid stale references in animation callback

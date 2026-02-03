@@ -9,6 +9,14 @@
 	import { onMount } from 'svelte';
 	import { setPointCloudState, getPointCloudState } from '$lib/stores/pointcloud.svelte';
 	import { resetCamera, type SceneContext } from '$lib/utils/three';
+	import { invoke } from '@tauri-apps/api/core';
+	import { open } from '@tauri-apps/plugin-dialog';
+	import type {
+		PointCloudData,
+		PointCloudMetadata,
+		Bounds3D,
+	} from '$lib/types/pointcloud';
+	import { toFloat32Array, unpackColorsNormalized } from '$lib/types/pointcloud';
 	import ViewerHeader from './ViewerHeader.svelte';
 	import ViewerToolbar from './ViewerToolbar.svelte';
 	import ThreeCanvas from './ThreeCanvas.svelte';
@@ -24,6 +32,13 @@
 
 	// Info panel collapsed state
 	let infoPanelCollapsed = $state(false);
+
+	// Point cloud data for ThreeCanvas
+	let positions = $state<Float32Array | null>(null);
+	let intensities = $state<Float32Array | null>(null);
+	let colors = $state<Float32Array | null>(null);
+	let classifications = $state<Uint8Array | null>(null);
+	let bounds = $state<Bounds3D | null>(null);
 
 	// Handle scene ready
 	function handleSceneReady(ctx: SceneContext) {
@@ -59,10 +74,73 @@
 		}
 	}
 
-	// Load file action (placeholder)
-	function handleLoad() {
-		// TODO: Integrate with Tauri file picker
-		console.log('Load file - to be implemented');
+	// Process loaded point cloud data
+	function processPointCloudData(data: PointCloudData) {
+		// Convert arrays to typed arrays for Three.js
+		positions = toFloat32Array(data.positions);
+		intensities = data.intensities ? toFloat32Array(data.intensities) : null;
+		colors = data.colors ? unpackColorsNormalized(data.colors) : null;
+		classifications = data.classifications ? new Uint8Array(data.classifications) : null;
+		bounds = data.metadata.bounds;
+
+		// Update store with file info
+		pcState.setFile({
+			name: data.metadata.path.split('/').pop() || 'unknown',
+			path: data.metadata.path,
+			format: data.metadata.format,
+			pointCount: data.metadata.point_count,
+			sizeBytes: data.metadata.file_size_bytes,
+			bounds: bounds
+				? {
+						min: { x: bounds.min[0], y: bounds.min[1], z: bounds.min[2] },
+						max: { x: bounds.max[0], y: bounds.max[1], z: bounds.max[2] },
+					}
+				: { min: { x: 0, y: 0, z: 0 }, max: { x: 0, y: 0, z: 0 } },
+		});
+	}
+
+	// Load file action
+	async function handleLoad() {
+		try {
+			// Open file picker
+			const filePath = await open({
+				multiple: false,
+				filters: [
+					{
+						name: 'Point Cloud',
+						extensions: ['las', 'laz', 'ply', 'pcd'],
+					},
+				],
+			});
+
+			// User cancelled
+			if (!filePath || Array.isArray(filePath)) return;
+
+			pcState.setLoading(true);
+			pcState.setError(null);
+			pcState.setLoadProgress(0);
+
+			// Get metadata first to check file size
+			const metadata = await invoke<PointCloudMetadata>('read_pointcloud_metadata', {
+				path: filePath,
+			});
+			pcState.setLoadProgress(20);
+
+			// For now, load directly (streaming will be added in Phase 8)
+			// TODO: Use streaming for files > 1M points
+			const data = await invoke<PointCloudData>('read_pointcloud', {
+				path: filePath,
+			});
+			pcState.setLoadProgress(80);
+
+			// Process and display
+			processPointCloudData(data);
+			pcState.setLoadProgress(100);
+		} catch (e) {
+			pcState.setError(e instanceof Error ? e.message : String(e));
+		} finally {
+			pcState.setLoading(false);
+		}
 	}
 
 	// Export action (placeholder)
@@ -157,7 +235,16 @@
 
 	<!-- 3D Viewport -->
 	<div class="flex-1 relative overflow-hidden">
-		<ThreeCanvas onReady={handleSceneReady} onFpsUpdate={handleFpsUpdate} class="absolute inset-0" />
+		<ThreeCanvas
+			onReady={handleSceneReady}
+			onFpsUpdate={handleFpsUpdate}
+			{positions}
+			{intensities}
+			{colors}
+			{classifications}
+			{bounds}
+			class="absolute inset-0"
+		/>
 
 		<!-- Loading overlay -->
 		{#if pcState.isLoading}
