@@ -135,12 +135,15 @@ class TestClassesEndpoint:
 class TestInferEndpoint:
     """Tests for POST /detect3d/infer endpoint."""
 
-    def test_infer_file_not_found(self, client: TestClient) -> None:
+    def test_infer_file_not_found(
+        self, client: TestClient, tmp_path: Path
+    ) -> None:
         """Should return 404 for missing point cloud file."""
+        nonexistent_file = tmp_path / "nonexistent.bin"
         response = client.post(
             "/detect3d/infer",
             json={
-                "input_path": "/nonexistent/scan.bin",
+                "input_path": str(nonexistent_file),
                 "model": "auto",
                 "confidence": 0.3,
             },
@@ -148,6 +151,25 @@ class TestInferEndpoint:
 
         assert response.status_code == 404
         assert "not found" in response.json()["detail"].lower()
+
+    def test_infer_invalid_file_extension(
+        self, client: TestClient, tmp_path: Path
+    ) -> None:
+        """Should return 400 for invalid file extension."""
+        # Create a file with invalid extension
+        invalid_file = tmp_path / "data.txt"
+        invalid_file.write_text("test")
+
+        response = client.post(
+            "/detect3d/infer",
+            json={
+                "input_path": str(invalid_file),
+                "model": "auto",
+            },
+        )
+
+        assert response.status_code == 400
+        assert "invalid file extension" in response.json()["detail"].lower()
 
     def test_infer_invalid_classes(
         self, client: TestClient, sample_bin_file: Path

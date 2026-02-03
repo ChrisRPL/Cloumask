@@ -10,6 +10,7 @@ Implements spec: 05-point-cloud/04-3d-detection
 from __future__ import annotations
 
 import logging
+import threading
 from pathlib import Path
 from typing import Literal
 
@@ -29,8 +30,12 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/detect3d", tags=["3D Detection"])
 
-# Module-level model cache for preloading
+# Allowed point cloud file extensions for security validation
+ALLOWED_EXTENSIONS: frozenset[str] = frozenset({".pcd", ".ply", ".bin", ".las", ".laz"})
+
+# Module-level model cache for preloading (thread-safe access)
 _loaded_models: dict[str, PVRCNNWrapper | CenterPointWrapper] = {}
+_models_lock = threading.Lock()
 
 
 # -----------------------------------------------------------------------------
@@ -100,6 +105,53 @@ class LoadResponse(BaseModel):
     message: str = Field(..., description="Status message")
 
 
+class ClassesResponse(BaseModel):
+    """Response model for supported object classes."""
+
+    classes: list[str] = Field(..., description="Supported object classes")
+
+
+# -----------------------------------------------------------------------------
+# Helper Functions
+# -----------------------------------------------------------------------------
+
+
+def _validate_input_path(input_path: str) -> Path:
+    """
+    Validate input path for security and existence.
+
+    Args:
+        input_path: Path to point cloud file.
+
+    Returns:
+        Resolved Path object.
+
+    Raises:
+        HTTPException: If path is invalid, has wrong extension, or doesn't exist.
+    """
+    path = Path(input_path).resolve()
+
+    # Validate file extension to prevent arbitrary file access
+    if path.suffix.lower() not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file extension '{path.suffix}'. "
+            f"Allowed extensions: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
+        )
+
+    if not path.exists():
+        raise HTTPException(
+            status_code=404, detail=f"Point cloud file not found: {input_path}"
+        )
+
+    if not path.is_file():
+        raise HTTPException(
+            status_code=400, detail=f"Path is not a file: {input_path}"
+        )
+
+    return path
+
+
 # -----------------------------------------------------------------------------
 # Endpoints
 # -----------------------------------------------------------------------------
@@ -113,11 +165,15 @@ async def list_models() -> ModelsListResponse:
     Returns information about PV-RCNN++ and CenterPoint models including
     VRAM requirements, supported classes, and current load status.
     """
+    with _models_lock:
+        pvrcnn_loaded = "pvrcnn++" in _loaded_models
+        centerpoint_loaded = "centerpoint" in _loaded_models
+
     models = [
         ModelInfo(
             name="pvrcnn++",
             description="PV-RCNN++ 3D detector via OpenPCDet (highest accuracy)",
-            loaded="pvrcnn++" in _loaded_models,
+            loaded=pvrcnn_loaded,
             vram_required_mb=PVRCNNWrapper.info.vram_required_mb,
             classes=list(DETECTION_3D_CLASSES),
             benchmark="KITTI 84% 3D AP",
@@ -125,7 +181,7 @@ async def list_models() -> ModelsListResponse:
         ModelInfo(
             name="centerpoint",
             description="CenterPoint 3D detector via OpenPCDet (faster, lower VRAM)",
-            loaded="centerpoint" in _loaded_models,
+            loaded=centerpoint_loaded,
             vram_required_mb=CenterPointWrapper.info.vram_required_mb,
             classes=list(DETECTION_3D_CLASSES),
             benchmark="KITTI 79% 3D AP",
@@ -145,11 +201,8 @@ async def detect_3d(request: Detect3DRequest) -> Detection3DResult:
     Supported input formats: .pcd, .ply, .bin (KITTI), .las, .laz
     """
     try:
-        # Validate input path
-        if not Path(request.input_path).exists():
-            raise HTTPException(
-                status_code=404, detail=f"Point cloud file not found: {request.input_path}"
-            )
+        # Validate input path (security check + existence)
+        validated_path = _validate_input_path(request.input_path)
 
         # Validate classes if provided
         if request.classes:
@@ -160,30 +213,31 @@ async def detect_3d(request: Detect3DRequest) -> Detection3DResult:
                     detail=f"Invalid classes: {invalid}. Valid: {DETECTION_3D_CLASSES}",
                 )
 
-        # Get or create detector
+        # Get or create detector (thread-safe cache access)
         requested_model = request.model
-        if requested_model == "auto":
-            detector = get_3d_detector(prefer_accuracy=True)
-            actual_model_name = detector.info.name
-        elif requested_model in _loaded_models:
-            detector = _loaded_models[requested_model]
-            actual_model_name = requested_model
-        else:
-            detector = get_3d_detector(force_model=requested_model)
-            actual_model_name = requested_model
+        with _models_lock:
+            if requested_model == "auto":
+                detector = get_3d_detector(prefer_accuracy=True)
+                actual_model_name = detector.info.name
+            elif requested_model in _loaded_models:
+                detector = _loaded_models[requested_model]
+                actual_model_name = requested_model
+            else:
+                detector = get_3d_detector(force_model=requested_model)
+                actual_model_name = requested_model
 
-        # Ensure model is loaded
-        if not detector.is_loaded:
-            logger.info("Loading 3D detector: %s", actual_model_name)
-            detector.load()
-            _loaded_models[actual_model_name] = detector  # type: ignore[assignment]
+            # Ensure model is loaded (inside lock for cache consistency)
+            if not detector.is_loaded:
+                logger.info("Loading 3D detector: %s", actual_model_name)
+                detector.load()
+                _loaded_models[actual_model_name] = detector  # type: ignore[assignment]
 
         # Parse coordinate system
         coord_system = CoordinateSystem(request.coordinate_system)
 
-        # Run detection
+        # Run detection (outside lock - inference can be concurrent)
         result = detector.predict(
-            request.input_path,
+            str(validated_path),
             confidence=request.confidence,
             classes=request.classes,
             coordinate_system=coord_system,
@@ -191,7 +245,7 @@ async def detect_3d(request: Detect3DRequest) -> Detection3DResult:
 
         logger.info(
             "3D detection on %s: found %d objects in %.1fms",
-            request.input_path,
+            validated_path,
             result.count,
             result.processing_time_ms,
         )
@@ -225,21 +279,22 @@ async def load_model(request: ModelLoadRequest) -> LoadResponse:
     try:
         model_name = request.model
 
-        # Check if already loaded
-        if model_name in _loaded_models and _loaded_models[model_name].is_loaded:
-            return LoadResponse(
-                success=True,
-                model=model_name,
-                message=f"Model '{model_name}' is already loaded",
-            )
+        with _models_lock:
+            # Check if already loaded
+            if model_name in _loaded_models and _loaded_models[model_name].is_loaded:
+                return LoadResponse(
+                    success=True,
+                    model=model_name,
+                    message=f"Model '{model_name}' is already loaded",
+                )
 
-        # Create and load the model
-        detector = PVRCNNWrapper() if model_name == "pvrcnn++" else CenterPointWrapper()
+            # Create and load the model
+            detector = PVRCNNWrapper() if model_name == "pvrcnn++" else CenterPointWrapper()
 
-        device = request.device if request.device != "auto" else "auto"
-        detector.load(device=device)
+            device = request.device if request.device != "auto" else "auto"
+            detector.load(device=device)
 
-        _loaded_models[model_name] = detector
+            _loaded_models[model_name] = detector
 
         logger.info("Loaded 3D detector: %s on %s", model_name, detector.device)
 
@@ -267,36 +322,37 @@ async def unload_model(request: ModelUnloadRequest) -> LoadResponse:
     """
     model_name = request.model
 
-    if model_name not in _loaded_models:
-        return LoadResponse(
-            success=True,
-            model=model_name,
-            message=f"Model '{model_name}' is not loaded",
-        )
+    with _models_lock:
+        if model_name not in _loaded_models:
+            return LoadResponse(
+                success=True,
+                model=model_name,
+                message=f"Model '{model_name}' is not loaded",
+            )
 
-    try:
-        detector = _loaded_models[model_name]
-        detector.unload()
-        del _loaded_models[model_name]
+        try:
+            detector = _loaded_models[model_name]
+            detector.unload()
+            del _loaded_models[model_name]
 
-        logger.info("Unloaded 3D detector: %s", model_name)
+            logger.info("Unloaded 3D detector: %s", model_name)
 
-        return LoadResponse(
-            success=True,
-            model=model_name,
-            message=f"Model '{model_name}' unloaded successfully",
-        )
+            return LoadResponse(
+                success=True,
+                model=model_name,
+                message=f"Model '{model_name}' unloaded successfully",
+            )
 
-    except Exception as e:
-        logger.exception("Failed to unload model: %s", model_name)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        except Exception as e:
+            logger.exception("Failed to unload model: %s", model_name)
+            raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@router.get("/classes")
-async def get_supported_classes() -> dict[str, list[str]]:
+@router.get("/classes", response_model=ClassesResponse)
+async def get_supported_classes() -> ClassesResponse:
     """
     Get the list of supported object classes for 3D detection.
 
     Returns the KITTI/nuScenes classes supported by both PV-RCNN++ and CenterPoint.
     """
-    return {"classes": list(DETECTION_3D_CLASSES)}
+    return ClassesResponse(classes=list(DETECTION_3D_CLASSES))
