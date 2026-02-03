@@ -17,8 +17,8 @@ from fastapi import APIRouter, HTTPException, Query
 
 from backend.data.ros_types import (
     BagInfoResponse,
-    ExtractionResult,
     ExtractImagesRequest,
+    ExtractionResult,
     ExtractPointcloudRequest,
     ExtractSyncedRequest,
     SyncedExtractionResult,

@@ -7,15 +7,14 @@ Tests dataclass creation, validation, and Pydantic model serialization.
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from backend.data.ros_types import (
     BagFormat,
     BagInfo,
     BagInfoResponse,
     CameraInfoMessage,
-    ExtractionResult,
     ExtractImagesRequest,
+    ExtractionResult,
     ExtractPointcloudRequest,
     ExtractSyncedRequest,
     ImageMessage,

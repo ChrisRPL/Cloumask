@@ -28,7 +28,7 @@ from backend.data.ros_types import (
 )
 
 if TYPE_CHECKING:
-    from rosbags.highlevel import AnyReader
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -115,7 +115,7 @@ class RosbagParser:
 
         # Try to detect from content
         try:
-            with open(self.bag_path, "rb") as f:
+            with self.bag_path.open("rb") as f:
                 magic = f.read(13)
                 if magic == b"#ROSBAG V2.0\n":
                     return BagFormat.ROS1
@@ -399,12 +399,12 @@ class RosbagParser:
                 if not connections:
                     raise ValueError(f"Topic not found: {topic}")
 
-                count = 0
-                for conn, timestamp, rawdata in reader.messages(connections):
+                for count, (conn, timestamp, rawdata) in enumerate(
+                    reader.messages(connections), start=1
+                ):
                     msg = reader.deserialize(rawdata, conn.msgtype)
                     yield self._convert_camera_info(msg, timestamp)
 
-                    count += 1
                     if max_messages and count >= max_messages:
                         break
 
@@ -529,11 +529,7 @@ class RosbagParser:
         point_step = msg.point_step
         height = msg.height
         width = msg.width
-
-        if height == 1:
-            point_count = width
-        else:
-            point_count = height * width
+        point_count = width if height == 1 else height * width
 
         # Parse binary data
         data = bytes(msg.data)
