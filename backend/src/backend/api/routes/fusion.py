@@ -37,7 +37,12 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/fusion", tags=["2D-3D Fusion"])
 
-# Calibration cache (thread-safe)
+# Allowed file extensions for security validation
+ALLOWED_CALIB_EXTENSIONS: frozenset[str] = frozenset({".txt", ".json", ".yaml", ".yml"})
+ALLOWED_PC_EXTENSIONS: frozenset[str] = frozenset({".pcd", ".ply", ".bin", ".las", ".laz"})
+
+# Calibration cache (thread-safe, bounded)
+_CACHE_MAX_SIZE = 100
 _calibration_cache: dict[str, CameraCalibration] = {}
 _cache_lock = threading.Lock()
 
@@ -198,8 +203,13 @@ def _get_calibration(
         if cache_key in _calibration_cache:
             return _calibration_cache[cache_key]
 
-    # Validate path exists
-    calib_path = Path(path)
+    # Validate path and extension for security
+    calib_path = Path(path).resolve()
+    if calib_path.suffix.lower() not in ALLOWED_CALIB_EXTENSIONS:
+        raise ValueError(
+            f"Invalid calibration file extension: {calib_path.suffix}. "
+            f"Allowed: {', '.join(sorted(ALLOWED_CALIB_EXTENSIONS))}"
+        )
     if not calib_path.exists():
         raise FileNotFoundError(f"Calibration file not found: {path}")
 
@@ -227,6 +237,10 @@ def _get_calibration(
         raise ValueError(f"Unknown calibration format: {format}")
 
     with _cache_lock:
+        # Bounded cache: remove oldest entry if at capacity
+        if len(_calibration_cache) >= _CACHE_MAX_SIZE:
+            oldest_key = next(iter(_calibration_cache))
+            del _calibration_cache[oldest_key]
         _calibration_cache[cache_key] = calib
 
     return calib
@@ -237,7 +251,14 @@ def _load_pointcloud(path: str) -> "NDArray":
     import numpy as np
     from numpy.typing import NDArray
 
-    pc_path = Path(path)
+    pc_path = Path(path).resolve()
+
+    # Validate extension for security
+    if pc_path.suffix.lower() not in ALLOWED_PC_EXTENSIONS:
+        raise ValueError(
+            f"Invalid point cloud extension: {pc_path.suffix}. "
+            f"Allowed: {', '.join(sorted(ALLOWED_PC_EXTENSIONS))}"
+        )
     if not pc_path.exists():
         raise FileNotFoundError(f"Point cloud not found: {path}")
 
@@ -267,8 +288,9 @@ async def load_calibration(request: LoadCalibrationRequest) -> CalibrationRespon
             has_distortion=calib.has_distortion,
             source_format=calib.source_format,
         )
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
+    except (FileNotFoundError, ValueError) as e:
+        status = 404 if isinstance(e, FileNotFoundError) else 400
+        raise HTTPException(status_code=status, detail=str(e)) from e
     except Exception as e:
         logger.exception("Failed to load calibration: %s", request.calibration_path)
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -309,8 +331,9 @@ async def project_points(request: ProjectPointsRequest) -> ProjectPointsResponse
             total_count=len(points),
             processing_time_ms=elapsed_ms,
         )
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
+    except (FileNotFoundError, ValueError) as e:
+        status = 404 if isinstance(e, FileNotFoundError) else 400
+        raise HTTPException(status_code=status, detail=str(e)) from e
     except Exception as e:
         logger.exception("Failed to project points")
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -367,8 +390,9 @@ async def project_boxes(request: ProjectBoxesRequest) -> ProjectBoxesResponse:
             total_count=len(detections),
             processing_time_ms=elapsed_ms,
         )
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
+    except (FileNotFoundError, ValueError) as e:
+        status = 404 if isinstance(e, FileNotFoundError) else 400
+        raise HTTPException(status_code=status, detail=str(e)) from e
     except Exception as e:
         logger.exception("Failed to project boxes")
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -379,6 +403,14 @@ async def lift_boxes(request: LiftBoxesRequest) -> LiftBoxesResponse:
     """Lift 2D bounding boxes to 3D using point cloud depth."""
     try:
         start = time.perf_counter()
+
+        # Validate class_names length if provided
+        if request.class_names and len(request.class_names) != len(request.boxes_2d):
+            raise HTTPException(
+                status_code=400,
+                detail=f"class_names length ({len(request.class_names)}) "
+                f"must match boxes_2d length ({len(request.boxes_2d)})",
+            )
 
         calib = _get_calibration(
             request.calibration_path,
@@ -430,8 +462,9 @@ async def lift_boxes(request: LiftBoxesRequest) -> LiftBoxesResponse:
             total_count=len(request.boxes_2d),
             processing_time_ms=elapsed_ms,
         )
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
+    except (FileNotFoundError, ValueError) as e:
+        status = 404 if isinstance(e, FileNotFoundError) else 400
+        raise HTTPException(status_code=status, detail=str(e)) from e
     except Exception as e:
         logger.exception("Failed to lift boxes")
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -490,8 +523,9 @@ async def fuse(request: FuseRequest) -> FusedAnnotationResult:
             calibration_path=request.calibration_path,
             processing_time_ms=elapsed_ms,
         )
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
+    except (FileNotFoundError, ValueError) as e:
+        status = 404 if isinstance(e, FileNotFoundError) else 400
+        raise HTTPException(status_code=status, detail=str(e)) from e
     except Exception as e:
         logger.exception("Failed to fuse detections")
         raise HTTPException(status_code=500, detail=str(e)) from e
