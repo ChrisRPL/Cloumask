@@ -21,6 +21,16 @@ if TYPE_CHECKING:
     pass
 
 
+def _has_rosbags() -> bool:
+    """Check if rosbags library is available for testing."""
+    try:
+        import rosbags.highlevel  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
 class TestRosbagParserInit:
     """Tests for RosbagParser initialization."""
 
@@ -51,7 +61,7 @@ class TestRosbagParserInit:
         """Parser detects ROS1 from magic bytes."""
         # Create file with unknown extension but ROS1 magic bytes
         bag_path = tmp_path / "test.unknown"
-        with open(bag_path, "wb") as f:
+        with bag_path.open("wb") as f:
             f.write(b"#ROSBAG V2.0\n")
             f.write(b"\x00" * 100)
         parser = RosbagParser(bag_path)
@@ -204,34 +214,44 @@ class TestTopicFiltering:
 class TestGetInfo:
     """Tests for bag info retrieval."""
 
+    @pytest.mark.skipif(
+        not _has_rosbags(),
+        reason="rosbags library not installed",
+    )
     def test_get_info_caching(self, temp_bag_path: Path) -> None:
         """get_info caches result."""
         parser = RosbagParser(temp_bag_path)
 
-        with patch.object(parser, "_info_cache", None):
-            with patch("backend.data.rosbag_parser.AnyReader") as mock_reader:
-                mock_ctx = MagicMock()
-                mock_reader.return_value.__enter__.return_value = mock_ctx
-                mock_ctx.connections = []
-                mock_ctx.duration = 1_000_000_000
-                mock_ctx.start_time = 0
-                mock_ctx.end_time = 1_000_000_000
+        with (
+            patch.object(parser, "_info_cache", None),
+            patch("rosbags.highlevel.AnyReader") as mock_reader,
+        ):
+            mock_ctx = MagicMock()
+            mock_reader.return_value.__enter__.return_value = mock_ctx
+            mock_ctx.connections = []
+            mock_ctx.duration = 1_000_000_000
+            mock_ctx.start_time = 0
+            mock_ctx.end_time = 1_000_000_000
 
-                # First call
-                info1 = parser.get_info()
+            # First call
+            info1 = parser.get_info()
 
-                # Second call should use cache
-                info2 = parser.get_info()
+            # Second call should use cache
+            info2 = parser.get_info()
 
-                # Should only open bag once
-                assert mock_reader.call_count == 1
-                assert info1 is info2
+            # Should only open bag once
+            assert mock_reader.call_count == 1
+            assert info1 is info2
 
+    @pytest.mark.skipif(
+        not _has_rosbags(),
+        reason="rosbags library not installed",
+    )
     def test_get_info_force_refresh(self, temp_bag_path: Path) -> None:
         """get_info with force_refresh re-reads bag."""
         parser = RosbagParser(temp_bag_path)
 
-        with patch("backend.data.rosbag_parser.AnyReader") as mock_reader:
+        with patch("rosbags.highlevel.AnyReader") as mock_reader:
             mock_ctx = MagicMock()
             mock_reader.return_value.__enter__.return_value = mock_ctx
             mock_ctx.connections = []

@@ -24,7 +24,7 @@ def temp_bag_path(tmp_path: Path) -> Path:
     """Create a temporary path for a fake bag file."""
     bag_path = tmp_path / "test.bag"
     # Create a file with ROS1 magic bytes
-    with open(bag_path, "wb") as f:
+    with bag_path.open("wb") as f:
         f.write(b"#ROSBAG V2.0\n")
         f.write(b"\x00" * 100)  # Padding
     return bag_path
