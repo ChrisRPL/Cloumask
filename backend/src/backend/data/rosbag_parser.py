@@ -590,6 +590,19 @@ class RosbagParser:
         # Convert based on encoding
         data = bytes(msg.data)
 
+        # Validate data size for known encodings
+        expected_sizes = {
+            "rgb8": height * width * 3,
+            "bgr8": height * width * 3,
+            "mono8": height * width,
+            "16UC1": height * width * 2,
+        }
+        if encoding in expected_sizes and len(data) != expected_sizes[encoding]:
+            raise RosbagParseError(
+                f"Image data size mismatch for {encoding}: "
+                f"expected {expected_sizes[encoding]}, got {len(data)}"
+            )
+
         if encoding in ("rgb8", "bgr8"):
             image = np.frombuffer(data, dtype=np.uint8).reshape(height, width, 3)
             if encoding == "bgr8":

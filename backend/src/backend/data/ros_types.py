@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, Field
 
@@ -195,7 +195,9 @@ class ExtractPointcloudRequest(BaseModel):
     topic: str = Field(..., description="PointCloud2 topic name")
     output_dir: str = Field(..., description="Output directory path")
     max_frames: int | None = Field(None, ge=1, description="Max frames to extract")
-    output_format: str = Field("pcd", description="Output format: pcd, ply, npy")
+    output_format: Literal["pcd", "ply", "npy"] = Field(
+        "pcd", description="Output format: pcd, ply, npy"
+    )
     skip_existing: bool = Field(False, description="Skip if output exists")
 
 
@@ -206,7 +208,9 @@ class ExtractImagesRequest(BaseModel):
     topic: str = Field(..., description="Image topic name")
     output_dir: str = Field(..., description="Output directory path")
     max_frames: int | None = Field(None, ge=1, description="Max frames to extract")
-    output_format: str = Field("png", description="Output format: png, jpg")
+    output_format: Literal["png", "jpg", "jpeg"] = Field(
+        "png", description="Output format: png, jpg, jpeg"
+    )
     skip_existing: bool = Field(False, description="Skip if output exists")
 
 
@@ -220,8 +224,12 @@ class ExtractSyncedRequest(BaseModel):
     output_dir: str = Field(..., description="Output directory path")
     max_frames: int | None = Field(None, ge=1, description="Max frames to extract")
     max_sync_error_ms: float = Field(50.0, ge=0, description="Max sync error in ms")
-    pointcloud_format: str = Field("pcd", description="Point cloud format")
-    image_format: str = Field("png", description="Image format")
+    pointcloud_format: Literal["pcd", "ply", "npy"] = Field(
+        "pcd", description="Point cloud format"
+    )
+    image_format: Literal["png", "jpg", "jpeg"] = Field(
+        "png", description="Image format"
+    )
 
 
 class ExtractionResult(BaseModel):
