@@ -10,10 +10,12 @@
 	import { setPointCloudState, getPointCloudState } from '$lib/stores/pointcloud.svelte';
 	import { resetCamera, type SceneContext } from '$lib/utils/three';
 	import { invoke } from '@tauri-apps/api/core';
+	import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 	import { open } from '@tauri-apps/plugin-dialog';
 	import type {
 		PointCloudData,
 		PointCloudMetadata,
+		PointCloudChunk,
 		Bounds3D,
 	} from '$lib/types/pointcloud';
 	import { toFloat32Array, unpackColorsNormalized } from '$lib/types/pointcloud';
@@ -101,6 +103,72 @@
 		});
 	}
 
+	// Streaming threshold (points)
+	const STREAMING_THRESHOLD = 1_000_000;
+
+	// Load file via streaming for large files
+	async function loadStreamedPointCloud(path: string, metadata: PointCloudMetadata): Promise<void> {
+		// Accumulators for chunked data
+		const allPositions: number[] = [];
+		const allIntensities: number[] = [];
+		const allColors: number[] = [];
+		const allClassifications: number[] = [];
+		let receivedChunks = 0;
+		let totalChunks = 1;
+
+		// Set up event listeners
+		const unlisteners: UnlistenFn[] = [];
+
+		const chunkListener = await listen<PointCloudChunk>('pointcloud:chunk', (event) => {
+			const chunk = event.payload;
+			totalChunks = chunk.total_chunks;
+			receivedChunks++;
+
+			// Accumulate data
+			allPositions.push(...chunk.positions);
+			if (chunk.intensities) allIntensities.push(...chunk.intensities);
+			if (chunk.colors) allColors.push(...chunk.colors);
+			if (chunk.classifications) allClassifications.push(...chunk.classifications);
+
+			// Update progress
+			const progress = 20 + Math.round((receivedChunks / totalChunks) * 60);
+			pcState.setLoadProgress(progress);
+		});
+		unlisteners.push(chunkListener);
+
+		const completeListener = await listen<PointCloudMetadata>('pointcloud:complete', () => {
+			// All chunks received - process the complete data
+			pcState.setLoadProgress(90);
+
+			const data: PointCloudData = {
+				metadata,
+				positions: allPositions,
+				intensities: allIntensities.length > 0 ? allIntensities : null,
+				colors: allColors.length > 0 ? allColors : null,
+				classifications: allClassifications.length > 0 ? allClassifications : null,
+			};
+
+			processPointCloudData(data);
+			pcState.setLoadProgress(100);
+
+			// Clean up listeners
+			unlisteners.forEach((fn) => fn());
+		});
+		unlisteners.push(completeListener);
+
+		const errorListener = await listen<string>('pointcloud:error', (event) => {
+			pcState.setError(event.payload);
+			unlisteners.forEach((fn) => fn());
+		});
+		unlisteners.push(errorListener);
+
+		// Start streaming - this returns immediately with metadata
+		await invoke<PointCloudMetadata>('stream_pointcloud', {
+			path,
+			config: { chunk_size: 100000 },
+		});
+	}
+
 	// Load file action
 	async function handleLoad() {
 		try {
@@ -128,16 +196,18 @@
 			});
 			pcState.setLoadProgress(20);
 
-			// For now, load directly (streaming will be added in Phase 8)
-			// TODO: Use streaming for files > 1M points
-			const data = await invoke<PointCloudData>('read_pointcloud', {
-				path: filePath,
-			});
-			pcState.setLoadProgress(80);
-
-			// Process and display
-			processPointCloudData(data);
-			pcState.setLoadProgress(100);
+			// Use streaming for large files
+			if (metadata.point_count > STREAMING_THRESHOLD) {
+				await loadStreamedPointCloud(filePath, metadata);
+			} else {
+				// Load directly for smaller files
+				const data = await invoke<PointCloudData>('read_pointcloud', {
+					path: filePath,
+				});
+				pcState.setLoadProgress(80);
+				processPointCloudData(data);
+				pcState.setLoadProgress(100);
+			}
 		} catch (e) {
 			pcState.setError(e instanceof Error ? e.message : String(e));
 		} finally {
