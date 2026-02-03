@@ -13,7 +13,7 @@ import logging
 from pathlib import Path
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from backend.cv.detection_3d import (
@@ -161,20 +161,22 @@ async def detect_3d(request: Detect3DRequest) -> Detection3DResult:
                 )
 
         # Get or create detector
-        model_name = request.model
-        if model_name == "auto":
+        requested_model = request.model
+        if requested_model == "auto":
             detector = get_3d_detector(prefer_accuracy=True)
-            model_name = detector.info.name
-        elif model_name in _loaded_models:
-            detector = _loaded_models[model_name]
+            actual_model_name = detector.info.name
+        elif requested_model in _loaded_models:
+            detector = _loaded_models[requested_model]
+            actual_model_name = requested_model
         else:
-            detector = get_3d_detector(force_model=model_name)
+            detector = get_3d_detector(force_model=requested_model)
+            actual_model_name = requested_model
 
         # Ensure model is loaded
         if not detector.is_loaded:
-            logger.info("Loading 3D detector: %s", model_name)
+            logger.info("Loading 3D detector: %s", actual_model_name)
             detector.load()
-            _loaded_models[model_name] = detector  # type: ignore[assignment]
+            _loaded_models[actual_model_name] = detector  # type: ignore[assignment]
 
         # Parse coordinate system
         coord_system = CoordinateSystem(request.coordinate_system)
@@ -196,6 +198,9 @@ async def detect_3d(request: Detect3DRequest) -> Detection3DResult:
 
         return result
 
+    except HTTPException:
+        # Re-raise HTTP exceptions without modification
+        raise
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except ValueError as e:
@@ -229,10 +234,7 @@ async def load_model(request: ModelLoadRequest) -> LoadResponse:
             )
 
         # Create and load the model
-        if model_name == "pvrcnn++":
-            detector = PVRCNNWrapper()
-        else:
-            detector = CenterPointWrapper()
+        detector = PVRCNNWrapper() if model_name == "pvrcnn++" else CenterPointWrapper()
 
         device = request.device if request.device != "auto" else "auto"
         detector.load(device=device)

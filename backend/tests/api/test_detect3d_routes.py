@@ -325,7 +325,12 @@ class TestLoadEndpoint:
         self, mock_wrapper_class: MagicMock, client: TestClient
     ) -> None:
         """Should return 500 when model loading fails."""
+        # Clear any cached models first
+        from backend.api.routes import detect3d
+        detect3d._loaded_models.clear()
+
         mock_wrapper = MagicMock()
+        mock_wrapper.is_loaded = False  # Ensure not cached as loaded
         mock_wrapper.load.side_effect = RuntimeError("OpenPCDet not installed")
         mock_wrapper_class.return_value = mock_wrapper
 
