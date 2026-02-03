@@ -18,3 +18,6 @@ export * from "./sse";
 
 // Keyboard navigation types
 export * from "./keyboard";
+
+// Point cloud types
+export * from "./pointcloud";
