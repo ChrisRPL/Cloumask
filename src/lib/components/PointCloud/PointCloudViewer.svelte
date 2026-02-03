@@ -21,6 +21,7 @@
 	import ViewerToolbar from './ViewerToolbar.svelte';
 	import ThreeCanvas from './ThreeCanvas.svelte';
 	import InfoPanel from './InfoPanel.svelte';
+	import Controls from './Controls.svelte';
 
 	let { class: className }: PointCloudViewerProps = $props();
 
@@ -30,8 +31,9 @@
 	// Scene context reference
 	let sceneContext: SceneContext | null = $state(null);
 
-	// Info panel collapsed state
+	// Panel collapsed states
 	let infoPanelCollapsed = $state(false);
+	let controlsCollapsed = $state(true);
 
 	// Point cloud data for ThreeCanvas
 	let positions = $state<Float32Array | null>(null);
@@ -245,6 +247,9 @@
 			{bounds}
 			class="absolute inset-0"
 		/>
+
+		<!-- Controls Panel -->
+		<Controls collapsed={controlsCollapsed} onToggle={() => (controlsCollapsed = !controlsCollapsed)} />
 
 		<!-- Loading overlay -->
 		{#if pcState.isLoading}
