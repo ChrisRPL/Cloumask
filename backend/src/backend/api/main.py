@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend import __version__
 from backend.agent.llm.config import REQUIRED_MODEL
-from backend.api.routes import health, llm, pointcloud, review, rosbag, scripts
+from backend.api.routes import detect3d, health, llm, pointcloud, review, rosbag, scripts
 from backend.api.routes.llm import check_llm_ready_on_startup
 from backend.api.streaming import endpoints as streaming
 
@@ -70,6 +70,7 @@ def create_app() -> FastAPI:
     app.include_router(streaming.router)
     app.include_router(pointcloud.router)
     app.include_router(rosbag.router)
+    app.include_router(detect3d.router)
 
     return app
 
