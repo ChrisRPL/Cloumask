@@ -87,7 +87,13 @@
 			<Download class="h-3.5 w-3.5" />
 			Export
 		</Button>
-		<Button variant="ghost" size="sm" onclick={onSettings} class="h-8 w-8 p-0">
+		<Button
+			variant="ghost"
+			size="sm"
+			onclick={onSettings}
+			class="h-8 w-8 p-0"
+			aria-label="Open settings"
+		>
 			<Settings class="h-4 w-4" />
 		</Button>
 	</div>

@@ -29,6 +29,14 @@ export interface LabelOptions {
 	textColor: string;
 }
 
+const DEFAULT_LABEL_OPTIONS: LabelOptions = {
+	showClassName: true,
+	showConfidence: true,
+	fontSize: 14,
+	backgroundColor: 'rgba(22, 101, 52, 0.85)',
+	textColor: '#FAF7F0',
+};
+
 // Default edge material
 const DEFAULT_BOX_COLOR = new THREE.Color(CLOUMASK_COLORS.boundingBox);
 const SELECTED_BOX_COLOR = new THREE.Color(CLOUMASK_COLORS.boundingBoxSelected);
@@ -112,6 +120,7 @@ function createLabelSprite(text: string, options: LabelOptions): THREE.Sprite {
 
 	return sprite;
 }
+
 /**
  * Creates a wireframe box mesh for a 3D bounding box
  */
@@ -193,7 +202,11 @@ export function createBoxMesh(
 /**
  * Creates a group containing both wireframe and filled box
  */
-export function createBoxGroup(box: BoundingBox3D, selected = false): THREE.Group {
+export function createBoxGroup(
+	box: BoundingBox3D,
+	selected = false,
+	labelOptions?: Partial<LabelOptions>,
+): THREE.Group {
 	const group = new THREE.Group();
 	group.name = `bbox-group-${box.id}`;
 
@@ -202,6 +215,18 @@ export function createBoxGroup(box: BoundingBox3D, selected = false): THREE.Grou
 
 	group.add(wireframe);
 	group.add(mesh);
+
+	const options = resolveLabelOptions(labelOptions);
+	const labelText = buildLabelText(box, options);
+	if (labelText) {
+		const sprite = createLabelSprite(labelText, options);
+		const aspect = sprite.userData.labelAspect ?? 1;
+		const scale = Math.max(0.5, Math.max(box.size.x, box.size.y, box.size.z) * 0.25);
+		sprite.scale.set(scale * aspect, scale, 1);
+		sprite.position.set(box.center.x, box.center.y + box.size.y / 2 + scale * 0.6, box.center.z);
+		sprite.userData.boxId = box.id;
+		group.add(sprite);
+	}
 
 	group.userData = {
 		boxId: box.id,
@@ -232,6 +257,10 @@ export function updateBoxSelection(group: THREE.Group, selected: boolean): void 
 			const material = child.material as THREE.MeshBasicMaterial;
 			material.color.copy(color);
 			material.opacity = selected ? 0.2 : 0.1;
+			child.userData.isSelected = selected;
+		} else if (child instanceof THREE.Sprite) {
+			const material = child.material as THREE.SpriteMaterial;
+			material.opacity = selected ? 1.0 : 0.85;
 			child.userData.isSelected = selected;
 		}
 	});
@@ -266,7 +295,11 @@ export function getClassColor(className: string): number {
 /**
  * Creates all bounding boxes from an array of definitions
  */
-export function createBoundingBoxes(boxes: BoundingBox3D[], selectedId?: string): THREE.Group {
+export function createBoundingBoxes(
+	boxes: BoundingBox3D[],
+	selectedId?: string,
+	labelOptions?: Partial<LabelOptions>,
+): THREE.Group {
 	const container = new THREE.Group();
 	container.name = 'bounding-boxes';
 
@@ -274,7 +307,7 @@ export function createBoundingBoxes(boxes: BoundingBox3D[], selectedId?: string)
 		if (box.visible === false) return;
 
 		const isSelected = box.id === selectedId;
-		const boxGroup = createBoxGroup(box, isSelected);
+		const boxGroup = createBoxGroup(box, isSelected, labelOptions);
 		container.add(boxGroup);
 	});
 

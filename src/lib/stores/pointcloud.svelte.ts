@@ -60,6 +60,10 @@ export interface PointCloudState {
 	readonly showGrid: boolean;
 	readonly showAxes: boolean;
 	readonly showBoundingBoxes: boolean;
+	readonly showLabels: boolean;
+	readonly backgroundColor: string;
+	readonly lodEnabled: boolean;
+	readonly lodPointBudget: number;
 
 	// Navigation
 	readonly navigationMode: NavigationMode;
@@ -86,6 +90,10 @@ export interface PointCloudState {
 	setShowGrid(show: boolean): void;
 	setShowAxes(show: boolean): void;
 	setShowBoundingBoxes(show: boolean): void;
+	setShowLabels(show: boolean): void;
+	setBackgroundColor(color: string): void;
+	setLodEnabled(enabled: boolean): void;
+	setLodPointBudget(budget: number): void;
 	setNavigationMode(mode: NavigationMode): void;
 	setMeasurementType(type: MeasurementType): void;
 	updateCamera(info: Partial<CameraInfo>): void;
@@ -125,6 +133,10 @@ export function createPointCloudState(): PointCloudState {
 	let showGrid = $state(true);
 	let showAxes = $state(true);
 	let showBoundingBoxes = $state(true);
+	let showLabels = $state(true);
+	let backgroundColor = $state('#0c3b1f');
+	let lodEnabled = $state(true);
+	let lodPointBudget = $state(500_000);
 
 	// Navigation
 	let navigationMode = $state<NavigationMode>('orbit');
@@ -169,6 +181,18 @@ export function createPointCloudState(): PointCloudState {
 		},
 		get showBoundingBoxes() {
 			return showBoundingBoxes;
+		},
+		get showLabels() {
+			return showLabels;
+		},
+		get backgroundColor() {
+			return backgroundColor;
+		},
+		get lodEnabled() {
+			return lodEnabled;
+		},
+		get lodPointBudget() {
+			return lodPointBudget;
 		},
 		get navigationMode() {
 			return navigationMode;
@@ -220,6 +244,18 @@ export function createPointCloudState(): PointCloudState {
 		setShowBoundingBoxes(show) {
 			showBoundingBoxes = show;
 		},
+		setShowLabels(show) {
+			showLabels = show;
+		},
+		setBackgroundColor(color) {
+			backgroundColor = color;
+		},
+		setLodEnabled(enabled) {
+			lodEnabled = enabled;
+		},
+		setLodPointBudget(budget) {
+			lodPointBudget = Math.max(50_000, Math.min(5_000_000, Math.round(budget)));
+		},
 		setNavigationMode(mode) {
 			navigationMode = mode;
 		},
@@ -251,6 +287,10 @@ export function createPointCloudState(): PointCloudState {
 			showGrid = true;
 			showAxes = true;
 			showBoundingBoxes = true;
+			showLabels = true;
+			backgroundColor = '#0c3b1f';
+			lodEnabled = true;
+			lodPointBudget = 500_000;
 			navigationMode = 'orbit';
 			camera = { ...DEFAULT_CAMERA };
 			fps = 0;
