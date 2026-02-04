@@ -33,6 +33,85 @@ export interface LabelOptions {
 const DEFAULT_BOX_COLOR = new THREE.Color(CLOUMASK_COLORS.boundingBox);
 const SELECTED_BOX_COLOR = new THREE.Color(CLOUMASK_COLORS.boundingBoxSelected);
 
+function resolveLabelOptions(options?: Partial<LabelOptions>): LabelOptions {
+	return { ...DEFAULT_LABEL_OPTIONS, ...(options ?? {}) };
+}
+
+function buildLabelText(box: BoundingBox3D, options: LabelOptions): string {
+	const parts: string[] = [];
+	if (options.showClassName) {
+		parts.push(box.className);
+	}
+	if (options.showConfidence) {
+		parts.push(`${Math.round(box.confidence * 100)}%`);
+	}
+	return parts.join(' | ');
+}
+
+function createLabelSprite(text: string, options: LabelOptions): THREE.Sprite {
+	const canvas = document.createElement('canvas');
+	const ctx = canvas.getContext('2d');
+	if (!ctx) {
+		return new THREE.Sprite();
+	}
+
+	const fontStack = '"JetBrains Mono", "Fira Code", "SF Mono", monospace';
+	const paddingX = options.fontSize * 0.7;
+	const paddingY = options.fontSize * 0.5;
+	const ratio = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+
+	ctx.font = `${options.fontSize}px ${fontStack}`;
+	const metrics = ctx.measureText(text);
+	const textWidth = metrics.width;
+	const textHeight = options.fontSize * 1.3;
+
+	canvas.width = Math.ceil((textWidth + paddingX * 2) * ratio);
+	canvas.height = Math.ceil((textHeight + paddingY * 2) * ratio);
+	ctx.scale(ratio, ratio);
+	ctx.font = `${options.fontSize}px ${fontStack}`;
+
+	// Background
+	ctx.fillStyle = options.backgroundColor;
+	const radius = Math.min(8, textHeight / 2);
+	const width = textWidth + paddingX * 2;
+	const height = textHeight + paddingY * 2;
+
+	ctx.beginPath();
+	ctx.moveTo(radius, 0);
+	ctx.lineTo(width - radius, 0);
+	ctx.quadraticCurveTo(width, 0, width, radius);
+	ctx.lineTo(width, height - radius);
+	ctx.quadraticCurveTo(width, height, width - radius, height);
+	ctx.lineTo(radius, height);
+	ctx.quadraticCurveTo(0, height, 0, height - radius);
+	ctx.lineTo(0, radius);
+	ctx.quadraticCurveTo(0, 0, radius, 0);
+	ctx.closePath();
+	ctx.fill();
+
+	// Text
+	ctx.fillStyle = options.textColor;
+	ctx.textAlign = 'left';
+	ctx.textBaseline = 'middle';
+	ctx.fillText(text, paddingX, height / 2);
+
+	const texture = new THREE.CanvasTexture(canvas);
+	texture.needsUpdate = true;
+	texture.minFilter = THREE.LinearFilter;
+	texture.generateMipmaps = false;
+
+	const material = new THREE.SpriteMaterial({
+		map: texture,
+		transparent: true,
+		depthTest: false,
+		depthWrite: false,
+	});
+
+	const sprite = new THREE.Sprite(material);
+	sprite.userData = { labelAspect: canvas.width / canvas.height };
+
+	return sprite;
+}
 /**
  * Creates a wireframe box mesh for a 3D bounding box
  */
