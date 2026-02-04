@@ -12,6 +12,7 @@ export * from "./pipeline";
 export * from "./execution";
 export * from "./review";
 export * from "./settings";
+export * from "./pointcloud";
 
 // SSE types
 export * from "./sse";

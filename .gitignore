@@ -229,6 +229,10 @@ vite.config.ts.timestamp-*
 /src-tauri/target/
 /src-tauri/gen/schemas/
 
+# Model weights (download on demand)
+/backend/models/*.pt
+/backend/models/**/*.pt
+
 # OS files
 .DS_Store
 Thumbs.db
