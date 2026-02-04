@@ -106,6 +106,9 @@
 	// Streaming threshold (points)
 	const STREAMING_THRESHOLD = 1_000_000;
 
+	// Streaming timeout (60 seconds)
+	const STREAMING_TIMEOUT_MS = 60_000;
+
 	// Load file via streaming for large files
 	async function loadStreamedPointCloud(path: string, metadata: PointCloudMetadata): Promise<void> {
 		// Accumulators for chunked data
@@ -115,58 +118,84 @@
 		const allClassifications: number[] = [];
 		let receivedChunks = 0;
 		let totalChunks = 1;
+		let isComplete = false;
 
 		// Set up event listeners
 		const unlisteners: UnlistenFn[] = [];
 
-		const chunkListener = await listen<PointCloudChunk>('pointcloud:chunk', (event) => {
-			const chunk = event.payload;
-			totalChunks = chunk.total_chunks;
-			receivedChunks++;
-
-			// Accumulate data
-			allPositions.push(...chunk.positions);
-			if (chunk.intensities) allIntensities.push(...chunk.intensities);
-			if (chunk.colors) allColors.push(...chunk.colors);
-			if (chunk.classifications) allClassifications.push(...chunk.classifications);
-
-			// Update progress
-			const progress = 20 + Math.round((receivedChunks / totalChunks) * 60);
-			pcState.setLoadProgress(progress);
-		});
-		unlisteners.push(chunkListener);
-
-		const completeListener = await listen<PointCloudMetadata>('pointcloud:complete', () => {
-			// All chunks received - process the complete data
-			pcState.setLoadProgress(90);
-
-			const data: PointCloudData = {
-				metadata,
-				positions: allPositions,
-				intensities: allIntensities.length > 0 ? allIntensities : null,
-				colors: allColors.length > 0 ? allColors : null,
-				classifications: allClassifications.length > 0 ? allClassifications : null,
-			};
-
-			processPointCloudData(data);
-			pcState.setLoadProgress(100);
-
-			// Clean up listeners
+		// Cleanup helper
+		const cleanup = () => {
 			unlisteners.forEach((fn) => fn());
-		});
-		unlisteners.push(completeListener);
+		};
 
-		const errorListener = await listen<string>('pointcloud:error', (event) => {
-			pcState.setError(event.payload);
-			unlisteners.forEach((fn) => fn());
-		});
-		unlisteners.push(errorListener);
+		// Timeout for streaming
+		const timeoutId = setTimeout(() => {
+			if (!isComplete) {
+				pcState.setError('Point cloud streaming timed out');
+				cleanup();
+			}
+		}, STREAMING_TIMEOUT_MS);
 
-		// Start streaming - this returns immediately with metadata
-		await invoke<PointCloudMetadata>('stream_pointcloud', {
-			path,
-			config: { chunk_size: 100000 },
-		});
+		try {
+			const chunkListener = await listen<PointCloudChunk>('pointcloud:chunk', (event) => {
+				const chunk = event.payload;
+				totalChunks = chunk.total_chunks;
+				receivedChunks++;
+
+				// Accumulate data
+				allPositions.push(...chunk.positions);
+				if (chunk.intensities) allIntensities.push(...chunk.intensities);
+				if (chunk.colors) allColors.push(...chunk.colors);
+				if (chunk.classifications) allClassifications.push(...chunk.classifications);
+
+				// Update progress
+				const progress = 20 + Math.round((receivedChunks / totalChunks) * 60);
+				pcState.setLoadProgress(progress);
+			});
+			unlisteners.push(chunkListener);
+
+			const completeListener = await listen<PointCloudMetadata>('pointcloud:complete', () => {
+				isComplete = true;
+				clearTimeout(timeoutId);
+
+				// All chunks received - process the complete data
+				pcState.setLoadProgress(90);
+
+				const data: PointCloudData = {
+					metadata,
+					positions: allPositions,
+					intensities: allIntensities.length > 0 ? allIntensities : null,
+					colors: allColors.length > 0 ? allColors : null,
+					classifications: allClassifications.length > 0 ? allClassifications : null,
+				};
+
+				processPointCloudData(data);
+				pcState.setLoadProgress(100);
+
+				// Clean up listeners
+				cleanup();
+			});
+			unlisteners.push(completeListener);
+
+			const errorListener = await listen<string>('pointcloud:error', (event) => {
+				isComplete = true;
+				clearTimeout(timeoutId);
+				pcState.setError(event.payload);
+				cleanup();
+			});
+			unlisteners.push(errorListener);
+
+			// Start streaming - this returns immediately with metadata
+			await invoke<PointCloudMetadata>('stream_pointcloud', {
+				path,
+				config: { chunk_size: 100000 },
+			});
+		} catch (e) {
+			// Clean up listeners on invoke error
+			clearTimeout(timeoutId);
+			cleanup();
+			throw e;
+		}
 	}
 
 	// Load file action

@@ -93,8 +93,6 @@ export class PointCloudOctree {
 		intensities?: Float32Array,
 		classifications?: Uint8Array,
 	): void {
-		const pointCount = positions.length / 3;
-
 		this.root = this.buildNode(
 			positions,
 			bounds,
@@ -477,27 +475,27 @@ export class PointCloudOctree {
 	}
 
 	/**
-	 * Dispose of octree data
+	 * Dispose of octree data and release memory
 	 */
 	dispose(): void {
-		this.root = null;
+		if (this.root) {
+			this.disposeNode(this.root);
+			this.root = null;
+		}
 	}
-}
 
-/**
- * Build an octree from point data (can be called from WebWorker)
- */
-export function buildOctree(
-	positions: Float32Array,
-	bounds: OctreeBounds,
-	colors?: Float32Array,
-	intensities?: Float32Array,
-	classifications?: Uint8Array,
-	config?: OctreeConfig,
-): OctreeNode | null {
-	const octree = new PointCloudOctree(config);
-	octree.build(positions, bounds, colors, intensities, classifications);
-	// Access the root (we'd need to expose it or use a different pattern)
-	// For now, this is a helper for the WebWorker
-	return null; // Placeholder - actual implementation would return the root
+	private disposeNode(node: OctreeNode): void {
+		// Recursively dispose children first
+		for (const child of node.children) {
+			this.disposeNode(child);
+		}
+		node.children = [];
+
+		// Clear typed array references to help GC with large datasets
+		(node as { positions: Float32Array | null }).positions = null;
+		if (node.colors) (node as { colors: Float32Array | null }).colors = null;
+		if (node.intensities) (node as { intensities: Float32Array | null }).intensities = null;
+		if (node.classifications)
+			(node as { classifications: Uint8Array | null }).classifications = null;
+	}
 }

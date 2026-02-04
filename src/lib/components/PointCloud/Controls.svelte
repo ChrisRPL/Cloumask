@@ -11,14 +11,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Switch } from '$lib/components/ui/switch';
 	import { Separator } from '$lib/components/ui/separator';
-	import {
-		Settings2,
-		ChevronLeft,
-		ChevronRight,
-		Eye,
-		Palette,
-		Camera,
-	} from '@lucide/svelte';
+	import { Settings2, ChevronRight, Eye, Palette, Camera } from '@lucide/svelte';
 	import { getPointCloudState } from '$lib/stores/pointcloud.svelte';
 
 	let { class: className, collapsed = true, onToggle }: ControlsProps = $props();
@@ -31,7 +24,10 @@
 
 	function handlePointSizeInput(e: Event) {
 		const target = e.target as HTMLInputElement;
-		pcState.setPointSize(parseFloat(target.value));
+		const value = parseFloat(target.value);
+		if (!isNaN(value)) {
+			pcState.setPointSize(value);
+		}
 	}
 </script>
 
