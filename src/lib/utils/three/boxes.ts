@@ -76,6 +76,7 @@ function createLabelSprite(text: string, options: LabelOptions): THREE.Sprite {
 	canvas.width = Math.ceil((textWidth + paddingX * 2) * ratio);
 	canvas.height = Math.ceil((textHeight + paddingY * 2) * ratio);
 	ctx.scale(ratio, ratio);
+	ctx.font = `${options.fontSize}px ${fontStack}`;
 
 	// Background
 	ctx.fillStyle = options.backgroundColor;
@@ -98,6 +99,7 @@ function createLabelSprite(text: string, options: LabelOptions): THREE.Sprite {
 
 	// Text
 	ctx.fillStyle = options.textColor;
+	ctx.textAlign = 'left';
 	ctx.textBaseline = 'middle';
 	ctx.fillText(text, paddingX, height / 2);
 
