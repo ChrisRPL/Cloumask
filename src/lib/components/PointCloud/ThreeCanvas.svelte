@@ -1,11 +1,14 @@
 <script lang="ts" module>
-	import type { SceneContext } from '$lib/utils/three';
+	import type { SceneContext, BoundingBox3D } from '$lib/utils/three';
 	import type { Bounds3D } from '$lib/types/pointcloud';
 
 	export interface ThreeCanvasProps {
 		class?: string;
 		onReady?: (context: SceneContext) => void;
 		onFpsUpdate?: (fps: number) => void;
+		onPointClick?: (payload: { index: number; position: [number, number, number] }) => void;
+		onBoxClick?: (payload: { box: BoundingBox3D }) => void;
+		onCameraChange?: (payload: { position: [number, number, number]; target: [number, number, number] }) => void;
 		/** Point positions as flat array [x,y,z,x,y,z,...] */
 		positions?: Float32Array | null;
 		/** Intensity values (normalized 0-1) */
@@ -36,8 +39,10 @@
 		createBoundingBoxes,
 		updateBoxSelection,
 		raycastBoundingBox,
+		PointCloudOctree,
 		type ColorMode,
-		type BoundingBox3D,
+		type OctreeBounds,
+		type VisiblePointSet,
 	} from '$lib/utils/three';
 	import { getPointCloudState } from '$lib/stores/pointcloud.svelte';
 
@@ -45,6 +50,9 @@
 		class: className,
 		onReady,
 		onFpsUpdate,
+		onPointClick,
+		onBoxClick,
+		onCameraChange,
 		positions = null,
 		intensities = null,
 		colors = null,
@@ -66,6 +74,7 @@
 
 	// Point cloud mesh
 	let pointsMesh: THREE.Points | null = null;
+	let fullBounds: THREE.Box3 | null = null;
 
 	// Bounding boxes group
 	let bboxGroup: THREE.Group | null = null;
@@ -73,6 +82,18 @@
 	// Raycaster for box selection
 	const raycaster = new THREE.Raycaster();
 	const mouse = new THREE.Vector2();
+
+	const LOD_THRESHOLD_POINTS = 1_000_000;
+	const LOD_UPDATE_INTERVAL_MS = 120;
+
+	let lodOctree: PointCloudOctree | null = null;
+	let lodLastUpdate = 0;
+	const lodEligible = $derived(
+		pcState.lodEnabled &&
+			hasData &&
+			positions !== null &&
+			positions.length / 3 >= LOD_THRESHOLD_POINTS,
+	);
 
 	// Create material based on color mode and available data
 	function createMaterialForMode(
@@ -100,7 +121,7 @@
 				return createHeightMaterial({ ...config, heightMin, heightMax });
 			case 'rgb':
 				if (colors) {
-					// Colors should already be set
+				geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 					return createRGBMaterial(config);
 				}
 				// Fallback to height if no colors
@@ -151,6 +172,108 @@
 		points.name = 'point-cloud';
 
 		return points;
+	}
+
+	function getOctreeBoundsFromGeometry(geometry: THREE.BufferGeometry): OctreeBounds {
+		geometry.computeBoundingBox();
+		const box = geometry.boundingBox ?? new THREE.Box3();
+		return {
+			min: [box.min.x, box.min.y, box.min.z],
+			max: [box.max.x, box.max.y, box.max.z],
+		};
+	}
+
+	function applyFullDataToGeometry(geometry: THREE.BufferGeometry): void {
+		if (!positions) return;
+
+		geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+		if (colors) {
+			geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+		} else {
+			geometry.deleteAttribute('color');
+		}
+
+		if (intensities) {
+			geometry.setAttribute('intensity', new THREE.BufferAttribute(intensities, 1));
+		} else {
+			geometry.deleteAttribute('intensity');
+		}
+
+		if (pcState.colorMode === 'classification' && classifications) {
+			applyClassificationColors(geometry, classifications);
+		}
+
+		geometry.computeBoundingBox();
+	}
+
+	let lastVisibleSet: VisiblePointSet | null = null;
+
+	function applyVisiblePointSet(visible: VisiblePointSet): void {
+		if (!pointsMesh) return;
+
+		lastVisibleSet = visible;
+		const geometry = pointsMesh.geometry;
+
+		geometry.setAttribute('position', new THREE.BufferAttribute(visible.positions, 3));
+		geometry.attributes.position.setUsage(THREE.DynamicDrawUsage);
+
+		if (visible.colors) {
+			geometry.setAttribute('color', new THREE.BufferAttribute(visible.colors, 3));
+		} else {
+			geometry.deleteAttribute('color');
+		}
+
+		if (visible.intensities) {
+			geometry.setAttribute('intensity', new THREE.BufferAttribute(visible.intensities, 1));
+		} else {
+			geometry.deleteAttribute('intensity');
+		}
+
+		if (pcState.colorMode === 'classification' && visible.classifications) {
+			applyClassificationColors(geometry, visible.classifications);
+		}
+
+		geometry.computeBoundingBox();
+	}
+
+	function buildOctree(geometry: THREE.BufferGeometry): void {
+		if (!positions) return;
+
+		const octreeBounds: OctreeBounds = bounds
+			? {
+					min: [bounds.min[0], bounds.min[1], bounds.min[2]],
+					max: [bounds.max[0], bounds.max[1], bounds.max[2]],
+				}
+			: getOctreeBoundsFromGeometry(geometry);
+
+		const nextOctree = new PointCloudOctree();
+		nextOctree.build(
+			positions,
+			octreeBounds,
+			colors ?? undefined,
+			intensities ?? undefined,
+			classifications ?? undefined,
+		);
+
+		lodOctree?.dispose();
+		lodOctree = nextOctree;
+	}
+
+	function updateLodIfNeeded(now: number): void {
+		if (!lodOctree || !sceneCtx || !pointsMesh) return;
+		if (now - lodLastUpdate < LOD_UPDATE_INTERVAL_MS) return;
+
+		const visible = lodOctree.getVisiblePoints(
+			sceneCtx.camera,
+			pcState.lodPointBudget,
+		);
+
+		if (visible.needsUpdate) {
+			applyVisiblePointSet(visible);
+		}
+
+		lodLastUpdate = now;
 	}
 
 	// Demo point cloud data (shown when no data is loaded)
@@ -214,6 +337,12 @@
 			}
 			pointsMesh = null;
 		}
+		fullBounds = null;
+		if (lodOctree) {
+			lodOctree.dispose();
+			lodOctree = null;
+			lastVisibleSet = null;
+		}
 	}
 
 	// Remove existing bounding boxes from scene
@@ -230,6 +359,10 @@
 							(obj.material as THREE.Material).dispose();
 						}
 					}
+				} else if (obj instanceof THREE.Sprite) {
+					const material = obj.material as THREE.SpriteMaterial;
+					material.map?.dispose();
+					material.dispose();
 				}
 			});
 			bboxGroup = null;
@@ -238,7 +371,7 @@
 
 	// Handle click for bounding box selection
 	function handleClick(event: MouseEvent) {
-		if (!sceneCtx || !bboxGroup || !canvasRef) return;
+		if (!sceneCtx || !canvasRef || !pointsMesh) return;
 
 		// Calculate mouse position in normalized device coordinates
 		const rect = canvasRef.getBoundingClientRect();
@@ -248,14 +381,58 @@
 		// Update raycaster
 		raycaster.setFromCamera(mouse, sceneCtx.camera);
 
-		// Check for intersection with bounding boxes
-		const hitBox = raycastBoundingBox(raycaster, bboxGroup);
+		// Check for intersection with bounding boxes first
+		const hitBox = bboxGroup ? raycastBoundingBox(raycaster, bboxGroup) : null;
 
 		if (hitBox) {
 			pcState.setSelectedBoxId(hitBox.id);
-		} else {
-			pcState.setSelectedBoxId(null);
+			pcState.setSelection({
+				pointCount: 1,
+				className: hitBox.className,
+				confidence: hitBox.confidence,
+				boxId: hitBox.id,
+			});
+			onBoxClick?.({ box: hitBox });
+			return;
 		}
+
+		// Check for point intersection
+		const intersects = raycaster.intersectObject(pointsMesh, false);
+		if (intersects.length > 0 && intersects[0].index !== undefined) {
+			const index = intersects[0].index;
+			const positionAttr = pointsMesh.geometry.getAttribute('position') as THREE.BufferAttribute;
+			const position: [number, number, number] = [
+				positionAttr.getX(index),
+				positionAttr.getY(index),
+				positionAttr.getZ(index),
+			];
+
+			pcState.setSelectedBoxId(null);
+			pcState.setSelection({ pointCount: 1 });
+			onPointClick?.({ index, position });
+			return;
+		}
+
+		pcState.setSelectedBoxId(null);
+		pcState.setSelection(null);
+	}
+
+	function handleControlsChange() {
+		if (!sceneCtx) return;
+
+		const position = sceneCtx.camera.position;
+		const target = sceneCtx.controls.target;
+
+		pcState.updateCamera({
+			position: { x: position.x, y: position.y, z: position.z },
+			target: { x: target.x, y: target.y, z: target.z },
+			fov: sceneCtx.camera.fov,
+		});
+
+		onCameraChange?.({
+			position: [position.x, position.y, position.z],
+			target: [target.x, target.y, target.z],
+		});
 	}
 
 	// Update helpers visibility
@@ -263,6 +440,13 @@
 		if (sceneCtx) {
 			sceneCtx.helpers.grid.visible = pcState.showGrid;
 			sceneCtx.helpers.axes.visible = pcState.showAxes;
+		}
+	});
+
+	// Update background color
+	$effect(() => {
+		if (sceneCtx) {
+			sceneCtx.scene.background = new THREE.Color(pcState.backgroundColor);
 		}
 	});
 
@@ -274,6 +458,7 @@
 				updatePointSize(material, pcState.pointSize);
 			}
 		}
+		raycaster.params.Points.threshold = Math.max(0.1, pcState.pointSize * 0.4);
 	});
 
 	// React to data changes - create or update point cloud
@@ -282,10 +467,32 @@
 
 		// Remove existing point cloud
 		removePointCloud();
+		let focusBounds: THREE.Box3 | null = null;
 
 		// Create new point cloud
 		if (hasData && positions) {
 			pointsMesh = createPointCloudFromData();
+			pointsMesh.geometry.computeBoundingBox();
+			focusBounds = bounds
+				? new THREE.Box3(
+						new THREE.Vector3(bounds.min[0], bounds.min[1], bounds.min[2]),
+						new THREE.Vector3(bounds.max[0], bounds.max[1], bounds.max[2]),
+					)
+				: (pointsMesh.geometry.boundingBox ?? null);
+			fullBounds = focusBounds;
+
+			if (lodEligible) {
+				buildOctree(pointsMesh.geometry);
+				const initialVisible = lodOctree?.getVisiblePoints(
+					sceneCtx.camera,
+					pcState.lodPointBudget,
+				);
+				if (initialVisible?.needsUpdate) {
+					applyVisiblePointSet(initialVisible);
+				}
+			} else {
+				lastVisibleSet = null;
+			}
 		} else {
 			// Show demo if no data
 			pointsMesh = createDemoPointCloud();
@@ -294,12 +501,8 @@
 		sceneCtx.scene.add(pointsMesh);
 
 		// Focus camera on new point cloud
-		if (bounds && hasData) {
-			const box = new THREE.Box3(
-				new THREE.Vector3(bounds.min[0], bounds.min[1], bounds.min[2]),
-				new THREE.Vector3(bounds.max[0], bounds.max[1], bounds.max[2]),
-			);
-			focusOnBounds(sceneCtx.camera, sceneCtx.controls, box);
+		if (focusBounds && hasData) {
+			focusOnBounds(sceneCtx.camera, sceneCtx.controls, focusBounds);
 		} else if (pointsMesh.geometry.boundingBox) {
 			const center = pointsMesh.geometry.boundingBox.getCenter(new THREE.Vector3());
 			sceneCtx.controls.target.copy(center);
@@ -316,9 +519,9 @@
 		let heightMin = 0;
 		let heightMax = 100;
 
-		if (bounds) {
-			heightMin = bounds.min[2];
-			heightMax = bounds.max[2];
+		if (fullBounds) {
+			heightMin = fullBounds.min.z;
+			heightMax = fullBounds.max.z;
 		} else if (geometry.boundingBox) {
 			heightMin = geometry.boundingBox.min.z;
 			heightMax = geometry.boundingBox.max.z;
@@ -333,6 +536,38 @@
 
 		// Create new material
 		pointsMesh.material = createMaterialForMode(pcState.colorMode, geometry, heightMin, heightMax);
+		if (lodOctree && lastVisibleSet) {
+			applyVisiblePointSet(lastVisibleSet);
+		} else if (!lodOctree) {
+			applyFullDataToGeometry(geometry);
+		}
+	});
+
+	// LOD toggle and budget changes
+	$effect(() => {
+		if (!sceneCtx || !pointsMesh) return;
+
+		if (!lodEligible) {
+			lodOctree?.dispose();
+			lodOctree = null;
+			lastVisibleSet = null;
+			if (hasData) {
+				applyFullDataToGeometry(pointsMesh.geometry);
+			}
+			return;
+		}
+
+		if (!lodOctree && hasData) {
+			buildOctree(pointsMesh.geometry);
+		}
+
+		if (lodOctree) {
+			lodOctree.invalidate();
+			const visible = lodOctree.getVisiblePoints(sceneCtx.camera, pcState.lodPointBudget);
+			if (visible.needsUpdate) {
+				applyVisiblePointSet(visible);
+			}
+		}
 	});
 
 	// React to bounding boxes changes
@@ -347,6 +582,10 @@
 			bboxGroup = createBoundingBoxes(
 				pcState.boundingBoxes,
 				pcState.selectedBoxId ?? undefined,
+				{
+					showClassName: pcState.showLabels,
+					showConfidence: pcState.showLabels,
+				},
 			);
 			sceneCtx.scene.add(bboxGroup);
 		}
@@ -388,6 +627,7 @@
 		const ctx = createScene(canvasRef, {
 			showGrid: pcState.showGrid,
 			showAxes: pcState.showAxes,
+			backgroundColor: new THREE.Color(pcState.backgroundColor).getHex(),
 		});
 		sceneCtx = ctx;
 
@@ -399,8 +639,14 @@
 		ctx.renderer.setAnimationLoop(() => {
 			trackFps();
 			ctx.controls.update();
+			if (lodEligible) {
+				updateLodIfNeeded(performance.now());
+			}
 			ctx.renderer.render(ctx.scene, ctx.camera);
 		});
+
+		ctx.controls.addEventListener('change', handleControlsChange);
+		handleControlsChange();
 
 		// Notify parent
 		onReady?.(ctx);
@@ -409,6 +655,7 @@
 	// Cleanup - properly stop animation loop before disposal
 	onDestroy(() => {
 		if (sceneCtx) {
+			sceneCtx.controls.removeEventListener('change', handleControlsChange);
 			sceneCtx.renderer.setAnimationLoop(null);
 			sceneCtx.dispose();
 		}

@@ -13,6 +13,7 @@ export { default as ViewerHeader } from './ViewerHeader.svelte';
 export { default as ViewerToolbar } from './ViewerToolbar.svelte';
 export { default as InfoPanel } from './InfoPanel.svelte';
 export { default as Controls } from './Controls.svelte';
+export { default as SettingsModal } from './SettingsModal.svelte';
 
 // Re-export types
 export type { PointCloudViewerProps } from './PointCloudViewer.svelte';
@@ -21,3 +22,4 @@ export type { ViewerHeaderProps } from './ViewerHeader.svelte';
 export type { ViewerToolbarProps } from './ViewerToolbar.svelte';
 export type { InfoPanelProps } from './InfoPanel.svelte';
 export type { ControlsProps } from './Controls.svelte';
+export type { SettingsModalProps } from './SettingsModal.svelte';

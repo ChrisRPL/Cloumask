@@ -132,6 +132,15 @@
 						onCheckedChange={(checked) => pcState.setShowBoundingBoxes(checked)}
 					/>
 				</div>
+
+				<!-- Label Toggle -->
+				<div class="flex items-center justify-between">
+					<Label class="text-xs font-mono">Show Labels</Label>
+					<Switch
+						checked={pcState.showLabels}
+						onCheckedChange={(checked) => pcState.setShowLabels(checked)}
+					/>
+				</div>
 			</div>
 
 			<Separator />

@@ -1,6 +1,11 @@
 <script lang="ts" module>
+	import type { BoundingBox3D } from '$lib/utils/three';
+
 	export interface PointCloudViewerProps {
 		class?: string;
+		onPointClick?: (payload: { index: number; position: [number, number, number] }) => void;
+		onBoxClick?: (payload: { box: BoundingBox3D }) => void;
+		onCameraChange?: (payload: { position: [number, number, number]; target: [number, number, number] }) => void;
 	}
 </script>
 
@@ -11,12 +16,14 @@
 	import { resetCamera, type SceneContext } from '$lib/utils/three';
 	import { invoke } from '@tauri-apps/api/core';
 	import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-	import { open } from '@tauri-apps/plugin-dialog';
+	import { open, save } from '@tauri-apps/plugin-dialog';
 	import type {
 		PointCloudData,
 		PointCloudMetadata,
 		PointCloudChunk,
 		Bounds3D,
+		PointCloudFormat,
+		ConversionOptions,
 	} from '$lib/types/pointcloud';
 	import { toFloat32Array, unpackColorsNormalized } from '$lib/types/pointcloud';
 	import ViewerHeader from './ViewerHeader.svelte';
@@ -24,8 +31,9 @@
 	import ThreeCanvas from './ThreeCanvas.svelte';
 	import InfoPanel from './InfoPanel.svelte';
 	import Controls from './Controls.svelte';
+	import SettingsModal from './SettingsModal.svelte';
 
-	let { class: className }: PointCloudViewerProps = $props();
+	let { class: className, onPointClick, onBoxClick, onCameraChange }: PointCloudViewerProps = $props();
 
 	// Initialize pointcloud state in context
 	const pcState = setPointCloudState();
@@ -36,6 +44,7 @@
 	// Panel collapsed states
 	let infoPanelCollapsed = $state(false);
 	let controlsCollapsed = $state(true);
+	let settingsOpen = $state(false);
 
 	// Point cloud data for ThreeCanvas
 	let positions = $state<Float32Array | null>(null);
@@ -244,16 +253,59 @@
 		}
 	}
 
-	// Export action (placeholder)
+	// Export action
 	function handleExport() {
-		// TODO: Implement export
-		console.log('Export - to be implemented');
+		void (async () => {
+			if (!pcState.file) return;
+
+			try {
+				const defaultName = pcState.file.name.replace(/\.[^/.]+$/, '');
+				const outputPath = await save({
+					defaultPath: `${defaultName}.ply`,
+					filters: [
+						{
+							name: 'Point Cloud',
+							extensions: ['ply', 'pcd', 'las', 'laz'],
+						},
+					],
+				});
+
+				if (!outputPath) return;
+
+				const extension = outputPath.split('.').pop()?.toLowerCase();
+				if (!extension || !['ply', 'pcd', 'las', 'laz'].includes(extension)) {
+					throw new Error('Unsupported export format');
+				}
+
+				pcState.setLoading(true);
+				pcState.setLoadProgress(0);
+
+				const options: ConversionOptions = {
+					target_format: extension as PointCloudFormat,
+					preserve_intensity: true,
+					preserve_rgb: true,
+					preserve_classification: true,
+					decimation: null,
+				};
+
+				await invoke<PointCloudMetadata>('convert_pointcloud', {
+					input_path: pcState.file.path,
+					output_path: outputPath,
+					options,
+				});
+
+				pcState.setLoadProgress(100);
+			} catch (e) {
+				pcState.setError(e instanceof Error ? e.message : String(e));
+			} finally {
+				pcState.setLoading(false);
+			}
+		})();
 	}
 
-	// Settings action (placeholder)
+	// Settings action
 	function handleSettings() {
-		// TODO: Open settings modal
-		console.log('Settings - to be implemented');
+		settingsOpen = true;
 	}
 
 	// Keyboard shortcuts
@@ -339,6 +391,9 @@
 		<ThreeCanvas
 			onReady={handleSceneReady}
 			onFpsUpdate={handleFpsUpdate}
+			onPointClick={onPointClick}
+			onBoxClick={onBoxClick}
+			onCameraChange={onCameraChange}
 			{positions}
 			{intensities}
 			{colors}
@@ -375,4 +430,6 @@
 
 	<!-- Info Panel -->
 	<InfoPanel collapsed={infoPanelCollapsed} onToggle={() => (infoPanelCollapsed = !infoPanelCollapsed)} />
+
+	<SettingsModal bind:open={settingsOpen} />
 </div>

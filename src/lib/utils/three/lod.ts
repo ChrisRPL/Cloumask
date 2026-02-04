@@ -468,6 +468,14 @@ export class PointCloudOctree {
 	}
 
 	/**
+	 * Force next LOD update regardless of camera movement
+	 */
+	invalidate(): void {
+		this.lastCameraPosition.set(Number.POSITIVE_INFINITY, 0, 0);
+		this.lastCameraTarget.set(Number.POSITIVE_INFINITY, 0, 0);
+	}
+
+	/**
 	 * Get total point count
 	 */
 	getTotalPointCount(): number {
