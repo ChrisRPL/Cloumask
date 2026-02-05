@@ -35,6 +35,21 @@ from backend.cv.anonymization import (
     AnonymizationResult,
     anonymize,
 )
+from backend.cv.anonymization_3d import (
+    Anonymization3DResult,
+    AnonymizationMode3D,
+    PointCloudAnonymizer,
+)
+from backend.cv.face_3d_projection import (
+    expand_box,
+    find_points_in_2d_box,
+    project_points_to_camera,
+    render_depth_image,
+)
+from backend.cv.virtual_camera import (
+    VirtualCamera,
+    generate_virtual_cameras,
+)
 from backend.cv.base import (
     BaseModelWrapper,
     ModelInfo,
@@ -212,10 +227,21 @@ __all__ = [
     # Point Cloud Processing
     "PointCloudProcessor",
     "get_processor",
-    # Anonymization
+    # Anonymization (2D)
     "AnonymizationConfig",
     "AnonymizationMode",
     "AnonymizationPipeline",
     "AnonymizationResult",
     "anonymize",
+    # Anonymization (3D)
+    "Anonymization3DResult",
+    "AnonymizationMode3D",
+    "PointCloudAnonymizer",
+    # Virtual Camera & Face-3D Projection
+    "VirtualCamera",
+    "generate_virtual_cameras",
+    "project_points_to_camera",
+    "render_depth_image",
+    "find_points_in_2d_box",
+    "expand_box",
 ]
