@@ -41,12 +41,15 @@ Available Tools:
     - Project3DTo2DTool: Project 3D detections to 2D image coordinates
     - ProcessPointCloudTool: Point cloud processing (downsample, filter, normals)
     - PointCloudStatsTool: Get point cloud metadata and statistics
+    - AnonymizePointCloudTool: 3D point cloud face anonymization (remove/noise)
+    - ExtractRosbagTool: Extract point clouds and images from ROS bags
     - ExportTool: Export annotations to various formats (stub)
     - CustomScriptTool: Execute user-defined Python scripts
 """
 
 # Import tool implementations to trigger registration via @register_tool decorator
 from backend.agent.tools.anonymize import AnonymizeTool
+from backend.agent.tools.anonymize_3d import AnonymizePointCloudTool
 from backend.agent.tools.base import (
     BaseTool,
     ProgressCallback,
@@ -74,6 +77,7 @@ from backend.agent.tools.registry import (
     get_tool_registry,
     register_tool,
 )
+from backend.agent.tools.rosbag import ExtractRosbagTool
 from backend.agent.tools.scan import ScanDirectoryTool
 from backend.agent.tools.segment import SegmentTool
 
@@ -108,4 +112,6 @@ __all__ = [
     "CustomScriptTool",
     "ProcessPointCloudTool",
     "PointCloudStatsTool",
+    "AnonymizePointCloudTool",
+    "ExtractRosbagTool",
 ]
