@@ -64,7 +64,8 @@ def project_points_to_camera(
     safe_z = np.where(valid, -points_cam[:, 2], 1.0)
 
     u = K[0, 0] * points_cam[:, 0] / safe_z + K[0, 2]
-    v = K[1, 1] * points_cam[:, 1] / safe_z + K[1, 2]
+    # Negate Y to convert from camera frame (Y-up) to image frame (Y-down)
+    v = K[1, 1] * (-points_cam[:, 1]) / safe_z + K[1, 2]
 
     points_2d = np.stack([u, v], axis=1)
 

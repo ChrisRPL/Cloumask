@@ -227,7 +227,7 @@ class PointCloudAnonymizer:
         face_regions_found = 0
 
         for cam_idx, cam in enumerate(cameras):
-            indices = self._detect_faces_in_view(
+            indices, det_count = self._detect_faces_in_view(
                 points, cam, face_confidence, face_margin
             )
             if len(indices) > 0:
@@ -237,7 +237,7 @@ class PointCloudAnonymizer:
                     len(indices),
                 )
             face_point_indices.update(indices)
-            face_regions_found += self._last_detection_count
+            face_regions_found += det_count
 
         # Apply anonymization
         face_indices_arr = np.array(sorted(face_point_indices), dtype=np.intp)
@@ -252,7 +252,7 @@ class PointCloudAnonymizer:
         # Verification pass
         verification_passed = True
         if verify and face_regions_found > 0:
-            verification_passed = self._verify(new_pcd, num_views, resolution, face_confidence)
+            verification_passed = self.verify(new_pcd, num_views, resolution, face_confidence)
 
         processing_time_ms = (time.perf_counter() - start_time) * 1000
 
@@ -285,21 +285,21 @@ class PointCloudAnonymizer:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    # Tracks the number of face boxes from the last _detect_faces_in_view call
-    _last_detection_count: int = 0
-
     def _detect_faces_in_view(
         self,
         points: np.ndarray,
         camera: VirtualCamera,
         confidence: float,
         margin: float,
-    ) -> set[int]:
+    ) -> tuple[set[int], int]:
         """
         Detect faces in a single virtual camera view and return 3D point indices.
 
         Renders a depth image, writes it to a temporary file for the face
         detector, then maps detected 2D boxes back to 3D point indices.
+
+        Returns:
+            (point_indices, detection_count) tuple.
         """
         import tempfile
 
@@ -312,8 +312,7 @@ class PointCloudAnonymizer:
 
         # Skip empty views
         if depth_image.max() == 0:
-            self._last_detection_count = 0
-            return set()
+            return set(), 0
 
         # Write temp image for face detector (expects a file path)
         with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
@@ -327,10 +326,10 @@ class PointCloudAnonymizer:
         finally:
             Path(tmp_path).unlink(missing_ok=True)
 
-        self._last_detection_count = len(result.faces)
+        detection_count = len(result.faces)
 
         if not result.faces:
-            return set()
+            return set(), 0
 
         # Project all points to this camera
         points_2d, _depths, valid = project_points_to_camera(points, camera)
@@ -352,7 +351,7 @@ class PointCloudAnonymizer:
             )
             collected.update(indices.tolist())
 
-        return collected
+        return collected, detection_count
 
     @staticmethod
     def _apply_anonymization(
@@ -414,14 +413,33 @@ class PointCloudAnonymizer:
 
         return new_pcd, points_removed, points_noised
 
-    def _verify(
+    def verify(
         self,
         pcd: o3d.geometry.PointCloud,
-        num_views: int,
-        resolution: tuple[int, int],
-        confidence: float,
+        num_views: int = 8,
+        resolution: tuple[int, int] = (640, 480),
+        confidence: float = 0.4,
     ) -> bool:
-        """Re-project anonymized cloud and check that no faces remain."""
+        """
+        Verify that a point cloud contains no detectable faces.
+
+        Re-projects the cloud to virtual camera views and runs face
+        detection on each rendered depth image.
+
+        Args:
+            pcd: Open3D PointCloud to verify.
+            num_views: Number of virtual camera viewpoints.
+            resolution: Virtual camera image resolution (width, height).
+            confidence: Face detection confidence threshold.
+
+        Returns:
+            True if no faces are detected across all views.
+
+        Raises:
+            RuntimeError: If the anonymizer is not loaded.
+        """
+        if not self._is_loaded or self._face_detector is None:
+            raise RuntimeError("PointCloudAnonymizer not loaded. Call load() first.")
         points = np.asarray(pcd.points)
         if len(points) == 0:
             return True

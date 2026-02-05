@@ -214,8 +214,10 @@ class TestProjectPointsToCamera:
         pts = np.array([[5.0, 5.0, 1.5]])
         pts2d, depths, valid = project_points_to_camera(pts, cam)
 
-        # The center point should project to somewhere in the image
-        assert valid.any() or True  # May not be exactly in bounds, but should not crash
+        # Projection should complete without error and return correct shapes
+        assert pts2d.shape == (1, 2)
+        assert depths.shape == (1,)
+        assert valid.shape == (1,)
 
 
 class TestRenderDepthImage:
@@ -288,8 +290,8 @@ class TestExpandBox:
 class TestPointCloudAnonymizerUnit:
     """Unit tests for the full anonymization pipeline with mocks."""
 
-    @patch("backend.cv.anonymization_3d.get_face_detector")
-    @patch("backend.cv.anonymization_3d.select_device", return_value="cpu")
+    @patch("backend.cv.faces.get_face_detector")
+    @patch("backend.cv.device.select_device", return_value="cpu")
     def test_load_unload(
         self,
         mock_device: MagicMock,
@@ -311,8 +313,8 @@ class TestPointCloudAnonymizerUnit:
         with pytest.raises(RuntimeError, match="not loaded"):
             anon.anonymize("input.pcd", "output.pcd")
 
-    @patch("backend.cv.anonymization_3d.get_face_detector")
-    @patch("backend.cv.anonymization_3d.select_device", return_value="cpu")
+    @patch("backend.cv.faces.get_face_detector")
+    @patch("backend.cv.device.select_device", return_value="cpu")
     def test_anonymize_empty_cloud(
         self,
         mock_device: MagicMock,
@@ -334,8 +336,8 @@ class TestPointCloudAnonymizerUnit:
 
         anon.unload()
 
-    @patch("backend.cv.anonymization_3d.get_face_detector")
-    @patch("backend.cv.anonymization_3d.select_device", return_value="cpu")
+    @patch("backend.cv.faces.get_face_detector")
+    @patch("backend.cv.device.select_device", return_value="cpu")
     def test_anonymize_no_faces_preserves_points(
         self,
         mock_device: MagicMock,
@@ -359,8 +361,8 @@ class TestPointCloudAnonymizerUnit:
 
         anon.unload()
 
-    @patch("backend.cv.anonymization_3d.get_face_detector")
-    @patch("backend.cv.anonymization_3d.select_device", return_value="cpu")
+    @patch("backend.cv.faces.get_face_detector")
+    @patch("backend.cv.device.select_device", return_value="cpu")
     def test_anonymize_remove_mode(
         self,
         mock_device: MagicMock,
@@ -391,8 +393,8 @@ class TestPointCloudAnonymizerUnit:
 
         anon.unload()
 
-    @patch("backend.cv.anonymization_3d.get_face_detector")
-    @patch("backend.cv.anonymization_3d.select_device", return_value="cpu")
+    @patch("backend.cv.faces.get_face_detector")
+    @patch("backend.cv.device.select_device", return_value="cpu")
     def test_anonymize_noise_mode(
         self,
         mock_device: MagicMock,
@@ -422,8 +424,8 @@ class TestPointCloudAnonymizerUnit:
 
         anon.unload()
 
-    @patch("backend.cv.anonymization_3d.get_face_detector")
-    @patch("backend.cv.anonymization_3d.select_device", return_value="cpu")
+    @patch("backend.cv.faces.get_face_detector")
+    @patch("backend.cv.device.select_device", return_value="cpu")
     def test_anonymize_preserves_colors(
         self,
         mock_device: MagicMock,
@@ -447,8 +449,8 @@ class TestPointCloudAnonymizerUnit:
 
         anon.unload()
 
-    @patch("backend.cv.anonymization_3d.get_face_detector")
-    @patch("backend.cv.anonymization_3d.select_device", return_value="cpu")
+    @patch("backend.cv.faces.get_face_detector")
+    @patch("backend.cv.device.select_device", return_value="cpu")
     def test_nonexistent_input_raises(
         self,
         mock_device: MagicMock,
@@ -465,8 +467,8 @@ class TestPointCloudAnonymizerUnit:
 
         anon.unload()
 
-    @patch("backend.cv.anonymization_3d.get_face_detector")
-    @patch("backend.cv.anonymization_3d.select_device", return_value="cpu")
+    @patch("backend.cv.faces.get_face_detector")
+    @patch("backend.cv.device.select_device", return_value="cpu")
     def test_result_timing(
         self,
         mock_device: MagicMock,

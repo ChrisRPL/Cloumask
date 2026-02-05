@@ -92,6 +92,12 @@ class Verify3DRequest(BaseModel):
     face_confidence: float = Field(
         0.4, ge=0.0, le=1.0, description="Face detection confidence threshold"
     )
+    resolution_width: int = Field(
+        640, ge=64, le=1920, description="Virtual camera image width"
+    )
+    resolution_height: int = Field(
+        480, ge=64, le=1080, description="Virtual camera image height"
+    )
 
 
 class Verify3DResponse(BaseModel):
@@ -178,6 +184,8 @@ async def anonymize_3d(request: Anonymize3DRequest) -> Anonymize3DResponse:
             mode=result.mode,
         )
 
+    except HTTPException:
+        raise
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except ValueError as e:
@@ -200,7 +208,6 @@ async def verify_3d(request: Verify3DRequest) -> Verify3DResponse:
     try:
         input_path = _validate_pc_path(request.input_path, must_exist=True)
 
-        import numpy as np
         import open3d as o3d
 
         pcd = o3d.io.read_point_cloud(str(input_path))
@@ -212,11 +219,11 @@ async def verify_3d(request: Verify3DRequest) -> Verify3DResponse:
             )
 
         anonymizer = _get_anonymizer()
-        passed = anonymizer._verify(
+        passed = anonymizer.verify(
             pcd,
-            request.num_views,
-            (640, 480),
-            request.face_confidence,
+            num_views=request.num_views,
+            resolution=(request.resolution_width, request.resolution_height),
+            confidence=request.face_confidence,
         )
 
         return Verify3DResponse(
@@ -225,6 +232,8 @@ async def verify_3d(request: Verify3DRequest) -> Verify3DResponse:
             views_checked=request.num_views,
         )
 
+    except HTTPException:
+        raise
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except ValueError as e:
