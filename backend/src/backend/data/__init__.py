@@ -3,9 +3,20 @@
 This module provides data loading and extraction utilities including:
 - ROS bag parsing and sensor data extraction
 - Core data models for label representation (BBox, Label, Sample, Dataset)
+- Format loaders and exporters (YOLO, COCO, KITTI, VOC, CVAT)
 - Format conversion utilities
 """
 
+from backend.data.formats import (
+    FormatExporter,
+    FormatLoader,
+    FormatRegistry,
+    convert,
+    detect_format,
+    get_exporter,
+    get_loader,
+    list_formats,
+)
 from backend.data.models import (
     BBox,
     BBoxFormat,
@@ -51,6 +62,15 @@ __all__ = [
     "LabelSchema",
     "SampleSchema",
     "DatasetStatsSchema",
+    # Format handling
+    "FormatLoader",
+    "FormatExporter",
+    "FormatRegistry",
+    "get_loader",
+    "get_exporter",
+    "detect_format",
+    "list_formats",
+    "convert",
     # ROS Enums
     "BagFormat",
     # ROS Dataclasses
@@ -73,3 +93,4 @@ __all__ = [
     "RosbagParseError",
     "get_parser",
 ]
+
