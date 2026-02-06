@@ -1,5 +1,5 @@
 """API route handlers."""
 
-from backend.api.routes import health, llm, review
+from backend.api.routes import anonymize_3d, detect3d, health, llm, review, rosbag
 
-__all__ = ["health", "llm", "review"]
+__all__ = ["anonymize_3d", "detect3d", "health", "llm", "review", "rosbag"]

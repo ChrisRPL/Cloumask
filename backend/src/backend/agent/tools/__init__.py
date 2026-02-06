@@ -38,12 +38,18 @@ Available Tools:
     - AnonymizeTool: Anonymize faces and plates (blur, blackbox, pixelate, mask)
     - FaceDetectTool: Face detection (SCRFD, YuNet, or SAM3 quality mode)
     - Detect3DTool: 3D object detection (PV-RCNN++, CenterPoint)
+    - Project3DTo2DTool: Project 3D detections to 2D image coordinates
+    - ProcessPointCloudTool: Point cloud processing (downsample, filter, normals)
+    - PointCloudStatsTool: Get point cloud metadata and statistics
+    - AnonymizePointCloudTool: 3D point cloud face anonymization (remove/noise)
+    - ExtractRosbagTool: Extract point clouds and images from ROS bags
     - ExportTool: Export annotations to various formats (stub)
     - CustomScriptTool: Execute user-defined Python scripts
 """
 
 # Import tool implementations to trigger registration via @register_tool decorator
 from backend.agent.tools.anonymize import AnonymizeTool
+from backend.agent.tools.anonymize_3d import AnonymizePointCloudTool
 from backend.agent.tools.base import (
     BaseTool,
     ProgressCallback,
@@ -56,6 +62,7 @@ from backend.agent.tools.base import (
 from backend.agent.tools.custom import CustomScriptTool
 from backend.agent.tools.detect import DetectTool
 from backend.agent.tools.detect_3d import Detect3DTool
+from backend.agent.tools.pointcloud_process import PointCloudStatsTool, ProcessPointCloudTool
 from backend.agent.tools.discovery import (
     discover_tools,
     initialize_tools,
@@ -63,12 +70,14 @@ from backend.agent.tools.discovery import (
     reload_tools,
 )
 from backend.agent.tools.export import ExportTool
+from backend.agent.tools.fusion import Project3DTo2DTool
 from backend.agent.tools.faces import FaceDetectTool
 from backend.agent.tools.registry import (
     ToolRegistry,
     get_tool_registry,
     register_tool,
 )
+from backend.agent.tools.rosbag import ExtractRosbagTool
 from backend.agent.tools.scan import ScanDirectoryTool
 from backend.agent.tools.segment import SegmentTool
 
@@ -98,6 +107,11 @@ __all__ = [
     "AnonymizeTool",
     "FaceDetectTool",
     "Detect3DTool",
+    "Project3DTo2DTool",
     "ExportTool",
     "CustomScriptTool",
+    "ProcessPointCloudTool",
+    "PointCloudStatsTool",
+    "AnonymizePointCloudTool",
+    "ExtractRosbagTool",
 ]

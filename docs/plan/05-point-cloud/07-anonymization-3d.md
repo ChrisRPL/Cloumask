@@ -1,6 +1,6 @@
 # 3D Point Cloud Anonymization
 
-> **Status:** 🔴 Not Started
+> **Status:** 🟢 Complete
 > **Priority:** P1 (High)
 > **Dependencies:** 03-cv-models (SCRFD), 05-2d-3d-fusion, 02-python-open3d
 > **Parent:** [SPEC.md](./SPEC.md)

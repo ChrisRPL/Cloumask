@@ -72,7 +72,7 @@ Cloumask replaces complex CLI tools, fragmented scripts, and cloud-dependent pla
 | **Agent System** | 🟢 Complete | P0 | [SPEC](./02-agent-system/SPEC.md) |
 | **CV Models** | 🟢 Complete | P0 | [SPEC](./03-cv-models/SPEC.md) |
 | **Frontend UI** | 🟢 Complete | P1 | [SPEC](./04-frontend-ui/SPEC.md) |
-| **Point Cloud** | 🔴 Not Started | P1 | [SPEC](./05-point-cloud/SPEC.md) |
+| **Point Cloud** | 🟢 Complete | P1 | [SPEC](./05-point-cloud/SPEC.md) |
 | **Data Pipeline** | 🔴 Not Started | P1 | [SPEC](./06-data-pipeline/SPEC.md) |
 
 ---

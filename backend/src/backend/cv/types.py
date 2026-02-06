@@ -379,6 +379,59 @@ class Detection3D(BaseModel):
         """Volume of the 3D bounding box in cubic meters."""
         return self.dimensions[0] * self.dimensions[1] * self.dimensions[2]
 
+    def to_corners(self) -> "NDArray[np.float64]":
+        """
+        Get 8 corner points of the 3D bounding box.
+
+        Computes corners by applying yaw rotation around z-axis to the
+        box dimensions centered at the detection center.
+
+        Returns:
+            (8, 3) array of corner coordinates in world frame.
+            Corner order: [front-left-bottom, front-right-bottom,
+            front-right-top, front-left-top, rear-left-bottom,
+            rear-right-bottom, rear-right-top, rear-left-top]
+        """
+        cx, cy, cz = self.center
+        length, width, height = self.dimensions  # l=x, w=y, h=z
+        yaw = self.rotation
+
+        # Half dimensions
+        hl, hw, hh = length / 2, width / 2, height / 2
+
+        # Corner offsets in object frame (before rotation)
+        # Front = +x, Left = +y, Top = +z (KITTI convention)
+        corners_local = np.array(
+            [
+                [hl, hw, -hh],  # front-left-bottom
+                [hl, -hw, -hh],  # front-right-bottom
+                [hl, -hw, hh],  # front-right-top
+                [hl, hw, hh],  # front-left-top
+                [-hl, hw, -hh],  # rear-left-bottom
+                [-hl, -hw, -hh],  # rear-right-bottom
+                [-hl, -hw, hh],  # rear-right-top
+                [-hl, hw, hh],  # rear-left-top
+            ],
+            dtype=np.float64,
+        )
+
+        # Rotation matrix around z-axis (yaw)
+        cos_yaw = np.cos(yaw)
+        sin_yaw = np.sin(yaw)
+        rotation_matrix = np.array(
+            [
+                [cos_yaw, -sin_yaw, 0],
+                [sin_yaw, cos_yaw, 0],
+                [0, 0, 1],
+            ],
+            dtype=np.float64,
+        )
+
+        # Rotate corners and translate to world frame
+        corners_world = (rotation_matrix @ corners_local.T).T + np.array([cx, cy, cz])
+
+        return corners_world
+
 
 class Detection3DResult(BaseModel):
     """
@@ -443,3 +496,92 @@ class PlateDetectionResult(BaseModel):
     def count(self) -> int:
         """Number of plates detected."""
         return len(self.plates)
+
+
+# Point Cloud Processing Types
+
+
+class PointCloudStats(BaseModel):
+    """
+    Statistics and metadata about a point cloud file.
+
+    Provides comprehensive information about a point cloud including
+    point count, spatial bounds, and available attributes.
+
+    Attributes:
+        point_count: Total number of points in the cloud.
+        bounds_min: Minimum coordinates (x, y, z) in meters.
+        bounds_max: Maximum coordinates (x, y, z) in meters.
+        has_colors: Whether the cloud has RGB color data.
+        has_normals: Whether surface normals are computed.
+        has_intensity: Whether intensity values are available.
+        file_path: Path to the point cloud file.
+        file_format: File format (pcd, ply, las, laz, bin).
+    """
+
+    point_count: int = Field(..., ge=0, description="Total number of points")
+    bounds_min: tuple[float, float, float] = Field(
+        ..., description="Minimum coordinates (x, y, z) in meters"
+    )
+    bounds_max: tuple[float, float, float] = Field(
+        ..., description="Maximum coordinates (x, y, z) in meters"
+    )
+    has_colors: bool = Field(..., description="Whether RGB colors are present")
+    has_normals: bool = Field(..., description="Whether normals are computed")
+    has_intensity: bool = Field(..., description="Whether intensity values exist")
+    file_path: str = Field(..., description="Path to the point cloud file")
+    file_format: str = Field(..., description="File format (pcd, ply, las, etc.)")
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def extent(self) -> tuple[float, float, float]:
+        """Spatial extent (width, depth, height) in meters."""
+        return (
+            self.bounds_max[0] - self.bounds_min[0],
+            self.bounds_max[1] - self.bounds_min[1],
+            self.bounds_max[2] - self.bounds_min[2],
+        )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def center(self) -> tuple[float, float, float]:
+        """Center point of the bounding box."""
+        return (
+            (self.bounds_min[0] + self.bounds_max[0]) / 2,
+            (self.bounds_min[1] + self.bounds_max[1]) / 2,
+            (self.bounds_min[2] + self.bounds_max[2]) / 2,
+        )
+
+
+class PointCloudProcessingResult(BaseModel):
+    """
+    Result of a point cloud processing operation.
+
+    Contains information about the operation performed, input/output
+    point counts, and processing parameters.
+
+    Attributes:
+        output_path: Path to the output point cloud file.
+        original_count: Number of points in the input cloud.
+        result_count: Number of points in the output cloud.
+        operation: Name of the operation performed.
+        processing_time_ms: Time taken for processing in milliseconds.
+        parameters: Dictionary of operation-specific parameters.
+    """
+
+    output_path: str = Field(..., description="Path to output point cloud file")
+    original_count: int = Field(..., ge=0, description="Input point count")
+    result_count: int = Field(..., ge=0, description="Output point count")
+    operation: str = Field(..., description="Operation performed")
+    processing_time_ms: float = Field(..., ge=0.0, description="Processing time in ms")
+    parameters: dict[str, float | int | str | bool] = Field(
+        default_factory=dict, description="Operation parameters"
+    )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def reduction_ratio(self) -> float:
+        """Ratio of points removed (0.0 = none, 1.0 = all)."""
+        if self.original_count == 0:
+            return 0.0
+        return 1.0 - (self.result_count / self.original_count)

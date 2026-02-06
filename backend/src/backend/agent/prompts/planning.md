@@ -40,6 +40,52 @@ Convert annotations to standard format
   - `output_path` (str, required): Output directory
   - `format` (str, required): "yolo" | "coco" | "pascal"
 
+### pointcloud_stats
+Get metadata and statistics for a point cloud file
+- **Parameters:**
+  - `path` (str, required): Path to point cloud file (.pcd, .ply, .las, .laz, .bin)
+
+### process_pointcloud
+Downsample, filter, or estimate normals for a point cloud
+- **Parameters:**
+  - `input_path` (str, required): Path to input point cloud
+  - `output_path` (str, required): Path for output (.pcd or .ply)
+  - `operation` (str, required): "voxel" | "random" | "statistical" | "radius" | "normals"
+  - `voxel_size` (float, optional): Voxel size for "voxel" operation
+  - `target_count` (int, optional): Target count for "random" operation
+
+### detect_3d
+Detect 3D objects (cars, pedestrians, cyclists) in point clouds
+- **Parameters:**
+  - `input_path` (str, required): Path to point cloud file
+  - `classes` (list[str], optional): Classes to detect (Car, Pedestrian, Cyclist)
+  - `confidence` (float, optional): Confidence threshold (default: 0.3)
+  - `coordinate_system` (str, optional): "kitti" | "nuscenes" | "waymo"
+
+### project_3d_to_2d
+Project 3D detections to 2D image coordinates
+- **Parameters:**
+  - `calibration_path` (str, required): Path to calibration file
+  - `detections_path` (str, optional): Path to 3D detections JSON
+  - `pointcloud_path` (str, optional): Path to point cloud for detection
+  - `calibration_format` (str, optional): "kitti" | "nuscenes" | "ros" | "json"
+
+### anonymize_pointcloud
+Anonymize faces in a 3D point cloud for privacy compliance
+- **Parameters:**
+  - `input_path` (str, required): Path to input point cloud
+  - `output_path` (str, required): Path for anonymized output
+  - `mode` (str, optional): "remove" | "noise" (default: "remove")
+  - `verify` (bool, optional): Verify no faces remain (default: true)
+
+### extract_rosbag
+Extract point clouds and images from a ROS bag file
+- **Parameters:**
+  - `bag_path` (str, required): Path to ROS bag file (.bag, .db3, .mcap)
+  - `output_dir` (str, required): Directory for extracted data
+  - `max_frames` (int, optional): Maximum frames to extract (default: 100)
+  - `sync_sensors` (bool, optional): Synchronize LiDAR and camera (default: true)
+
 ## Response Format
 
 Respond ONLY with a valid JSON array of steps. No markdown, no explanation, just JSON:
@@ -119,6 +165,59 @@ Plan:
             "format": "yolo"
         },
         "description": "Export annotations in YOLO format"
+    }
+]
+```
+
+### Example 3: Point Cloud Analysis
+User intent: analyze the KITTI scan and find all cars
+
+Plan:
+```json
+[
+    {
+        "tool_name": "pointcloud_stats",
+        "parameters": {"path": "/data/kitti/scan.bin"},
+        "description": "Inspect point cloud metadata"
+    },
+    {
+        "tool_name": "detect_3d",
+        "parameters": {
+            "input_path": "/data/kitti/scan.bin",
+            "classes": ["Car"],
+            "confidence": 0.3,
+            "coordinate_system": "kitti"
+        },
+        "description": "Detect cars in the KITTI scan"
+    }
+]
+```
+
+### Example 4: ROS Bag Extraction + Anonymization
+User intent: extract frames from rosbag and anonymize the point clouds
+
+Plan:
+```json
+[
+    {
+        "tool_name": "extract_rosbag",
+        "parameters": {
+            "bag_path": "/data/recording.bag",
+            "output_dir": "/data/extracted",
+            "max_frames": 50,
+            "sync_sensors": true
+        },
+        "description": "Extract synchronized LiDAR and camera frames"
+    },
+    {
+        "tool_name": "anonymize_pointcloud",
+        "parameters": {
+            "input_path": "/data/extracted/pointclouds",
+            "output_path": "/data/extracted/anonymized",
+            "mode": "remove",
+            "verify": true
+        },
+        "description": "Anonymize faces in extracted point clouds"
     }
 ]
 ```
