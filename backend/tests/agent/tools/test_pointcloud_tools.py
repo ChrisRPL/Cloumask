@@ -479,7 +479,14 @@ class TestExtractRosbagTool:
         """Test synchronized extraction of LiDAR and camera data."""
         output_dir = tmp_path / "extracted"
 
-        with patch("backend.data.rosbag_parser.RosbagParser") as mock_parser_cls:
+        # Mock open3d and cv2 to avoid import errors in test environment
+        mock_o3d = MagicMock()
+        mock_cv2 = MagicMock()
+
+        with (
+            patch("backend.data.rosbag_parser.RosbagParser") as mock_parser_cls,
+            patch.dict("sys.modules", {"open3d": mock_o3d, "cv2": mock_cv2}),
+        ):
             mock_parser = MagicMock()
             mock_parser.get_info.return_value = mock_bag_info
             mock_parser.get_pointcloud_topics.return_value = [mock_bag_info.topics[0]]
@@ -504,7 +511,14 @@ class TestExtractRosbagTool:
         """Test separate extraction without synchronization."""
         output_dir = tmp_path / "extracted"
 
-        with patch("backend.data.rosbag_parser.RosbagParser") as mock_parser_cls:
+        # Mock open3d and cv2 to avoid import errors in test environment
+        mock_o3d = MagicMock()
+        mock_cv2 = MagicMock()
+
+        with (
+            patch("backend.data.rosbag_parser.RosbagParser") as mock_parser_cls,
+            patch.dict("sys.modules", {"open3d": mock_o3d, "cv2": mock_cv2}),
+        ):
             mock_parser = MagicMock()
             mock_parser.get_info.return_value = mock_bag_info
             mock_parser.get_pointcloud_topics.return_value = [mock_bag_info.topics[0]]
@@ -528,7 +542,14 @@ class TestExtractRosbagTool:
         """Test extraction with explicit topic names."""
         output_dir = tmp_path / "extracted"
 
-        with patch("backend.data.rosbag_parser.RosbagParser") as mock_parser_cls:
+        # Mock open3d and cv2 to avoid import errors in test environment
+        mock_o3d = MagicMock()
+        mock_cv2 = MagicMock()
+
+        with (
+            patch("backend.data.rosbag_parser.RosbagParser") as mock_parser_cls,
+            patch.dict("sys.modules", {"open3d": mock_o3d, "cv2": mock_cv2}),
+        ):
             mock_parser = MagicMock()
             mock_parser.get_info.return_value = mock_bag_info
             mock_parser.sync_frames.return_value = []
