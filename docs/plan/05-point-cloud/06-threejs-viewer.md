@@ -1,6 +1,6 @@
 # Three.js Point Cloud Viewer
 
-> **Status:** 🔴 Not Started
+> **Status:** 🟢 Complete
 > **Priority:** P1 (High)
 > **Dependencies:** 01-foundation (Svelte 5), 01-rust-io
 > **Parent:** [SPEC.md](./SPEC.md)

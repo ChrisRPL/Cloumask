@@ -35,11 +35,13 @@ def simple_calib() -> CameraCalibration:
 
 @pytest.fixture
 def sample_detection_2d() -> Detection:
-    """Sample 2D detection."""
+    """Sample 2D detection centered in image."""
+    # Bbox centered at (0.5, 0.5) will overlap with 3D box at (0, 0, 10)
+    # which projects to image center (320, 240) = normalized (0.5, 0.5)
     return Detection(
         class_id=0,
         class_name="Car",
-        bbox=BBox(x=0.5, y=0.5, width=0.2, height=0.15),
+        bbox=BBox(x=0.5, y=0.5, width=0.3, height=0.25),  # Centered, wider for overlap
         confidence=0.9,
     )
 

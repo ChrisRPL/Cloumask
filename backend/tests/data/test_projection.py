@@ -75,12 +75,15 @@ def kitti_like_calib() -> CameraCalibration:
 
 @pytest.fixture
 def sample_detection() -> Detection3D:
-    """Sample 3D detection for testing."""
+    """Sample 3D detection for testing.
+    
+    Uses camera coordinate system where z is forward (depth).
+    """
     return Detection3D(
         class_id=0,
         class_name="Car",
-        center=(10.0, 0.0, 0.0),  # 10m ahead, centered
-        dimensions=(4.5, 1.8, 1.5),  # Typical car dimensions
+        center=(0.0, 0.0, 10.0),  # 10m ahead in camera frame (z is forward)
+        dimensions=(4.5, 1.8, 1.5),  # Typical car dimensions (l, w, h)
         rotation=0.0,
         confidence=0.9,
     )
@@ -151,11 +154,12 @@ class TestProjectPointsToImage:
         """Test filter_behind and filter_outside options."""
         points = np.array([[0.0, 0.0, -10.0]])
 
-        # With filter_behind=False, point should have coordinates but still be marked
+        # With filter_behind=False, point should still be valid (allows negative z)
         points_2d, valid = project_points_to_image(
             points, simple_calib, filter_behind=False
         )
-        assert not valid[0]  # Still invalid due to negative z projection
+        # Point is behind camera but filter_behind=False so it's not filtered
+        assert valid[0]  # Valid because filter_behind=False
 
     def test_performance_100k_points(self, simple_calib: CameraCalibration) -> None:
         """Projection of 100K points should complete in <100ms."""
@@ -250,9 +254,10 @@ class TestDetection3DToCorners:
         corners = sample_detection.to_corners()
         center = corners.mean(axis=0)
 
-        np.testing.assert_almost_equal(center[0], 10.0, decimal=1)
+        # Detection center is at (0, 0, 10) in camera frame
+        np.testing.assert_almost_equal(center[0], 0.0, decimal=1)
         np.testing.assert_almost_equal(center[1], 0.0, decimal=1)
-        np.testing.assert_almost_equal(center[2], 0.0, decimal=1)
+        np.testing.assert_almost_equal(center[2], 10.0, decimal=1)
 
     def test_corners_with_rotation(self) -> None:
         """Corners should be rotated when yaw is non-zero."""
@@ -293,25 +298,27 @@ class TestLift2DTo3D:
 
     def test_lift_with_points(self, simple_calib: CameraCalibration) -> None:
         """Test lifting 2D box with point cloud."""
-        # Create points roughly forming a car shape at 10m
+        # Create points roughly forming a car shape at z=10m (in front of camera)
+        # With identity T_cam_lidar, z is the forward axis
         np.random.seed(42)
         points = np.array(
             [
-                [8.0, -0.5, -0.5],
-                [8.0, 0.5, -0.5],
-                [8.0, -0.5, 0.5],
-                [8.0, 0.5, 0.5],
-                [10.0, -0.5, -0.5],
-                [10.0, 0.5, -0.5],
-                [10.0, -0.5, 0.5],
-                [10.0, 0.5, 0.5],
-                [12.0, 0.0, 0.0],
+                [-0.5, -0.5, 8.0],
+                [0.5, -0.5, 8.0],
+                [-0.5, 0.5, 8.0],
+                [0.5, 0.5, 8.0],
+                [-0.5, -0.5, 10.0],
+                [0.5, -0.5, 10.0],
+                [-0.5, 0.5, 10.0],
+                [0.5, 0.5, 10.0],
+                [0.0, 0.0, 12.0],
             ]
         )
 
         # Project to get 2D box
         points_2d, valid = project_points_to_image(points, simple_calib)
         valid_2d = points_2d[valid]
+        assert len(valid_2d) > 0, "No points projected into image"
         box_2d = (
             float(valid_2d[:, 0].min()),
             float(valid_2d[:, 1].min()),
@@ -323,8 +330,8 @@ class TestLift2DTo3D:
         det3d = lift_2d_to_3d(box_2d, points, simple_calib)
 
         assert det3d is not None
-        # Center should be near the median of points
-        assert 7 < det3d.center[0] < 13
+        # Center z should be near the median of points (around 10m)
+        assert 7 < det3d.center[2] < 13
 
     def test_lift_insufficient_points(self, simple_calib: CameraCalibration) -> None:
         """Test that lifting fails with insufficient points."""
@@ -337,17 +344,19 @@ class TestLift2DTo3D:
 
     def test_lift_with_class_prior(self, simple_calib: CameraCalibration) -> None:
         """Test lifting with class-specific size prior."""
+        # Points in front of camera (positive z) - with identity transform, z is forward
         points = np.array(
             [
-                [10.0, -0.5, -0.5],
-                [10.0, 0.5, -0.5],
-                [10.0, 0.0, 0.5],
-                [11.0, 0.0, 0.0],
+                [-0.5, -0.5, 10.0],
+                [0.5, -0.5, 10.0],
+                [0.0, 0.5, 10.0],
+                [0.0, 0.0, 11.0],
             ]
         )
 
         points_2d, valid = project_points_to_image(points, simple_calib)
         valid_2d = points_2d[valid]
+        assert len(valid_2d) > 0, "No points projected into image"
         box_2d = (
             float(valid_2d[:, 0].min()),
             float(valid_2d[:, 1].min()),

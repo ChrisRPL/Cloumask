@@ -9,12 +9,10 @@ Implements spec: 05-point-cloud/05-2d-3d-fusion
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from pydantic import BaseModel, Field, computed_field
 
-if TYPE_CHECKING:
-    from backend.cv.types import BBox, Detection3D
+# Import at runtime for Pydantic - can't use TYPE_CHECKING for annotated fields
+from backend.cv.types import BBox, Detection3D
 
 
 class FusedAnnotation(BaseModel):

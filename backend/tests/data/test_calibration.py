@@ -97,7 +97,7 @@ class TestCameraCalibrationKITTI:
         """KITTI images are pre-rectified, should have no distortion."""
         calib = CameraCalibration.from_kitti(str(kitti_calib_file))
 
-        assert calib.has_distortion is False
+        assert calib.has_distortion == False  # noqa: E712 - numpy bool
         assert np.allclose(calib.D, 0)
 
     def test_from_kitti_different_cameras(self, kitti_calib_file: Path) -> None:
@@ -148,7 +148,7 @@ class TestCameraCalibrationJSON:
         """Test JSON calibration with distortion coefficients."""
         calib = CameraCalibration.from_json(str(json_calib_file))
 
-        assert calib.has_distortion is True
+        assert calib.has_distortion == True  # noqa: E712 - numpy bool
         assert len(calib.D) == 5
 
 
