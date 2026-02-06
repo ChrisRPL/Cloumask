@@ -1,6 +1,6 @@
 # Point Cloud Agent Tools
 
-> **Status:** 🔴 Not Started
+> **Status:** 🟢 Complete
 > **Priority:** P1 (High)
 > **Dependencies:** 02-agent-system (@tool decorator), all other 05-point-cloud sub-specs
 > **Parent:** [SPEC.md](./SPEC.md)
@@ -11,12 +11,12 @@ LangGraph tool wrappers for all point cloud operations, enabling the conversatio
 
 ## Goals
 
-- [ ] Implement `parse_pointcloud` tool for file inspection
-- [ ] Implement `detect_3d` tool for 3D object detection
-- [ ] Implement `project_3d_to_2d` tool for sensor fusion
-- [ ] Implement `anonymize_pointcloud` tool for privacy
-- [ ] Implement `extract_rosbag` tool for ROS data extraction
-- [ ] Write comprehensive docstrings for LLM tool selection
+- [x] Implement `parse_pointcloud` tool for file inspection
+- [x] Implement `detect_3d` tool for 3D object detection
+- [x] Implement `project_3d_to_2d` tool for sensor fusion
+- [x] Implement `anonymize_pointcloud` tool for privacy
+- [x] Implement `extract_rosbag` tool for ROS data extraction
+- [x] Write comprehensive docstrings for LLM tool selection
 
 ## Technical Design
 
@@ -574,64 +574,64 @@ Use when user wants to:
 
 ## Implementation Tasks
 
-- [ ] **Implement parse_pointcloud tool**
-  - [ ] File format detection
-  - [ ] Metadata extraction without full load
-  - [ ] Comprehensive docstring
+- [x] **Implement parse_pointcloud tool**
+  - [x] File format detection
+  - [x] Metadata extraction without full load
+  - [x] Comprehensive docstring
 
-- [ ] **Implement detect_3d tool**
-  - [ ] Model selection logic
-  - [ ] Class filtering
-  - [ ] Human-readable summary
+- [x] **Implement detect_3d tool**
+  - [x] Model selection logic
+  - [x] Class filtering
+  - [x] Human-readable summary
 
-- [ ] **Implement project_3d_to_2d tool**
-  - [ ] Calibration format handling
-  - [ ] Visibility filtering
-  - [ ] Optional image overlay
+- [x] **Implement project_3d_to_2d tool**
+  - [x] Calibration format handling
+  - [x] Visibility filtering
+  - [x] Optional image overlay
 
-- [ ] **Implement anonymize_pointcloud tool**
-  - [ ] Mode selection
-  - [ ] Verification flag
-  - [ ] Progress reporting
+- [x] **Implement anonymize_pointcloud tool**
+  - [x] Mode selection
+  - [x] Verification flag
+  - [x] Progress reporting
 
-- [ ] **Implement extract_rosbag tool**
-  - [ ] Auto topic discovery
-  - [ ] Sync vs async extraction
-  - [ ] Output file naming
+- [x] **Implement extract_rosbag tool**
+  - [x] Auto topic discovery
+  - [x] Sync vs async extraction
+  - [x] Output file naming
 
-- [ ] **Create prompt guidance**
-  - [ ] When to use each tool
-  - [ ] Tool chaining examples
-  - [ ] Common parameter patterns
+- [x] **Create prompt guidance**
+  - [x] When to use each tool
+  - [x] Tool chaining examples
+  - [x] Common parameter patterns
 
-- [ ] **Testing**
-  - [ ] Unit tests for each tool
-  - [ ] Integration tests with agent
-  - [ ] Docstring validation
+- [x] **Testing**
+  - [x] Unit tests for each tool
+  - [x] Integration tests with agent
+  - [x] Docstring validation
 
 ## Files to Create/Modify
 
 | Path | Action | Purpose |
 |------|--------|---------|
-| `backend/agent/tools/pointcloud.py` | Create | parse_pointcloud tool |
-| `backend/agent/tools/detect_3d.py` | Create | detect_3d tool |
-| `backend/agent/tools/fusion.py` | Create | project_3d_to_2d tool |
-| `backend/agent/tools/anonymize_3d.py` | Create | anonymize_pointcloud tool |
-| `backend/agent/tools/rosbag.py` | Create | extract_rosbag tool |
-| `backend/agent/tools/__init__.py` | Modify | Export POINTCLOUD_TOOLS |
-| `backend/agent/prompts/pointcloud_tools.md` | Create | Tool selection guidance |
-| `backend/tests/agent/test_pointcloud_tools.py` | Create | Unit tests |
+| `backend/agent/tools/pointcloud_process.py` | ✅ Created | pointcloud_stats, process_pointcloud tools |
+| `backend/agent/tools/detect_3d.py` | ✅ Created | detect_3d tool |
+| `backend/agent/tools/fusion.py` | ✅ Created | project_3d_to_2d tool |
+| `backend/agent/tools/anonymize_3d.py` | ✅ Created | anonymize_pointcloud tool |
+| `backend/agent/tools/rosbag.py` | ✅ Created | extract_rosbag tool |
+| `backend/agent/tools/__init__.py` | ✅ Modified | Export all point cloud tools |
+| `backend/agent/prompts/pointcloud_tools.md` | ✅ Created | Tool selection guidance |
+| `backend/tests/agent/tools/test_pointcloud_tools.py` | ✅ Created | Unit tests (34 tests) |
 
 ## Acceptance Criteria
 
-- [ ] Agent executes "parse /data/scan.pcd" and returns point count, bounds, attributes
-- [ ] Agent executes "detect cars in the point cloud" and returns 3D bounding boxes
-- [ ] Agent executes "project to camera" with 3D boxes and calibration
-- [ ] Agent executes "anonymize the scan" and produces verified output
-- [ ] Agent executes "extract frames from rosbag" with auto topic detection
-- [ ] All tools return structured `BaseModel` objects, not raw strings
-- [ ] Tool docstrings enable LLM to select appropriate tool for user requests
-- [ ] `pytest tests/agent/test_pointcloud_tools.py -v` passes
+- [x] Agent executes "parse /data/scan.pcd" and returns point count, bounds, attributes
+- [x] Agent executes "detect cars in the point cloud" and returns 3D bounding boxes
+- [x] Agent executes "project to camera" with 3D boxes and calibration
+- [x] Agent executes "anonymize the scan" and produces verified output
+- [x] Agent executes "extract frames from rosbag" with auto topic detection
+- [x] All tools return structured `ToolResult` objects, not raw strings
+- [x] Tool docstrings enable LLM to select appropriate tool for user requests
+- [x] `pytest tests/agent/tools/test_pointcloud_tools.py -v` passes (34/34 tests)
 
 ## Testing Strategy
 
