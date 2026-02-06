@@ -2,9 +2,21 @@
 
 This module provides data loading and extraction utilities including:
 - ROS bag parsing and sensor data extraction
-- Format conversion utilities (planned for 06-data-pipeline)
+- Core data models for label representation (BBox, Label, Sample, Dataset)
+- Format conversion utilities
 """
 
+from backend.data.models import (
+    BBox,
+    BBoxFormat,
+    BBoxSchema,
+    Dataset,
+    DatasetStatsSchema,
+    Label,
+    LabelSchema,
+    Sample,
+    SampleSchema,
+)
 from backend.data.ros_types import (
     BagFormat,
     BagInfo,
@@ -28,16 +40,27 @@ from backend.data.rosbag_parser import (
 )
 
 __all__ = [
-    # Enums
+    # Data Pipeline Models
+    "BBox",
+    "BBoxFormat",
+    "Label",
+    "Sample",
+    "Dataset",
+    # Data Pipeline Pydantic Schemas
+    "BBoxSchema",
+    "LabelSchema",
+    "SampleSchema",
+    "DatasetStatsSchema",
+    # ROS Enums
     "BagFormat",
-    # Dataclasses
+    # ROS Dataclasses
     "TopicInfo",
     "BagInfo",
     "PointCloud2Message",
     "ImageMessage",
     "CameraInfoMessage",
     "SyncedFrame",
-    # Pydantic models
+    # ROS Pydantic models
     "TopicInfoResponse",
     "BagInfoResponse",
     "ExtractPointcloudRequest",
