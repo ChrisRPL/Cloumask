@@ -23,7 +23,7 @@ from backend.data.formats.fused_annotation import (
 # (uncomment as they are implemented)
 from backend.data.formats import yolo  # noqa: F401
 from backend.data.formats import coco  # noqa: F401
-# from backend.data.formats import kitti
+from backend.data.formats import kitti  # noqa: F401
 # from backend.data.formats import voc
 # from backend.data.formats import cvat
 # from backend.data.formats import nuscenes
@@ -47,4 +47,5 @@ __all__ = [
     # Format loaders
     "YoloLoader",
     "CocoLoader",
+    "KittiLoader",
 ]
