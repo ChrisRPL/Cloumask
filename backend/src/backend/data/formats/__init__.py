@@ -21,7 +21,7 @@ from backend.data.formats.fused_annotation import (
 
 # Import format modules to trigger registration
 # (uncomment as they are implemented)
-# from backend.data.formats import yolo
+from backend.data.formats import yolo  # noqa: F401
 # from backend.data.formats import coco
 # from backend.data.formats import kitti
 # from backend.data.formats import voc
@@ -44,4 +44,6 @@ __all__ = [
     # Fusion formats
     "FusedAnnotation",
     "FusedAnnotationResult",
+    # Format loaders
+    "YoloLoader",
 ]
