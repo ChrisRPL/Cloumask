@@ -14,17 +14,16 @@ from backend.data.formats.base import (
     get_loader,
     list_formats,
 )
+from backend.data.formats.coco import CocoLoader
 from backend.data.formats.fused_annotation import (
     FusedAnnotation,
     FusedAnnotationResult,
 )
+from backend.data.formats.kitti import KITTI_CLASSES, KittiLoader
+from backend.data.formats.voc import VOC_CLASSES, VocLoader
+from backend.data.formats.yolo import YoloLoader
 
-# Import format modules to trigger registration
-# (uncomment as they are implemented)
-from backend.data.formats import yolo  # noqa: F401
-from backend.data.formats import coco  # noqa: F401
-from backend.data.formats import kitti  # noqa: F401
-# from backend.data.formats import voc
+# Remaining loaders/exporters:
 # from backend.data.formats import cvat
 # from backend.data.formats import nuscenes
 # from backend.data.formats import openlabel
@@ -48,4 +47,7 @@ __all__ = [
     "YoloLoader",
     "CocoLoader",
     "KittiLoader",
+    "VocLoader",
+    "VOC_CLASSES",
+    "KITTI_CLASSES",
 ]
