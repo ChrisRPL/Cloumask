@@ -22,7 +22,7 @@ from backend.data.formats.fused_annotation import (
 )
 from backend.data.formats.kitti import KITTI_CLASSES, KittiExporter, KittiLoader
 from backend.data.formats.nuscenes import NUSCENES_CAMERAS, NuscenesExporter, NuscenesLoader
-from backend.data.formats.openlabel import OpenlabelLoader
+from backend.data.formats.openlabel import OpenlabelExporter, OpenlabelLoader
 from backend.data.formats.voc import VOC_CLASSES, VocExporter, VocLoader
 from backend.data.formats.yolo import YoloExporter, YoloLoader
 
@@ -55,6 +55,7 @@ __all__ = [
     "KittiLoader",
     "NuscenesExporter",
     "NuscenesLoader",
+    "OpenlabelExporter",
     "OpenlabelLoader",
     "VocExporter",
     "VocLoader",
