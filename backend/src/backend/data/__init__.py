@@ -7,6 +7,14 @@ This module provides data loading and extraction utilities including:
 - Format conversion utilities
 """
 
+from backend.data.duplicates import (
+    DuplicateDetector,
+    DuplicateGroup,
+    DuplicateResult,
+    EmbeddingComparator,
+    PerceptualHasher,
+    find_duplicates,
+)
 from backend.data.formats import (
     FormatExporter,
     FormatLoader,
@@ -71,6 +79,13 @@ __all__ = [
     "detect_format",
     "list_formats",
     "convert",
+    # Duplicate detection
+    "PerceptualHasher",
+    "EmbeddingComparator",
+    "DuplicateGroup",
+    "DuplicateResult",
+    "DuplicateDetector",
+    "find_duplicates",
     # ROS Enums
     "BagFormat",
     # ROS Dataclasses
@@ -93,4 +108,3 @@ __all__ = [
     "RosbagParseError",
     "get_parser",
 ]
-
