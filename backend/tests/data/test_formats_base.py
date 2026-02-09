@@ -1,7 +1,7 @@
 """Tests for format base classes and registry."""
 
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
 from unittest.mock import MagicMock
 
 import pytest
@@ -213,6 +213,11 @@ class TestDetectFormat:
     def test_detect_kitti_by_label_2(self, tmp_path: Path) -> None:
         """Test KITTI detection by label_2 directory."""
         (tmp_path / "label_2").mkdir()
+        assert detect_format(tmp_path) == "kitti"
+
+    def test_detect_kitti_by_split_label_2(self, tmp_path: Path) -> None:
+        """Test KITTI detection by split/label_2 directory."""
+        (tmp_path / "training" / "label_2").mkdir(parents=True)
         assert detect_format(tmp_path) == "kitti"
 
     def test_detect_cvat_by_xml(self, tmp_path: Path) -> None:
