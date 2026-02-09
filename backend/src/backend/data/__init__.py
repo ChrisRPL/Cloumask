@@ -53,6 +53,11 @@ from backend.data.qa import (
     QAResult,
     run_qa,
 )
+from backend.data.report import (
+    ReportGenerator,
+    generate_dataset_report,
+    generate_qa_report,
+)
 from backend.data.ros_types import (
     BagFormat,
     BagInfo,
@@ -127,6 +132,9 @@ __all__ = [
     "QAResult",
     "LabelQA",
     "run_qa",
+    "ReportGenerator",
+    "generate_dataset_report",
+    "generate_qa_report",
     # Dataset splitting
     "SplitResult",
     "DatasetSplitter",
