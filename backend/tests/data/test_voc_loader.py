@@ -1,10 +1,11 @@
 """Tests for Pascal VOC format loader."""
 
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
 
-from backend.data.formats.voc import VOC_CLASSES, VocLoader
+from backend.data.formats.voc import VOC_CLASSES, VocExporter, VocLoader
 from backend.data.models import Dataset
 
 
@@ -233,3 +234,104 @@ class TestVocLoader:
 
         assert len(progress_calls) == 2
         assert progress_calls[-1][0] == progress_calls[-1][1]
+
+
+class TestVocExporter:
+    """Tests for VocExporter."""
+
+    def test_export_basic(self, voc_dataset: Path, tmp_path: Path) -> None:
+        """Test basic VOC export writes expected structure."""
+        dataset = VocLoader(voc_dataset).load()
+
+        output = tmp_path / "export"
+        exporter = VocExporter(output)
+        exported = exporter.export(dataset)
+
+        assert exported == output
+        assert (output / "Annotations").exists()
+        assert (output / "JPEGImages").exists()
+        assert (output / "ImageSets" / "Main").exists()
+        assert (output / "Annotations" / "img001.xml").exists()
+        assert (output / "Annotations" / "img002.xml").exists()
+        assert (output / "JPEGImages" / "img001.jpg").exists()
+        assert (output / "JPEGImages" / "img002.jpg").exists()
+
+        split_file = output / "ImageSets" / "Main" / "trainval.txt"
+        assert split_file.exists()
+        assert split_file.read_text(encoding="utf-8").splitlines() == ["img001", "img002"]
+
+    def test_export_roundtrip(self, voc_dataset: Path, tmp_path: Path) -> None:
+        """Test load -> export -> load roundtrip."""
+        original = VocLoader(voc_dataset).load()
+
+        output = tmp_path / "export"
+        VocExporter(output).export(original)
+
+        reloaded = VocLoader(output).load()
+
+        assert len(reloaded) == len(original)
+        assert reloaded.total_labels() == original.total_labels()
+        assert "forklift" in reloaded.class_names
+
+        original_counts = {sample.image_path.stem: len(sample.labels) for sample in original}
+        reloaded_counts = {sample.image_path.stem: len(sample.labels) for sample in reloaded}
+        assert reloaded_counts == original_counts
+
+        original_person = next(
+            label for label in next(s for s in original if s.image_path.stem == "img001").labels
+            if label.class_name == "person"
+        )
+        reloaded_person = next(
+            label for label in next(s for s in reloaded if s.image_path.stem == "img001").labels
+            if label.class_name == "person"
+        )
+        assert reloaded_person.attributes["difficult"] == original_person.attributes["difficult"]
+        assert reloaded_person.attributes["truncated"] == original_person.attributes["truncated"]
+        assert reloaded_person.attributes["occluded"] == original_person.attributes["occluded"]
+        assert reloaded_person.bbox.cx == pytest.approx(original_person.bbox.cx, abs=0.02)
+        assert reloaded_person.bbox.cy == pytest.approx(original_person.bbox.cy, abs=0.02)
+
+    def test_export_includes_voc_attributes(self, voc_dataset: Path, tmp_path: Path) -> None:
+        """Test exporter writes difficult/truncated/occluded tags."""
+        dataset = VocLoader(voc_dataset).load()
+
+        output = tmp_path / "export"
+        VocExporter(output).export(dataset)
+
+        root = ET.parse(output / "Annotations" / "img001.xml").getroot()
+        objects = {
+            obj.findtext("name", default=""): obj
+            for obj in root.findall("object")
+        }
+
+        person = objects["person"]
+        assert person.findtext("truncated") == "0"
+        assert person.findtext("difficult") == "0"
+        assert person.findtext("occluded") == "1"
+
+        car = objects["car"]
+        assert car.findtext("truncated") == "1"
+        assert car.findtext("difficult") == "1"
+        assert car.findtext("occluded") == "0"
+
+    def test_export_uses_sample_split_metadata(self, voc_dataset: Path, tmp_path: Path) -> None:
+        """Test split file generation uses sample metadata split when available."""
+        dataset = VocLoader(voc_dataset, split="train").load()
+
+        output = tmp_path / "export"
+        VocExporter(output, split="trainval").export(dataset)
+
+        train_file = output / "ImageSets" / "Main" / "train.txt"
+        assert train_file.exists()
+        assert train_file.read_text(encoding="utf-8").splitlines() == ["img001"]
+
+    def test_validate_export(self, voc_dataset: Path, tmp_path: Path) -> None:
+        """Test exported VOC structure validation."""
+        dataset = VocLoader(voc_dataset).load()
+
+        output = tmp_path / "export"
+        exporter = VocExporter(output)
+        exporter.export(dataset)
+
+        warnings = exporter.validate_export()
+        assert warnings == []
