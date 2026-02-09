@@ -7,6 +7,16 @@ This module provides data loading and extraction utilities including:
 - Format conversion utilities
 """
 
+from backend.data.augmentation import (
+    ALBUMENTATIONS_AVAILABLE,
+    AugmentationPipeline,
+    AugmentedSample,
+    augment_dataset,
+    augment_sample,
+    available_presets,
+    get_preset_pipeline,
+    preview_augmentations,
+)
 from backend.data.duplicates import (
     DuplicateDetector,
     DuplicateGroup,
@@ -102,6 +112,15 @@ __all__ = [
     "DuplicateResult",
     "DuplicateDetector",
     "find_duplicates",
+    # Augmentation
+    "ALBUMENTATIONS_AVAILABLE",
+    "AugmentedSample",
+    "AugmentationPipeline",
+    "get_preset_pipeline",
+    "available_presets",
+    "augment_sample",
+    "preview_augmentations",
+    "augment_dataset",
     # Label QA
     "IssueType",
     "QAIssue",

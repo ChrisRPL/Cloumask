@@ -47,6 +47,7 @@ cv = [
     "opencv-python>=4.10.0",
     "numpy>=1.26.0",
     "pillow>=10.4.0",
+    "albumentations>=1.4.0",
     "rosbags>=0.9.0",
 ]
 all = [
