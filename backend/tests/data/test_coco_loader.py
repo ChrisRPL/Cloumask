@@ -3,9 +3,10 @@
 import json
 from pathlib import Path
 
+import numpy as np
 import pytest
 
-from backend.data.formats.coco import CocoLoader
+from backend.data.formats.coco import CocoExporter, CocoLoader
 from backend.data.models import Dataset
 
 
@@ -252,3 +253,82 @@ class TestCocoLoader:
         loader = CocoLoader(tmp_path)
         with pytest.raises(FileNotFoundError):
             loader.load()
+
+
+class TestCocoExporter:
+    """Tests for CocoExporter."""
+
+    def test_export_basic(self, coco_dataset: Path, tmp_path: Path) -> None:
+        """Test basic COCO export writes expected structure."""
+        dataset = CocoLoader(coco_dataset).load()
+
+        output = tmp_path / "export"
+        exporter = CocoExporter(output)
+        exported = exporter.export(dataset)
+
+        assert exported == output
+        assert (output / "annotations" / "instances_train.json").exists()
+        assert (output / "images" / "img001.jpg").exists()
+        assert (output / "images" / "img002.jpg").exists()
+
+    def test_export_roundtrip(self, coco_dataset: Path, tmp_path: Path) -> None:
+        """Test load -> export -> load roundtrip."""
+        original = CocoLoader(coco_dataset).load()
+
+        output = tmp_path / "export"
+        CocoExporter(output).export(original)
+
+        exported = CocoLoader(output).load()
+
+        assert len(exported) == len(original)
+        assert exported.class_names == original.class_names
+
+        original_counts = {sample.image_path.stem: len(sample.labels) for sample in original}
+        exported_counts = {sample.image_path.stem: len(sample.labels) for sample in exported}
+        assert exported_counts == original_counts
+
+    def test_export_categories(self, coco_dataset: Path, tmp_path: Path) -> None:
+        """Test categories are exported with 1-indexed IDs."""
+        dataset = CocoLoader(coco_dataset).load()
+
+        output = tmp_path / "export"
+        CocoExporter(output).export(dataset)
+
+        with (output / "annotations" / "instances_train.json").open() as f:
+            data = json.load(f)
+
+        assert len(data["categories"]) == len(dataset.class_names)
+        assert [category["id"] for category in data["categories"]] == list(
+            range(1, len(dataset.class_names) + 1)
+        )
+
+    def test_export_mask_rle(self, coco_dataset: Path, tmp_path: Path) -> None:
+        """Test segmentation mask export using RLE encoding."""
+        dataset = CocoLoader(coco_dataset).load()
+        dataset[0].labels[0].mask = np.array(
+            [[0, 1, 1], [0, 1, 0], [0, 0, 0]],
+            dtype=np.uint8,
+        )
+
+        output = tmp_path / "export"
+        exporter = CocoExporter(output, mask_encoding="rle")
+        exporter.export(dataset)
+
+        with (output / "annotations" / "instances_train.json").open() as f:
+            data = json.load(f)
+
+        segmentation = data["annotations"][0]["segmentation"]
+        assert isinstance(segmentation, dict)
+        assert "counts" in segmentation
+        assert "size" in segmentation
+
+    def test_validate_export(self, coco_dataset: Path, tmp_path: Path) -> None:
+        """Test export validation."""
+        dataset = CocoLoader(coco_dataset).load()
+
+        output = tmp_path / "export"
+        exporter = CocoExporter(output)
+        exporter.export(dataset)
+
+        warnings = exporter.validate_export()
+        assert warnings == []

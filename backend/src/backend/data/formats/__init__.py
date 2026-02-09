@@ -14,7 +14,7 @@ from backend.data.formats.base import (
     get_loader,
     list_formats,
 )
-from backend.data.formats.coco import CocoLoader
+from backend.data.formats.coco import CocoExporter, CocoLoader
 from backend.data.formats.cvat import CvatLoader
 from backend.data.formats.fused_annotation import (
     FusedAnnotation,
@@ -47,6 +47,7 @@ __all__ = [
     # Format loaders
     "YoloExporter",
     "YoloLoader",
+    "CocoExporter",
     "CocoLoader",
     "CvatLoader",
     "KittiLoader",
