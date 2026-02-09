@@ -12,13 +12,21 @@ from __future__ import annotations
 
 import json
 import logging
+import shutil
 from collections import defaultdict
+from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Iterator, Optional
+from typing import Any
 
 import numpy as np
 
-from backend.data.formats.base import FormatLoader, FormatRegistry, ProgressCallback
+from backend.data.formats.base import (
+    FormatExporter,
+    FormatLoader,
+    FormatRegistry,
+    ProgressCallback,
+)
 from backend.data.models import BBox, Dataset, Label, Sample
 
 logger = logging.getLogger(__name__)
@@ -81,6 +89,72 @@ def polygon_to_mask(polygon: list[list[float]], height: int, width: int) -> np.n
         return np.zeros((height, width), dtype=np.uint8)
 
 
+def mask_to_polygon(mask: np.ndarray) -> list[list[float]]:
+    """Convert binary mask to COCO polygon contours.
+
+    Args:
+        mask: Binary mask array (H, W)
+
+    Returns:
+        COCO polygon list [[x1, y1, x2, y2, ...], ...]
+    """
+    if mask.ndim != 2:
+        return []
+
+    try:
+        import cv2
+    except ImportError:
+        logger.warning("cv2 not installed, cannot convert mask to polygon")
+        return []
+
+    binary_mask = (mask > 0).astype(np.uint8)
+    contours, _ = cv2.findContours(
+        binary_mask,
+        cv2.RETR_EXTERNAL,
+        cv2.CHAIN_APPROX_SIMPLE,
+    )
+
+    polygons: list[list[float]] = []
+    for contour in contours:
+        if contour.shape[0] < 3:
+            continue
+
+        flattened = contour.reshape(-1, 2).astype(float).flatten().tolist()
+        if len(flattened) >= 6:
+            polygons.append(flattened)
+
+    return polygons
+
+
+def mask_to_rle(mask: np.ndarray) -> dict[str, Any]:
+    """Encode a binary mask as uncompressed COCO RLE."""
+    if mask.ndim != 2:
+        raise ValueError("Mask must be 2D for RLE export")
+
+    binary_mask = (mask > 0).astype(np.uint8)
+    pixels = binary_mask.reshape(-1, order="F")
+
+    counts: list[int] = []
+    prev = 0
+    run_length = 0
+
+    for pixel in pixels:
+        pixel_value = int(pixel)
+        if pixel_value != prev:
+            counts.append(run_length)
+            run_length = 1
+            prev = pixel_value
+        else:
+            run_length += 1
+
+    counts.append(run_length)
+
+    return {
+        "counts": counts,
+        "size": [int(binary_mask.shape[0]), int(binary_mask.shape[1])],
+    }
+
+
 @FormatRegistry.register_loader
 class CocoLoader(FormatLoader):
     """Load COCO format datasets.
@@ -102,9 +176,9 @@ class CocoLoader(FormatLoader):
         self,
         root_path: Path,
         *,
-        class_names: Optional[list[str]] = None,
-        progress_callback: Optional[ProgressCallback] = None,
-        annotation_file: Optional[str] = None,
+        class_names: list[str] | None = None,
+        progress_callback: ProgressCallback | None = None,
+        annotation_file: str | None = None,
         load_masks: bool = True,
     ) -> None:
         """Initialize COCO loader.
@@ -119,12 +193,12 @@ class CocoLoader(FormatLoader):
         super().__init__(root_path, class_names=class_names, progress_callback=progress_callback)
         self.annotation_file = annotation_file
         self.load_masks = load_masks
-        self._coco_data: Optional[dict] = None
+        self._coco_data: dict | None = None
         self._categories: dict[int, dict] = {}
         self._image_info: dict[int, dict] = {}
         self._annotations: dict[int, list[dict]] = defaultdict(list)
 
-    def _find_annotation_file(self) -> Optional[Path]:
+    def _find_annotation_file(self) -> Path | None:
         """Find the annotation JSON file."""
         if self.annotation_file:
             path = self.root_path / self.annotation_file
@@ -147,7 +221,7 @@ class CocoLoader(FormatLoader):
         # Check root for JSON files
         for json_file in self.root_path.glob("*.json"):
             try:
-                with open(json_file) as f:
+                with json_file.open() as f:
                     data = json.load(f)
                 if "images" in data and "annotations" in data:
                     return json_file
@@ -166,7 +240,7 @@ class CocoLoader(FormatLoader):
             raise FileNotFoundError(f"No COCO annotation file found in {self.root_path}")
 
         logger.info(f"Loading COCO annotations from {ann_file}")
-        with open(ann_file) as f:
+        with ann_file.open() as f:
             self._coco_data = json.load(f)
 
         # Index categories
@@ -188,7 +262,7 @@ class CocoLoader(FormatLoader):
         sorted_cats = sorted(self._categories.values(), key=lambda x: x["id"])
         return [cat["name"] for cat in sorted_cats]
 
-    def _find_image(self, image_info: dict) -> Optional[Path]:
+    def _find_image(self, image_info: dict) -> Path | None:
         """Find the actual image file.
 
         Args:
@@ -224,7 +298,7 @@ class CocoLoader(FormatLoader):
         ann: dict,
         img_width: int,
         img_height: int,
-    ) -> Optional[Label]:
+    ) -> Label | None:
         """Parse a single COCO annotation.
 
         Args:
@@ -399,3 +473,391 @@ class CocoLoader(FormatLoader):
         base["num_annotations"] = sum(len(anns) for anns in self._annotations.values())
         base["num_categories"] = len(self._categories)
         return base
+
+
+@FormatRegistry.register_exporter
+class CocoExporter(FormatExporter):
+    """Export datasets to COCO JSON format.
+
+    Creates:
+    - annotations/instances_<split>.json
+    - images/ directory with exported images
+    """
+
+    format_name = "coco"
+    description = "COCO JSON format"
+
+    def __init__(
+        self,
+        output_path: Path,
+        *,
+        overwrite: bool = False,
+        progress_callback: ProgressCallback | None = None,
+        split: str = "train",
+        export_masks: bool = True,
+        mask_encoding: str = "polygon",
+    ) -> None:
+        """Initialize COCO exporter.
+
+        Args:
+            output_path: Output directory
+            overwrite: Whether to overwrite existing files
+            progress_callback: Progress callback
+            split: Split name for annotations file (instances_<split>.json)
+            export_masks: Whether to export segmentation
+            mask_encoding: Segmentation encoding for label masks ("polygon" or "rle")
+        """
+        super().__init__(output_path, overwrite=overwrite, progress_callback=progress_callback)
+        self.split = split
+        self.export_masks = export_masks
+        self.mask_encoding = mask_encoding
+
+        if self.mask_encoding not in {"polygon", "rle"}:
+            raise ValueError("mask_encoding must be one of: {'polygon', 'rle'}")
+
+    def _resolve_class_names(self, dataset: Dataset, samples: list[Sample]) -> list[str]:
+        """Resolve class names from dataset metadata and label content."""
+        names = list(dataset.class_names) if dataset.class_names else []
+
+        max_class_id = -1
+        for sample in samples:
+            for label in sample.labels:
+                if label.class_id > max_class_id:
+                    max_class_id = label.class_id
+
+                if label.class_id >= len(names):
+                    continue
+
+                if not names[label.class_id] and label.class_name:
+                    names[label.class_id] = label.class_name
+
+        if max_class_id >= len(names):
+            names.extend(
+                f"class_{class_id}" for class_id in range(len(names), max_class_id + 1)
+            )
+
+        for sample in samples:
+            for label in sample.labels:
+                if (
+                    0 <= label.class_id < len(names)
+                    and label.class_name
+                    and names[label.class_id].startswith("class_")
+                ):
+                    names[label.class_id] = label.class_name
+
+        return names
+
+    def _resolve_image_dimensions(self, sample: Sample) -> tuple[int, int]:
+        """Resolve image dimensions for export."""
+        if sample.image_width and sample.image_height:
+            return sample.image_width, sample.image_height
+
+        try:
+            from PIL import Image
+
+            with Image.open(sample.image_path) as image:
+                width, height = image.size
+                return int(width), int(height)
+        except Exception:
+            logger.warning(
+                "Unable to resolve image dimensions for %s. Falling back to 1x1.",
+                sample.image_path,
+            )
+            return 1, 1
+
+    def _convert_attribute_polygon(
+        self,
+        polygon_data: Any,
+        img_width: int,
+        img_height: int,
+    ) -> list[list[float]]:
+        """Convert polygon attribute into COCO polygon format."""
+        if not isinstance(polygon_data, (list, tuple)):
+            return []
+
+        if polygon_data and isinstance(polygon_data[0], (list, tuple)):
+            polygon_groups = polygon_data
+        else:
+            polygon_groups = [polygon_data]
+
+        polygons: list[list[float]] = []
+        for polygon in polygon_groups:
+            if not isinstance(polygon, (list, tuple)):
+                continue
+
+            try:
+                values = [float(value) for value in polygon]
+            except (TypeError, ValueError):
+                continue
+
+            if len(values) < 6 or len(values) % 2 != 0:
+                continue
+
+            is_normalized = all(0.0 <= value <= 1.0 for value in values)
+            if is_normalized:
+                pixel_values = [
+                    value * img_width if idx % 2 == 0 else value * img_height
+                    for idx, value in enumerate(values)
+                ]
+            else:
+                pixel_values = values
+
+            polygons.append(pixel_values)
+
+        return polygons
+
+    def _annotation_segmentation(
+        self,
+        label: Label,
+        img_width: int,
+        img_height: int,
+    ) -> list[list[float]] | dict[str, Any] | list:
+        """Build segmentation payload for a COCO annotation."""
+        if not self.export_masks:
+            return []
+
+        if label.mask is not None:
+            if self.mask_encoding == "rle":
+                return mask_to_rle(label.mask)
+
+            polygons = mask_to_polygon(label.mask)
+            if polygons:
+                return polygons
+            return []
+
+        polygon = self._convert_attribute_polygon(
+            label.attributes.get("polygon"),
+            img_width=img_width,
+            img_height=img_height,
+        )
+        if polygon:
+            return polygon
+
+        return []
+
+    def _exported_image_name(
+        self,
+        sample: Sample,
+        img_id: int,
+        images_dir: Path,
+        *,
+        copy_images: bool,
+        image_subdir: str,
+    ) -> str:
+        """Resolve exported image name and copy image when requested."""
+        source = sample.image_path
+        image_name = source.name
+        destination = images_dir / image_name
+
+        if destination.exists():
+            image_name = f"{source.stem}_{img_id}{source.suffix}"
+            destination = images_dir / image_name
+
+        if copy_images:
+            if source.exists():
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, destination)
+            else:
+                logger.warning("Image not found during COCO export: %s", source)
+
+            return str(Path(image_subdir) / image_name).replace("\\", "/")
+
+        return source.as_posix()
+
+    def export(
+        self,
+        dataset: Dataset,
+        *,
+        copy_images: bool = True,
+        image_subdir: str = "images",
+    ) -> Path:
+        """Export dataset to COCO format.
+
+        Args:
+            dataset: Dataset to export
+            copy_images: Whether to copy images
+            image_subdir: Subdirectory for exported images
+
+        Returns:
+            Path to exported dataset root
+        """
+        self._ensure_output_dir()
+
+        images_dir = self.output_path / image_subdir
+        annotations_dir = self.output_path / "annotations"
+        images_dir.mkdir(parents=True, exist_ok=True)
+        annotations_dir.mkdir(parents=True, exist_ok=True)
+
+        samples = list(dataset)
+        class_names = self._resolve_class_names(dataset, samples)
+
+        coco_data: dict[str, Any] = {
+            "info": {
+                "description": f"Exported from {dataset.name}",
+                "version": "1.0",
+                "year": datetime.now(UTC).year,
+                "date_created": datetime.now(UTC).isoformat(),
+            },
+            "licenses": [],
+            "images": [],
+            "annotations": [],
+            "categories": [],
+        }
+
+        for idx, class_name in enumerate(class_names, start=1):
+            coco_data["categories"].append(
+                {
+                    "id": idx,
+                    "name": class_name,
+                    "supercategory": "object",
+                }
+            )
+
+        ann_id = 1
+        total = len(samples)
+
+        for img_id, sample in enumerate(samples, start=1):
+            img_width, img_height = self._resolve_image_dimensions(sample)
+            file_name = self._exported_image_name(
+                sample,
+                img_id,
+                images_dir,
+                copy_images=copy_images,
+                image_subdir=image_subdir,
+            )
+
+            coco_data["images"].append(
+                {
+                    "id": img_id,
+                    "file_name": file_name,
+                    "width": img_width,
+                    "height": img_height,
+                }
+            )
+
+            for label in sample.labels:
+                if label.class_id < 0:
+                    logger.warning(
+                        "Skipping label with invalid class_id=%s for image %s",
+                        label.class_id,
+                        sample.image_path,
+                    )
+                    continue
+
+                x, y, w, h = label.bbox.to_xywh()
+                x_px = x * img_width
+                y_px = y * img_height
+                w_px = w * img_width
+                h_px = h * img_height
+
+                category_id = label.class_id + 1
+                if category_id > len(class_names):
+                    logger.warning(
+                        "Skipping label with class_id=%s outside category range for image %s",
+                        label.class_id,
+                        sample.image_path,
+                    )
+                    continue
+
+                annotation: dict[str, Any] = {
+                    "id": ann_id,
+                    "image_id": img_id,
+                    "category_id": category_id,
+                    "bbox": [x_px, y_px, w_px, h_px],
+                    "area": float(w_px * h_px),
+                    "iscrowd": int(bool(label.attributes.get("iscrowd", False))),
+                    "segmentation": self._annotation_segmentation(
+                        label,
+                        img_width=img_width,
+                        img_height=img_height,
+                    ),
+                }
+                coco_data["annotations"].append(annotation)
+                ann_id += 1
+
+            self._report_progress(img_id, total, "Exporting COCO")
+
+        ann_file = annotations_dir / f"instances_{self.split}.json"
+        with ann_file.open("w", encoding="utf-8") as f:
+            json.dump(coco_data, f, indent=2)
+
+        return self.output_path
+
+    def validate_export(self) -> list[str]:
+        """Validate exported COCO dataset and return warnings."""
+        warnings: list[str] = []
+
+        ann_file = self.output_path / "annotations" / f"instances_{self.split}.json"
+        if not ann_file.exists():
+            warnings.append(f"Annotation file not found: {ann_file.name}")
+            return warnings
+
+        try:
+            with ann_file.open(encoding="utf-8") as f:
+                data = json.load(f)
+        except json.JSONDecodeError as exc:
+            return [f"Invalid COCO JSON: {exc}"]
+
+        for key in ("images", "annotations", "categories"):
+            if key not in data:
+                warnings.append(f"Missing top-level key: {key}")
+            elif not isinstance(data[key], list):
+                warnings.append(f"Top-level key '{key}' must be a list")
+
+        images = data.get("images", [])
+        annotations = data.get("annotations", [])
+        categories = data.get("categories", [])
+
+        if not images:
+            warnings.append("No images in annotation file")
+        if not categories:
+            warnings.append("No categories in annotation file")
+
+        image_ids: set[int] = set()
+        for image in images:
+            image_id = image.get("id")
+            if image_id in image_ids:
+                warnings.append(f"Duplicate image id: {image_id}")
+                break
+            image_ids.add(image_id)
+
+            file_name = image.get("file_name")
+            if not isinstance(file_name, str) or not file_name:
+                warnings.append("Image entry missing file_name")
+                continue
+
+            image_path = self.output_path / Path(file_name)
+            if not image_path.exists():
+                warnings.append(f"Missing image: {file_name}")
+                break
+
+        category_ids: set[int] = set()
+        for category in categories:
+            category_id = category.get("id")
+            if category_id in category_ids:
+                warnings.append(f"Duplicate category id: {category_id}")
+                break
+            category_ids.add(category_id)
+
+        annotation_ids: set[int] = set()
+        for annotation in annotations:
+            annotation_id = annotation.get("id")
+            if annotation_id in annotation_ids:
+                warnings.append(f"Duplicate annotation id: {annotation_id}")
+                break
+            annotation_ids.add(annotation_id)
+
+            if annotation.get("image_id") not in image_ids:
+                warnings.append(f"Annotation {annotation_id} references unknown image_id")
+                break
+
+            if annotation.get("category_id") not in category_ids:
+                warnings.append(f"Annotation {annotation_id} references unknown category_id")
+                break
+
+            bbox = annotation.get("bbox")
+            if not isinstance(bbox, list) or len(bbox) != 4:
+                warnings.append(f"Annotation {annotation_id} has invalid bbox")
+                break
+
+        return warnings
