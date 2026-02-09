@@ -36,6 +36,13 @@ from backend.data.models import (
     Sample,
     SampleSchema,
 )
+from backend.data.qa import (
+    IssueType,
+    LabelQA,
+    QAIssue,
+    QAResult,
+    run_qa,
+)
 from backend.data.ros_types import (
     BagFormat,
     BagInfo,
@@ -86,6 +93,12 @@ __all__ = [
     "DuplicateResult",
     "DuplicateDetector",
     "find_duplicates",
+    # Label QA
+    "IssueType",
+    "QAIssue",
+    "QAResult",
+    "LabelQA",
+    "run_qa",
     # ROS Enums
     "BagFormat",
     # ROS Dataclasses
