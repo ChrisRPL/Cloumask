@@ -11,11 +11,17 @@ Implements spec: 06-data-pipeline/06-voc-loader
 from __future__ import annotations
 
 import logging
+import shutil
 import xml.etree.ElementTree as ET
 from collections.abc import Iterator
 from pathlib import Path
 
-from backend.data.formats.base import FormatLoader, FormatRegistry, ProgressCallback
+from backend.data.formats.base import (
+    FormatExporter,
+    FormatLoader,
+    FormatRegistry,
+    ProgressCallback,
+)
 from backend.data.models import BBox, Dataset, Label, Sample
 
 logger = logging.getLogger(__name__)
@@ -54,6 +60,17 @@ def _parse_bool(value: str | None) -> bool:
     if value is None:
         return False
     return value.strip().lower() in {"1", "true", "yes"}
+
+
+def _to_voc_bool(value: object) -> str:
+    """Convert a mixed-type attribute value to VOC 0/1 text."""
+    if isinstance(value, bool):
+        return "1" if value else "0"
+    if isinstance(value, (int, float)):
+        return "1" if value != 0 else "0"
+    if isinstance(value, str):
+        return "1" if _parse_bool(value) else "0"
+    return "0"
 
 
 @FormatRegistry.register_loader
@@ -498,3 +515,270 @@ class VocLoader(FormatLoader):
         base["load_segmentation_indices"] = self.load_segmentation_indices
         base["num_xml_files"] = len(list(ann_dir.glob("*.xml"))) if ann_dir else 0
         return base
+
+
+@FormatRegistry.register_exporter
+class VocExporter(FormatExporter):
+    """Export datasets to Pascal VOC format.
+
+    Creates:
+    - Annotations/ with XML files
+    - JPEGImages/ with copied images
+    - ImageSets/Main/ with split files
+    """
+
+    format_name = "voc"
+    description = "Pascal VOC XML format"
+
+    def __init__(
+        self,
+        output_path: Path,
+        *,
+        overwrite: bool = False,
+        progress_callback: ProgressCallback | None = None,
+        split: str = "trainval",
+    ) -> None:
+        """Initialize VOC exporter."""
+        super().__init__(output_path, overwrite=overwrite, progress_callback=progress_callback)
+        self.split = split
+        self._image_subdir = "JPEGImages"
+        self._copied_images = True
+
+    def _resolve_image_dimensions(self, sample: Sample) -> tuple[int, int]:
+        """Resolve image dimensions for export."""
+        if sample.image_width and sample.image_height:
+            return sample.image_width, sample.image_height
+
+        try:
+            from PIL import Image
+
+            with Image.open(sample.image_path) as image:
+                width, height = image.size
+                return int(width), int(height)
+        except Exception:
+            logger.warning(
+                "Unable to resolve image dimensions for %s. Using VOC defaults 1920x1080.",
+                sample.image_path,
+            )
+            return 1920, 1080
+
+    def _bbox_to_voc_pixels(
+        self,
+        bbox: BBox,
+        img_width: int,
+        img_height: int,
+    ) -> tuple[int, int, int, int]:
+        """Convert normalized bbox to VOC 1-based inclusive pixel coordinates."""
+        x1, y1, x2, y2 = bbox.to_xyxy()
+        x1 = max(0.0, min(1.0, x1))
+        y1 = max(0.0, min(1.0, y1))
+        x2 = max(0.0, min(1.0, x2))
+        y2 = max(0.0, min(1.0, y2))
+
+        xmin = int(round((x1 * img_width) + 1.0))
+        ymin = int(round((y1 * img_height) + 1.0))
+        xmax = int(round(x2 * img_width))
+        ymax = int(round(y2 * img_height))
+
+        xmin = min(max(1, xmin), img_width)
+        ymin = min(max(1, ymin), img_height)
+        xmax = min(max(1, xmax), img_width)
+        ymax = min(max(1, ymax), img_height)
+
+        if xmax < xmin:
+            xmax = xmin
+        if ymax < ymin:
+            ymax = ymin
+
+        return xmin, ymin, xmax, ymax
+
+    def _create_annotation_xml(
+        self,
+        sample: Sample,
+        filename: str,
+        *,
+        folder: str,
+        img_width: int,
+        img_height: int,
+    ) -> str:
+        """Create a VOC XML annotation payload for one sample."""
+        annotation = ET.Element("annotation")
+        ET.SubElement(annotation, "folder").text = folder
+        ET.SubElement(annotation, "filename").text = filename
+
+        size = ET.SubElement(annotation, "size")
+        ET.SubElement(size, "width").text = str(img_width)
+        ET.SubElement(size, "height").text = str(img_height)
+        ET.SubElement(size, "depth").text = str(sample.metadata.get("depth", 3))
+
+        for label in sample.labels:
+            attrs = label.attributes if isinstance(label.attributes, dict) else {}
+            xmin, ymin, xmax, ymax = self._bbox_to_voc_pixels(
+                label.bbox,
+                img_width=img_width,
+                img_height=img_height,
+            )
+
+            obj = ET.SubElement(annotation, "object")
+            ET.SubElement(obj, "name").text = label.class_name or f"class_{label.class_id}"
+
+            pose = attrs.get("pose")
+            pose_text = str(pose).strip() if pose is not None else ""
+            ET.SubElement(obj, "pose").text = pose_text or "Unspecified"
+
+            ET.SubElement(obj, "truncated").text = _to_voc_bool(attrs.get("truncated"))
+            ET.SubElement(obj, "difficult").text = _to_voc_bool(attrs.get("difficult"))
+            ET.SubElement(obj, "occluded").text = _to_voc_bool(attrs.get("occluded"))
+
+            bndbox = ET.SubElement(obj, "bndbox")
+            ET.SubElement(bndbox, "xmin").text = str(xmin)
+            ET.SubElement(bndbox, "ymin").text = str(ymin)
+            ET.SubElement(bndbox, "xmax").text = str(xmax)
+            ET.SubElement(bndbox, "ymax").text = str(ymax)
+
+        ET.indent(annotation, space="  ")
+        xml_bytes = ET.tostring(annotation, encoding="utf-8", xml_declaration=True)
+        return xml_bytes.decode("utf-8")
+
+    def export(
+        self,
+        dataset: Dataset,
+        *,
+        copy_images: bool = True,
+        image_subdir: str = "JPEGImages",
+    ) -> Path:
+        """Export dataset to VOC format."""
+        self._ensure_output_dir()
+        self._image_subdir = image_subdir
+        self._copied_images = copy_images
+
+        ann_dir = self.output_path / "Annotations"
+        images_dir = self.output_path / image_subdir
+        sets_dir = self.output_path / "ImageSets" / "Main"
+        ann_dir.mkdir(parents=True, exist_ok=True)
+        images_dir.mkdir(parents=True, exist_ok=True)
+        sets_dir.mkdir(parents=True, exist_ok=True)
+
+        samples = list(dataset)
+        total = len(samples)
+        split_members: dict[str, list[str]] = {}
+        used_stems: set[str] = set()
+        used_image_names: set[str] = set()
+
+        for idx, sample in enumerate(samples):
+            stem = sample.image_path.stem
+            xml_stem = stem
+            if xml_stem in used_stems:
+                xml_stem = f"{stem}_{idx}"
+            used_stems.add(xml_stem)
+
+            image_name = sample.image_path.name
+            if image_name in used_image_names:
+                image_name = f"{xml_stem}{sample.image_path.suffix}"
+            used_image_names.add(image_name)
+
+            img_width, img_height = self._resolve_image_dimensions(sample)
+
+            if copy_images:
+                destination = images_dir / image_name
+                if sample.image_path.exists():
+                    if not destination.exists():
+                        shutil.copy2(sample.image_path, destination)
+                else:
+                    logger.warning("Image not found during VOC export: %s", sample.image_path)
+
+                filename_for_xml = image_name
+            else:
+                filename_for_xml = sample.image_path.as_posix()
+
+            xml_content = self._create_annotation_xml(
+                sample,
+                filename_for_xml,
+                folder=image_subdir,
+                img_width=img_width,
+                img_height=img_height,
+            )
+            (ann_dir / f"{xml_stem}.xml").write_text(xml_content, encoding="utf-8")
+
+            split_name = str(sample.metadata.get("split", self.split)).strip() or self.split
+            split_members.setdefault(split_name, []).append(xml_stem)
+
+            self._report_progress(idx + 1, total, "Exporting VOC")
+
+        for split_name, stems in split_members.items():
+            split_file = sets_dir / f"{split_name}.txt"
+            split_file.write_text(
+                "\n".join(stems) + ("\n" if stems else ""),
+                encoding="utf-8",
+            )
+
+        return self.output_path
+
+    def validate_export(self) -> list[str]:
+        """Validate exported VOC dataset and return warnings."""
+        warnings: list[str] = []
+
+        ann_dir = self.output_path / "Annotations"
+        images_dir = self.output_path / self._image_subdir
+        sets_dir = self.output_path / "ImageSets" / "Main"
+
+        if not ann_dir.exists():
+            warnings.append("No Annotations directory")
+            return warnings
+        if not images_dir.exists():
+            warnings.append(f"No {self._image_subdir} directory")
+        if not sets_dir.exists():
+            warnings.append("No ImageSets/Main directory")
+
+        xml_files = sorted(ann_dir.glob("*.xml"))
+        if not xml_files:
+            warnings.append("No XML annotation files found")
+            return warnings
+
+        split_files = sorted(sets_dir.glob("*.txt")) if sets_dir.exists() else []
+        if not split_files:
+            warnings.append("No split files in ImageSets/Main")
+
+        image_stems = {path.stem for path in images_dir.iterdir()} if images_dir.exists() else set()
+        xml_stems = {path.stem for path in xml_files}
+        if self._copied_images and image_stems and image_stems != xml_stems:
+            missing_labels = image_stems - xml_stems
+            missing_images = xml_stems - image_stems
+            if missing_labels:
+                warnings.append(f"{len(missing_labels)} images without XML annotations")
+            if missing_images:
+                warnings.append(f"{len(missing_images)} XML annotations without images")
+
+        missing_images = 0
+        invalid_xml = 0
+        for xml_path in xml_files:
+            try:
+                tree = ET.parse(xml_path)
+            except ET.ParseError:
+                invalid_xml += 1
+                continue
+
+            root = tree.getroot()
+            if root.tag != "annotation":
+                invalid_xml += 1
+                continue
+
+            filename = root.findtext("filename")
+            if not filename:
+                missing_images += 1
+                continue
+
+            file_path = Path(filename)
+            resolved_image = (
+                file_path if file_path.is_absolute() else images_dir / file_path.name
+            )
+
+            if not resolved_image.exists():
+                missing_images += 1
+
+        if invalid_xml > 0:
+            warnings.append(f"{invalid_xml} XML files have invalid structure")
+        if missing_images > 0:
+            warnings.append(f"{missing_images} XML files reference missing images")
+
+        return warnings
