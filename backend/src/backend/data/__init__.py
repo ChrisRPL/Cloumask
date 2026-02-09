@@ -64,6 +64,15 @@ from backend.data.rosbag_parser import (
     RosbagParser,
     get_parser,
 )
+from backend.data.splitting import (
+    DatasetSplitter,
+    SplitResult,
+    create_folds,
+    cross_validation_indices,
+    split_dataset,
+    split_indices,
+    stratified_split_indices,
+)
 
 __all__ = [
     # Data Pipeline Models
@@ -99,6 +108,14 @@ __all__ = [
     "QAResult",
     "LabelQA",
     "run_qa",
+    # Dataset splitting
+    "SplitResult",
+    "DatasetSplitter",
+    "split_indices",
+    "stratified_split_indices",
+    "cross_validation_indices",
+    "split_dataset",
+    "create_folds",
     # ROS Enums
     "BagFormat",
     # ROS Dataclasses
