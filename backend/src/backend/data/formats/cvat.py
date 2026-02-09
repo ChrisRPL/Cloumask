@@ -10,20 +10,39 @@ Implements spec: 06-data-pipeline/07-cvat-loader
 
 from __future__ import annotations
 
+import json
 import logging
+import shutil
 import xml.etree.ElementTree as ET
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from backend.data.formats.base import FormatLoader, FormatRegistry, ProgressCallback
+from backend.data.formats.base import (
+    FormatExporter,
+    FormatLoader,
+    FormatRegistry,
+    ProgressCallback,
+)
 from backend.data.models import BBox, Dataset, Label, Sample
 
 logger = logging.getLogger(__name__)
 
 _IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".bmp", ".webp")
 _SHAPE_TYPES = ("box", "polygon", "polyline", "points", "cuboid")
+_SHAPES_WITH_POINTS = {"polygon", "polyline", "points", "cuboid"}
+_RESERVED_SHAPE_ATTRIBUTES = {
+    "shape_type",
+    "points",
+    "occluded",
+    "source",
+    "z_order",
+    "group_id",
+    "rotation",
+    "outside",
+    "keyframe",
+}
 
 
 @dataclass
@@ -35,6 +54,16 @@ class _ImageRecord:
     width: int
     height: int
     annotations: list[dict[str, Any]] = field(default_factory=list)
+
+
+@dataclass
+class _TrackShapeRecord:
+    """Track shape payload during CVAT export."""
+
+    frame: int
+    label: Label
+    image_width: int
+    image_height: int
 
 
 @FormatRegistry.register_loader
@@ -648,3 +677,461 @@ class CvatLoader(FormatLoader):
         base["has_tracks"] = self._has_tracks
         base["warnings"] = len(self._parse_warnings)
         return base
+
+
+@FormatRegistry.register_exporter
+class CvatExporter(FormatExporter):
+    """Export datasets to CVAT XML format.
+
+    Creates:
+    - annotations.xml
+    - images/ directory
+    """
+
+    format_name = "cvat"
+    description = "CVAT XML format (single annotations file)"
+
+    def __init__(
+        self,
+        output_path: Path,
+        *,
+        overwrite: bool = False,
+        progress_callback: ProgressCallback | None = None,
+        task_name: str = "exported",
+    ) -> None:
+        """Initialize CVAT exporter."""
+        super().__init__(output_path, overwrite=overwrite, progress_callback=progress_callback)
+        self.task_name = task_name
+        self._copied_images = True
+        self._image_subdir = "images"
+
+    @staticmethod
+    def _as_bool(value: object, *, default: bool = False) -> bool:
+        """Convert loose values to bool."""
+        if value is None:
+            return default
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return value != 0
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"1", "true", "yes", "y", "on"}:
+                return True
+            if normalized in {"0", "false", "no", "n", "off"}:
+                return False
+        return default
+
+    @staticmethod
+    def _stringify_attribute(value: object) -> str:
+        """Serialize attribute value to text."""
+        if value is None:
+            return ""
+        if isinstance(value, bool):
+            return "true" if value else "false"
+        if isinstance(value, (str, int, float)):
+            return str(value)
+        return json.dumps(value, sort_keys=True)
+
+    @staticmethod
+    def _resolve_class_names(dataset: Dataset, samples: list[Sample]) -> list[str]:
+        """Resolve class names from dataset metadata and label content."""
+        class_names = list(dataset.class_names) if dataset.class_names else []
+        max_class_id = -1
+
+        for sample in samples:
+            for label in sample.labels:
+                if label.class_id > max_class_id:
+                    max_class_id = label.class_id
+
+        if max_class_id >= len(class_names):
+            class_names.extend(
+                f"class_{class_id}" for class_id in range(len(class_names), max_class_id + 1)
+            )
+
+        for sample in samples:
+            for label in sample.labels:
+                if (
+                    0 <= label.class_id < len(class_names)
+                    and label.class_name
+                    and (
+                        not class_names[label.class_id]
+                        or class_names[label.class_id].startswith("class_")
+                    )
+                ):
+                    class_names[label.class_id] = label.class_name
+
+        return class_names
+
+    @staticmethod
+    def _label_name(label: Label, class_names: list[str]) -> str:
+        """Resolve the exported class name for a label."""
+        if label.class_name:
+            return label.class_name
+        if 0 <= label.class_id < len(class_names):
+            return class_names[label.class_id]
+        return f"class_{label.class_id}"
+
+    @staticmethod
+    def _resolve_image_dimensions(sample: Sample) -> tuple[int, int]:
+        """Resolve image dimensions for export."""
+        if sample.image_width and sample.image_height:
+            return sample.image_width, sample.image_height
+
+        try:
+            from PIL import Image
+
+            with Image.open(sample.image_path) as image:
+                width, height = image.size
+                return int(width), int(height)
+        except Exception:
+            logger.warning(
+                "Unable to resolve image dimensions for %s. Using CVAT defaults 1920x1080.",
+                sample.image_path,
+            )
+            return 1920, 1080
+
+    @staticmethod
+    def _bbox_to_pixels(bbox: BBox, img_width: int, img_height: int) -> tuple[float, float, float, float]:
+        """Convert normalized bbox to absolute pixel coordinates."""
+        x1, y1, x2, y2 = bbox.to_xyxy()
+        xtl = max(0.0, min(float(img_width), x1 * img_width))
+        ytl = max(0.0, min(float(img_height), y1 * img_height))
+        xbr = max(0.0, min(float(img_width), x2 * img_width))
+        ybr = max(0.0, min(float(img_height), y2 * img_height))
+
+        if xbr < xtl:
+            xtl, xbr = xbr, xtl
+        if ybr < ytl:
+            ytl, ybr = ybr, ytl
+
+        return xtl, ytl, xbr, ybr
+
+    @staticmethod
+    def _points_to_cvat_string(
+        points: object,
+        *,
+        img_width: int,
+        img_height: int,
+        min_pairs: int,
+    ) -> str | None:
+        """Convert point list to CVAT `x,y;x,y` format."""
+        if not isinstance(points, (list, tuple)):
+            return None
+
+        try:
+            raw_values = [float(value) for value in points]
+        except (TypeError, ValueError):
+            return None
+
+        if len(raw_values) < (min_pairs * 2) or len(raw_values) % 2 != 0:
+            return None
+
+        is_normalized = all(0.0 <= value <= 1.0 for value in raw_values)
+        encoded_points: list[str] = []
+        for idx in range(0, len(raw_values), 2):
+            x = raw_values[idx]
+            y = raw_values[idx + 1]
+            if is_normalized:
+                x *= img_width
+                y *= img_height
+            encoded_points.append(f"{x:.2f},{y:.2f}")
+        return ";".join(encoded_points)
+
+    def _set_shape_attributes(
+        self,
+        shape_elem: ET.Element,
+        attributes: dict[str, Any],
+        *,
+        include_track_fields: bool,
+    ) -> None:
+        """Set CVAT shape attributes and custom fields."""
+        shape_elem.set("occluded", "1" if self._as_bool(attributes.get("occluded")) else "0")
+
+        for key in ("source", "z_order", "group_id", "rotation"):
+            if key in attributes and attributes[key] is not None:
+                shape_elem.set(key, str(attributes[key]))
+
+        if include_track_fields:
+            shape_elem.set("outside", "1" if self._as_bool(attributes.get("outside")) else "0")
+            if "keyframe" in attributes:
+                shape_elem.set(
+                    "keyframe",
+                    "1" if self._as_bool(attributes.get("keyframe"), default=True) else "0",
+                )
+
+        for key, value in attributes.items():
+            if key in _RESERVED_SHAPE_ATTRIBUTES:
+                continue
+            if value is None:
+                continue
+            attr_elem = ET.SubElement(shape_elem, "attribute")
+            attr_elem.set("name", str(key))
+            attr_elem.text = self._stringify_attribute(value)
+
+    def _append_shape(
+        self,
+        parent: ET.Element,
+        label: Label,
+        *,
+        class_name: str,
+        img_width: int,
+        img_height: int,
+        frame: int | None = None,
+        default_track_label: str | None = None,
+    ) -> None:
+        """Append a CVAT shape for one label."""
+        attributes = label.attributes if isinstance(label.attributes, dict) else {}
+        shape_type = str(attributes.get("shape_type", "box")).strip().lower() or "box"
+
+        shape_attrs: dict[str, str] = {}
+        if frame is None:
+            shape_attrs["label"] = class_name
+        else:
+            shape_attrs["frame"] = str(frame)
+            if class_name and class_name != (default_track_label or ""):
+                shape_attrs["label"] = class_name
+
+        min_pairs = 1 if shape_type == "points" else 2
+        if shape_type in _SHAPES_WITH_POINTS:
+            points_str = self._points_to_cvat_string(
+                attributes.get("points"),
+                img_width=img_width,
+                img_height=img_height,
+                min_pairs=min_pairs,
+            )
+            if points_str:
+                shape_attrs["points"] = points_str
+                shape_elem = ET.SubElement(parent, shape_type, shape_attrs)
+                self._set_shape_attributes(
+                    shape_elem,
+                    attributes,
+                    include_track_fields=frame is not None,
+                )
+                return
+
+        xtl, ytl, xbr, ybr = self._bbox_to_pixels(label.bbox, img_width=img_width, img_height=img_height)
+        shape_attrs.update(
+            {
+                "xtl": f"{xtl:.2f}",
+                "ytl": f"{ytl:.2f}",
+                "xbr": f"{xbr:.2f}",
+                "ybr": f"{ybr:.2f}",
+            }
+        )
+        shape_elem = ET.SubElement(parent, "box", shape_attrs)
+        self._set_shape_attributes(
+            shape_elem,
+            attributes,
+            include_track_fields=frame is not None,
+        )
+
+    def _copy_image_if_needed(
+        self,
+        sample: Sample,
+        destination: Path,
+        *,
+        copy_images: bool,
+    ) -> None:
+        """Copy image into export tree when configured."""
+        if not copy_images:
+            return
+        if not sample.image_path.exists():
+            logger.warning("Image not found during CVAT export: %s", sample.image_path)
+            return
+        if destination.exists():
+            return
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(sample.image_path, destination)
+
+    def _build_meta(self, root: ET.Element, *, class_names: list[str], size: int) -> None:
+        """Build CVAT metadata section."""
+        meta_elem = ET.SubElement(root, "meta")
+        task_elem = ET.SubElement(meta_elem, "task")
+        ET.SubElement(task_elem, "name").text = self.task_name
+        ET.SubElement(task_elem, "size").text = str(size)
+
+        labels_elem = ET.SubElement(task_elem, "labels")
+        for class_name in class_names:
+            label_elem = ET.SubElement(labels_elem, "label")
+            ET.SubElement(label_elem, "name").text = class_name
+
+    def export(
+        self,
+        dataset: Dataset,
+        *,
+        copy_images: bool = True,
+        image_subdir: str = "images",
+    ) -> Path:
+        """Export dataset to CVAT XML format."""
+        self._ensure_output_dir()
+        self._copied_images = copy_images
+        self._image_subdir = image_subdir
+
+        images_dir = self.output_path / image_subdir
+        images_dir.mkdir(parents=True, exist_ok=True)
+
+        samples = list(dataset)
+        class_names = self._resolve_class_names(dataset, samples)
+
+        root = ET.Element("annotations")
+        ET.SubElement(root, "version").text = "1.1"
+        self._build_meta(root, class_names=class_names, size=len(samples))
+
+        used_image_names: set[str] = set()
+        track_map: dict[int, list[_TrackShapeRecord]] = {}
+        track_class_names: dict[int, str] = {}
+        negative_track_id_map: dict[int, int] = {}
+        fallback_track_id = 0
+        total = len(samples)
+
+        for idx, sample in enumerate(samples):
+            img_width, img_height = self._resolve_image_dimensions(sample)
+
+            if copy_images:
+                image_name = sample.image_path.name
+                if image_name in used_image_names:
+                    image_name = f"{sample.image_path.stem}_{idx}{sample.image_path.suffix}"
+                if not image_name:
+                    image_name = f"image_{idx:06d}.jpg"
+                used_image_names.add(image_name)
+                self._copy_image_if_needed(sample, images_dir / image_name, copy_images=copy_images)
+            else:
+                image_name = sample.image_path.as_posix()
+
+            image_elem = ET.SubElement(
+                root,
+                "image",
+                {
+                    "id": str(idx),
+                    "name": image_name,
+                    "width": str(img_width),
+                    "height": str(img_height),
+                },
+            )
+
+            for label in sample.labels:
+                class_name = self._label_name(label, class_names)
+
+                if label.track_id is None:
+                    self._append_shape(
+                        image_elem,
+                        label,
+                        class_name=class_name,
+                        img_width=img_width,
+                        img_height=img_height,
+                    )
+                    continue
+
+                track_id = label.track_id
+                if track_id < 0:
+                    if track_id not in negative_track_id_map:
+                        negative_track_id_map[track_id] = fallback_track_id
+                        fallback_track_id += 1
+                    track_id = negative_track_id_map[track_id]
+
+                track_map.setdefault(track_id, []).append(
+                    _TrackShapeRecord(
+                        frame=idx,
+                        label=label,
+                        image_width=img_width,
+                        image_height=img_height,
+                    )
+                )
+
+                if track_id not in track_class_names:
+                    track_class_names[track_id] = class_name
+                elif track_class_names[track_id] != class_name:
+                    logger.warning(
+                        "Track %s has inconsistent labels (%s vs %s); keeping first label.",
+                        track_id,
+                        track_class_names[track_id],
+                        class_name,
+                    )
+
+            self._report_progress(idx + 1, total, "Exporting CVAT")
+
+        for track_id in sorted(track_map.keys()):
+            track_label = track_class_names.get(track_id, "")
+            track_elem = ET.SubElement(
+                root,
+                "track",
+                {
+                    "id": str(track_id),
+                    "label": track_label,
+                },
+            )
+            for record in sorted(track_map[track_id], key=lambda item: item.frame):
+                self._append_shape(
+                    track_elem,
+                    record.label,
+                    class_name=self._label_name(record.label, class_names),
+                    img_width=record.image_width,
+                    img_height=record.image_height,
+                    frame=record.frame,
+                    default_track_label=track_label,
+                )
+
+        ET.indent(root, space="  ")
+        xml_path = self.output_path / "annotations.xml"
+        xml_bytes = ET.tostring(root, encoding="utf-8", xml_declaration=True)
+        xml_path.write_bytes(xml_bytes)
+
+        return self.output_path
+
+    def validate_export(self) -> list[str]:
+        """Validate exported CVAT dataset."""
+        warnings: list[str] = []
+        xml_path = self.output_path / "annotations.xml"
+        if not xml_path.exists():
+            warnings.append("annotations.xml not found")
+            return warnings
+
+        try:
+            root = ET.parse(xml_path).getroot()
+        except ET.ParseError as exc:
+            warnings.append(f"Invalid XML: {exc}")
+            return warnings
+
+        if root.tag != "annotations":
+            warnings.append(f"Invalid root tag: {root.tag}")
+
+        version = (root.findtext("version") or "").strip()
+        if version != "1.1":
+            warnings.append(f"Expected CVAT version 1.1, found '{version or 'missing'}'")
+
+        image_entries = root.findall("image")
+        track_entries = root.findall("track")
+        if not image_entries and not track_entries:
+            warnings.append("No image or track annotations found")
+
+        if not self._copied_images:
+            return warnings
+
+        images_dir = self.output_path / self._image_subdir
+        if not images_dir.exists():
+            warnings.append(f"No {self._image_subdir} directory")
+            return warnings
+
+        missing_images = 0
+        for image_elem in image_entries:
+            name = (image_elem.get("name") or "").strip()
+            if not name:
+                missing_images += 1
+                continue
+
+            image_path = Path(name)
+            if image_path.is_absolute():
+                if not image_path.exists():
+                    missing_images += 1
+                continue
+
+            direct_path = self.output_path / image_path
+            subdir_path = images_dir / image_path.name
+            if not direct_path.exists() and not subdir_path.exists():
+                missing_images += 1
+
+        if missing_images > 0:
+            warnings.append(f"{missing_images} images referenced in XML were not found on disk")
+
+        return warnings
