@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from backend.data.formats.nuscenes import NuscenesLoader
+from backend.data.formats.nuscenes import NuscenesExporter, NuscenesLoader
 from backend.data.models import Dataset
 
 
@@ -251,3 +251,89 @@ class TestNuscenesLoader:
         assert summary["num_sample_data"] == 5
         assert summary["num_annotations"] == 3
         assert summary["num_categories"] == 2
+
+
+class TestNuscenesExporter:
+    """Tests for NuscenesExporter."""
+
+    def test_export_basic_tables_and_images(self, nuscenes_dataset: Path, tmp_path: Path) -> None:
+        """Test exporter writes expected table files and copies images."""
+        dataset = NuscenesLoader(nuscenes_dataset, cameras=["CAM_FRONT"]).load()
+
+        output = tmp_path / "export"
+        exporter = NuscenesExporter(output)
+        exported = exporter.export(dataset)
+
+        assert exported == output
+
+        version_dir = output / "v1.0-custom"
+        assert version_dir.exists()
+        assert (version_dir / "category.json").exists()
+        assert (version_dir / "sample.json").exists()
+        assert (version_dir / "sample_data.json").exists()
+        assert (version_dir / "sample_annotation.json").exists()
+        assert (version_dir / "instance.json").exists()
+
+        exported_images = list((output / "samples" / "CAM_FRONT").glob("*.jpg"))
+        assert len(exported_images) == len(dataset)
+
+    def test_export_token_linking_and_3d_fields(
+        self, nuscenes_dataset: Path, tmp_path: Path
+    ) -> None:
+        """Test token references are valid and 3D fields are exported."""
+        dataset = NuscenesLoader(nuscenes_dataset, cameras=["CAM_FRONT"]).load()
+        output = tmp_path / "export"
+        NuscenesExporter(output).export(dataset)
+
+        version_dir = output / "v1.0-custom"
+        with (version_dir / "category.json").open() as file:
+            categories = json.load(file)
+        with (version_dir / "sample.json").open() as file:
+            samples = json.load(file)
+        with (version_dir / "sample_data.json").open() as file:
+            sample_data = json.load(file)
+        with (version_dir / "sample_annotation.json").open() as file:
+            annotations = json.load(file)
+        with (version_dir / "instance.json").open() as file:
+            instances = json.load(file)
+
+        sample_tokens = {sample["token"] for sample in samples}
+        instance_tokens = {instance["token"] for instance in instances}
+        category_by_token = {category["token"]: category["name"] for category in categories}
+
+        assert all(entry["sample_token"] in sample_tokens for entry in sample_data)
+        assert all(annotation["sample_token"] in sample_tokens for annotation in annotations)
+        assert all(annotation["instance_token"] in instance_tokens for annotation in annotations)
+        assert all(len(annotation["translation"]) == 3 for annotation in annotations)
+        assert all(len(annotation["size"]) == 3 for annotation in annotations)
+        assert all(len(annotation["rotation"]) == 4 for annotation in annotations)
+
+        car_instance_tokens = {
+            annotation["instance_token"]
+            for annotation in annotations
+            if category_by_token.get(annotation["category_token"]) == "car"
+        }
+        assert len(car_instance_tokens) == 1
+
+    def test_export_roundtrip(self, nuscenes_dataset: Path, tmp_path: Path) -> None:
+        """Test nuScenes load -> export -> load roundtrip."""
+        original = NuscenesLoader(nuscenes_dataset, cameras=["CAM_FRONT"]).load()
+
+        output = tmp_path / "export"
+        NuscenesExporter(output).export(original)
+        reloaded = NuscenesLoader(output, version="v1.0-custom", cameras=["CAM_FRONT"]).load()
+
+        assert len(reloaded) == len(original)
+        assert reloaded.total_labels() == original.total_labels()
+        assert reloaded.class_names == original.class_names
+
+    def test_validate_export(self, nuscenes_dataset: Path, tmp_path: Path) -> None:
+        """Test exported nuScenes structure passes exporter validation."""
+        dataset = NuscenesLoader(nuscenes_dataset, cameras=["CAM_FRONT"]).load()
+
+        output = tmp_path / "export"
+        exporter = NuscenesExporter(output)
+        exporter.export(dataset)
+
+        warnings = exporter.validate_export()
+        assert warnings == []
