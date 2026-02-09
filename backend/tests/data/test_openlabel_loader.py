@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from backend.data.formats.openlabel import OpenlabelLoader
+from backend.data.formats.openlabel import OpenlabelExporter, OpenlabelLoader
 from backend.data.models import Dataset
 
 
@@ -295,3 +295,79 @@ class TestOpenlabelLoader:
         loader = OpenlabelLoader(openlabel_dataset, json_file="custom_name.json")
         dataset = loader.load()
         assert len(dataset) == 2
+
+
+class TestOpenlabelExporter:
+    """Tests for OpenlabelExporter."""
+
+    def test_export_basic(self, openlabel_dataset: Path, tmp_path: Path) -> None:
+        """Test basic OpenLABEL export writes JSON and images."""
+        dataset = OpenlabelLoader(openlabel_dataset).load()
+        output = tmp_path / "export"
+
+        exporter = OpenlabelExporter(output)
+        exported = exporter.export(dataset)
+
+        assert exported == output
+        assert (output / "annotations.json").exists()
+        assert (output / "images" / "frame_000000.jpg").exists()
+        assert (output / "images" / "frame_000001.jpg").exists()
+
+        payload = json.loads((output / "annotations.json").read_text())
+        root = payload["openlabel"]
+
+        assert root["metadata"]["schema_version"] == "1.0.0"
+        assert len(root["frames"]) == 2
+        assert len(root["objects"]) >= 3
+
+    def test_export_roundtrip(self, openlabel_dataset: Path, tmp_path: Path) -> None:
+        """Test load -> export -> load roundtrip."""
+        original = OpenlabelLoader(openlabel_dataset).load()
+        output = tmp_path / "export"
+
+        OpenlabelExporter(output).export(original)
+        exported = OpenlabelLoader(output).load()
+
+        assert len(exported) == len(original)
+        assert set(exported.class_names) == set(original.class_names)
+
+        original_counts = {
+            sample.metadata["frame_id"]: len(sample.labels) for sample in original
+        }
+        exported_counts = {
+            sample.metadata["frame_id"]: len(sample.labels) for sample in exported
+        }
+        assert exported_counts == original_counts
+
+        exported_frame0 = next(sample for sample in exported if sample.metadata["frame_id"] == "0")
+        exported_frame1 = next(sample for sample in exported if sample.metadata["frame_id"] == "1")
+
+        car0 = next(label for label in exported_frame0.labels if label.class_name == "car")
+        car1 = next(label for label in exported_frame1.labels if label.class_name == "car")
+        assert car0.track_id == car1.track_id
+        assert car0.attributes["object_uid"] == car1.attributes["object_uid"]
+        assert "cuboid_3d" in car0.attributes
+
+    def test_export_disable_3d(self, openlabel_dataset: Path, tmp_path: Path) -> None:
+        """Test exporter can disable cuboid payloads."""
+        dataset = OpenlabelLoader(openlabel_dataset).load()
+        output = tmp_path / "export"
+
+        OpenlabelExporter(output, export_3d=False).export(dataset)
+
+        payload = json.loads((output / "annotations.json").read_text())
+        for frame in payload["openlabel"]["frames"].values():
+            frame_objects = frame.get("objects", {})
+            for obj in frame_objects.values():
+                object_data = obj.get("object_data", {})
+                assert "cuboid" not in object_data
+
+    def test_validate_export(self, openlabel_dataset: Path, tmp_path: Path) -> None:
+        """Test exporter validation for generated OpenLABEL dataset."""
+        dataset = OpenlabelLoader(openlabel_dataset).load()
+        output = tmp_path / "export"
+
+        exporter = OpenlabelExporter(output)
+        exporter.export(dataset)
+        warnings = exporter.validate_export()
+        assert warnings == []

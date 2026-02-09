@@ -1,4 +1,4 @@
-"""OpenLABEL format loader.
+"""OpenLABEL format loader and exporter.
 
 Supports OpenLABEL (ASAM) 1.x datasets:
 - JSON annotations with `openlabel` root
@@ -7,7 +7,9 @@ Supports OpenLABEL (ASAM) 1.x datasets:
 - Actions/events/relations metadata
 - Coordinate systems and frame transforms metadata
 
-Implements spec: 06-data-pipeline/09-openlabel-loader
+Implements specs:
+- 06-data-pipeline/09-openlabel-loader
+- 06-data-pipeline/16-openlabel-exporter
 """
 
 from __future__ import annotations
@@ -15,18 +17,35 @@ from __future__ import annotations
 import json
 import logging
 import re
+import shutil
 from collections import defaultdict
 from collections.abc import Iterator
 from contextlib import suppress
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from backend.data.formats.base import FormatLoader, FormatRegistry, ProgressCallback
+from backend.data.formats.base import (
+    FormatExporter,
+    FormatLoader,
+    FormatRegistry,
+    ProgressCallback,
+)
 from backend.data.models import BBox, Dataset, Label, Sample
 
 logger = logging.getLogger(__name__)
 
 _IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".bmp", ".webp")
+_RESERVED_EXPORT_ATTRIBUTES = {
+    "object_uid",
+    "object_name",
+    "stream",
+    "coordinate_system",
+    "cuboid_3d",
+    "actions",
+    "events",
+    "relations",
+}
 
 
 @FormatRegistry.register_loader
@@ -943,3 +962,580 @@ class OpenlabelLoader(FormatLoader):
             base["stream_filter"] = sorted(self.stream_filter)
 
         return base
+
+
+@FormatRegistry.register_exporter
+class OpenlabelExporter(FormatExporter):
+    """Export datasets to OpenLABEL format.
+
+    Creates:
+    - annotations.json with OpenLABEL schema
+    - images/ directory with exported images (when copy_images=True)
+    """
+
+    format_name = "openlabel"
+    description = "OpenLABEL (ASAM) format"
+
+    def __init__(
+        self,
+        output_path: Path,
+        *,
+        overwrite: bool = False,
+        progress_callback: ProgressCallback | None = None,
+        export_3d: bool = True,
+        stream_name: str = "CAM_MAIN",
+    ) -> None:
+        """Initialize OpenLABEL exporter."""
+        super().__init__(output_path, overwrite=overwrite, progress_callback=progress_callback)
+        self.export_3d = export_3d
+        self.stream_name = stream_name.strip() or "CAM_MAIN"
+        self._copied_images = True
+        self._image_subdir = "images"
+
+    @staticmethod
+    def _resolve_class_names(dataset: Dataset, samples: list[Sample]) -> list[str]:
+        """Resolve class names from dataset metadata and labels."""
+        class_names = list(dataset.class_names) if dataset.class_names else []
+        max_class_id = -1
+
+        for sample in samples:
+            for label in sample.labels:
+                if label.class_id > max_class_id:
+                    max_class_id = label.class_id
+
+        if max_class_id >= len(class_names):
+            class_names.extend(
+                f"class_{class_id}" for class_id in range(len(class_names), max_class_id + 1)
+            )
+
+        for sample in samples:
+            for label in sample.labels:
+                if (
+                    0 <= label.class_id < len(class_names)
+                    and label.class_name
+                    and (
+                        not class_names[label.class_id]
+                        or class_names[label.class_id].startswith("class_")
+                    )
+                ):
+                    class_names[label.class_id] = label.class_name
+
+        return class_names
+
+    @staticmethod
+    def _label_class_name(label: Label, class_names: list[str]) -> str:
+        """Get class name for a label."""
+        if label.class_name:
+            name = label.class_name.strip()
+            if name:
+                return name
+
+        if 0 <= label.class_id < len(class_names):
+            name = str(class_names[label.class_id]).strip()
+            if name:
+                return name
+
+        return f"class_{label.class_id}"
+
+    @staticmethod
+    def _safe_float(value: Any) -> float | None:
+        """Convert value to float or return None."""
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    def _resolve_image_dimensions(self, sample: Sample) -> tuple[int, int]:
+        """Resolve image dimensions for export."""
+        if sample.image_width and sample.image_height:
+            return int(sample.image_width), int(sample.image_height)
+
+        try:
+            from PIL import Image
+
+            with Image.open(sample.image_path) as image:
+                width, height = image.size
+                return int(width), int(height)
+        except Exception:
+            logger.warning(
+                "Unable to resolve image dimensions for %s. Using OpenLABEL defaults 1920x1080.",
+                sample.image_path,
+            )
+            return 1920, 1080
+
+    @staticmethod
+    def _normalize_cuboid(cuboid: Any) -> list[float] | None:
+        """Convert cuboid_3d attributes to OpenLABEL cuboid val payload."""
+        if not isinstance(cuboid, dict):
+            return None
+
+        position = cuboid.get("position")
+        rotation = cuboid.get("rotation")
+        size = cuboid.get("size")
+
+        if not isinstance(position, (list, tuple)):
+            return None
+        if not isinstance(rotation, (list, tuple)):
+            return None
+        if not isinstance(size, (list, tuple)):
+            return None
+        if len(position) < 3 or len(rotation) < 4 or len(size) < 3:
+            return None
+
+        values: list[float] = []
+        for item in list(position[:3]) + list(rotation[:4]) + list(size[:3]):
+            converted = OpenlabelExporter._safe_float(item)
+            if converted is None:
+                return None
+            values.append(converted)
+
+        return values
+
+    @staticmethod
+    def _stringify_scalar(value: Any) -> str:
+        """Convert scalar values to textual OpenLABEL entries."""
+        if isinstance(value, bool):
+            return "true" if value else "false"
+        return str(value)
+
+    @classmethod
+    def _attribute_buckets(cls, attributes: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+        """Convert label attributes to OpenLABEL text/num/boolean buckets."""
+        buckets: dict[str, list[dict[str, Any]]] = {
+            "text": [],
+            "num": [],
+            "boolean": [],
+        }
+
+        for key, value in attributes.items():
+            if key in _RESERVED_EXPORT_ATTRIBUTES or value is None:
+                continue
+
+            name = str(key).strip()
+            if not name:
+                continue
+
+            if isinstance(value, bool):
+                buckets["boolean"].append({"name": name, "val": value})
+                continue
+
+            if isinstance(value, (int, float)):
+                buckets["num"].append({"name": name, "val": float(value)})
+                continue
+
+            if isinstance(value, str):
+                buckets["text"].append({"name": name, "val": value})
+                continue
+
+            buckets["text"].append({"name": name, "val": cls._stringify_scalar(value)})
+
+        return {bucket: entries for bucket, entries in buckets.items() if entries}
+
+    @staticmethod
+    def _get_frame_id(sample: Sample, index: int, used_ids: set[str]) -> str:
+        """Resolve unique frame identifier."""
+        raw_frame_id = sample.metadata.get("frame_id")
+        frame_id = str(raw_frame_id).strip() if raw_frame_id is not None else str(index)
+        if not frame_id:
+            frame_id = str(index)
+
+        if frame_id not in used_ids:
+            used_ids.add(frame_id)
+            return frame_id
+
+        fallback = str(index)
+        if fallback not in used_ids:
+            used_ids.add(fallback)
+            return fallback
+
+        suffix = 1
+        while f"{fallback}_{suffix}" in used_ids:
+            suffix += 1
+        resolved = f"{fallback}_{suffix}"
+        used_ids.add(resolved)
+        return resolved
+
+    @staticmethod
+    def _resolve_timestamp(sample: Sample, index: int) -> int:
+        """Resolve frame timestamp."""
+        timestamp = sample.metadata.get("timestamp")
+        try:
+            return int(timestamp)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return index * 100
+
+    @staticmethod
+    def _resolve_track_uid(
+        label: Label,
+        *,
+        frame_index: int,
+        label_index: int,
+        track_uid_map: dict[int, str],
+        used_uids: set[str],
+    ) -> str:
+        """Resolve deterministic object UID for tracked/untracked labels."""
+        if label.track_id is not None and label.track_id in track_uid_map:
+            return track_uid_map[label.track_id]
+
+        attributes = label.attributes if isinstance(label.attributes, dict) else {}
+        preferred_uid = attributes.get("object_uid")
+
+        if label.track_id is not None:
+            if isinstance(preferred_uid, str) and preferred_uid.strip():
+                candidate = preferred_uid.strip()
+            else:
+                candidate = f"track_{label.track_id}"
+        else:
+            candidate = f"obj_{frame_index}_{label_index}"
+
+        if not candidate:
+            candidate = "obj"
+
+        if candidate in used_uids:
+            suffix = 1
+            while f"{candidate}_{suffix}" in used_uids:
+                suffix += 1
+            candidate = f"{candidate}_{suffix}"
+
+        used_uids.add(candidate)
+
+        if label.track_id is not None:
+            track_uid_map[label.track_id] = candidate
+
+        return candidate
+
+    @staticmethod
+    def _entity_map(entries: Any) -> dict[str, dict[str, Any]]:
+        """Convert frame metadata action/event/relation lists into OpenLABEL maps."""
+        if not isinstance(entries, list):
+            return {}
+
+        entities: dict[str, dict[str, Any]] = {}
+        for item in entries:
+            if not isinstance(item, dict):
+                continue
+
+            uid = item.get("uid")
+            if not isinstance(uid, str) or not uid.strip():
+                continue
+
+            entities[uid.strip()] = {key: value for key, value in item.items() if key != "uid"}
+
+        return entities
+
+    def _exported_image_uri(
+        self,
+        sample: Sample,
+        *,
+        frame_index: int,
+        images_dir: Path,
+        image_subdir: str,
+        copy_images: bool,
+        used_names: set[str],
+    ) -> str:
+        """Resolve and optionally copy image path for frame stream URI."""
+        source = sample.image_path
+        default_suffix = source.suffix or ".jpg"
+        image_name = source.name or f"frame_{frame_index:06d}{default_suffix}"
+
+        if image_name in used_names:
+            stem = source.stem or f"frame_{frame_index:06d}"
+            image_name = f"{stem}_{frame_index}{default_suffix}"
+        used_names.add(image_name)
+
+        if copy_images:
+            destination = images_dir / image_name
+            if source.exists():
+                if not destination.exists():
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(source, destination)
+            else:
+                logger.warning("Image not found during OpenLABEL export: %s", source)
+
+            return str(Path(image_subdir) / image_name).replace("\\", "/")
+
+        return source.as_posix()
+
+    def export(
+        self,
+        dataset: Dataset,
+        *,
+        copy_images: bool = True,
+        image_subdir: str = "images",
+    ) -> Path:
+        """Export dataset to OpenLABEL format."""
+        self._ensure_output_dir()
+        self._copied_images = copy_images
+        self._image_subdir = image_subdir
+
+        images_dir = self.output_path / image_subdir
+        images_dir.mkdir(parents=True, exist_ok=True)
+
+        samples = list(dataset)
+        class_names = self._resolve_class_names(dataset, samples)
+        total = len(samples)
+
+        openlabel_root: dict[str, Any] = {
+            "metadata": {
+                "schema_version": "1.0.0",
+                "exporter": "cloumask",
+                "date_created": datetime.now(UTC).isoformat(),
+            },
+            "coordinate_systems": {},
+            "streams": {
+                self.stream_name: {
+                    "description": "default exported image stream",
+                }
+            },
+            "objects": {},
+            "actions": {},
+            "events": {},
+            "relations": {},
+            "frames": {},
+        }
+
+        objects = openlabel_root["objects"]
+        frames = openlabel_root["frames"]
+        used_frame_ids: set[str] = set()
+        used_image_names: set[str] = set()
+        used_uids: set[str] = set()
+        track_uid_map: dict[int, str] = {}
+
+        for frame_index, sample in enumerate(samples):
+            image_width, image_height = self._resolve_image_dimensions(sample)
+            frame_id = self._get_frame_id(sample, frame_index, used_frame_ids)
+            timestamp = self._resolve_timestamp(sample, frame_index)
+            image_uri = self._exported_image_uri(
+                sample,
+                frame_index=frame_index,
+                images_dir=images_dir,
+                image_subdir=image_subdir,
+                copy_images=copy_images,
+                used_names=used_image_names,
+            )
+
+            frame_payload: dict[str, Any] = {
+                "frame_properties": {
+                    "timestamp": timestamp,
+                    "width": image_width,
+                    "height": image_height,
+                    "streams": {
+                        self.stream_name: {
+                            "uri": image_uri,
+                        }
+                    },
+                },
+                "objects": {},
+            }
+
+            coordinate_systems = sample.metadata.get("coordinate_systems")
+            if isinstance(coordinate_systems, dict):
+                # Preserve dataset-level coordinate systems when source metadata contains them.
+                for key, value in coordinate_systems.items():
+                    openlabel_root["coordinate_systems"][str(key)] = value
+
+            frame_coordinate_systems = sample.metadata.get("frame_coordinate_systems")
+            if frame_coordinate_systems is not None:
+                frame_payload["coordinate_systems"] = frame_coordinate_systems
+
+            transforms = sample.metadata.get("transforms")
+            if transforms is not None:
+                frame_payload["transforms"] = transforms
+
+            action_map = self._entity_map(sample.metadata.get("actions"))
+            event_map = self._entity_map(sample.metadata.get("events"))
+            relation_map = self._entity_map(sample.metadata.get("relations"))
+            if action_map:
+                frame_payload["actions"] = action_map
+            if event_map:
+                frame_payload["events"] = event_map
+            if relation_map:
+                frame_payload["relations"] = relation_map
+
+            for label_index, label in enumerate(sample.labels):
+                object_uid = self._resolve_track_uid(
+                    label,
+                    frame_index=frame_index,
+                    label_index=label_index,
+                    track_uid_map=track_uid_map,
+                    used_uids=used_uids,
+                )
+                class_name = self._label_class_name(label, class_names)
+                attributes = label.attributes if isinstance(label.attributes, dict) else {}
+
+                if object_uid not in objects:
+                    object_name_raw = attributes.get("object_name")
+                    object_name = (
+                        object_name_raw.strip()
+                        if isinstance(object_name_raw, str) and object_name_raw.strip()
+                        else f"{class_name}_{object_uid}"
+                    )
+                    objects[object_uid] = {
+                        "name": object_name,
+                        "type": class_name,
+                    }
+
+                x, y, width, height = label.bbox.to_xywh()
+                object_data: dict[str, Any] = {
+                    "bbox": [
+                        {
+                            "name": "bbox2d",
+                            "val": [
+                                float(x * image_width),
+                                float(y * image_height),
+                                float(width * image_width),
+                                float(height * image_height),
+                            ],
+                        }
+                    ],
+                }
+
+                if self.export_3d:
+                    cuboid_values = self._normalize_cuboid(attributes.get("cuboid_3d"))
+                    if cuboid_values is not None:
+                        object_data["cuboid"] = [{"name": "cuboid3d", "val": cuboid_values}]
+
+                stream = attributes.get("stream")
+                if isinstance(stream, str) and stream.strip():
+                    object_data["stream"] = stream.strip()
+
+                coordinate_system = attributes.get("coordinate_system")
+                if coordinate_system is not None:
+                    object_data["coordinate_system"] = coordinate_system
+
+                object_data.update(self._attribute_buckets(attributes))
+
+                frame_payload["objects"][object_uid] = {"object_data": object_data}
+
+            frames[frame_id] = frame_payload
+            self._report_progress(frame_index + 1, total, "Exporting OpenLABEL")
+
+        annotations = {"openlabel": openlabel_root}
+        json_path = self.output_path / "annotations.json"
+        with json_path.open("w", encoding="utf-8") as file:
+            json.dump(annotations, file, indent=2)
+
+        return self.output_path
+
+    def validate_export(self) -> list[str]:
+        """Validate exported OpenLABEL dataset."""
+        warnings: list[str] = []
+
+        json_path = self.output_path / "annotations.json"
+        if not json_path.exists():
+            warnings.append("annotations.json not found")
+            return warnings
+
+        try:
+            with json_path.open(encoding="utf-8") as file:
+                payload = json.load(file)
+        except json.JSONDecodeError as exc:
+            return [f"Invalid JSON: {exc}"]
+
+        if not isinstance(payload, dict):
+            warnings.append("Export payload must be a JSON object")
+            return warnings
+
+        data = payload.get("openlabel")
+        if not isinstance(data, dict):
+            warnings.append("Missing or invalid 'openlabel' root key")
+            return warnings
+
+        metadata = data.get("metadata")
+        if not isinstance(metadata, dict):
+            warnings.append("Missing metadata section")
+        else:
+            schema_version = str(metadata.get("schema_version", "")).strip()
+            if not schema_version.startswith("1.0"):
+                warnings.append(
+                    f"Expected OpenLABEL schema version 1.0.x, found '{schema_version or 'missing'}'"
+                )
+
+        objects = data.get("objects")
+        if not isinstance(objects, dict):
+            warnings.append("Missing or invalid objects map")
+            return warnings
+
+        frames = data.get("frames")
+        if not isinstance(frames, dict):
+            warnings.append("Missing or invalid frames map")
+            return warnings
+
+        for frame_id, frame_data in frames.items():
+            if not isinstance(frame_data, dict):
+                warnings.append(f"Frame '{frame_id}' must be an object")
+                continue
+
+            frame_objects = frame_data.get("objects")
+            if not isinstance(frame_objects, dict):
+                warnings.append(f"Frame '{frame_id}' missing objects map")
+                continue
+
+            frame_props = frame_data.get("frame_properties")
+            frame_streams = {}
+            if isinstance(frame_props, dict):
+                raw_streams = frame_props.get("streams")
+                if isinstance(raw_streams, dict):
+                    frame_streams = raw_streams
+
+            for stream_data in frame_streams.values():
+                if not isinstance(stream_data, dict):
+                    continue
+                uri = stream_data.get("uri")
+                if not isinstance(uri, str) or not uri.strip():
+                    continue
+                image_path = Path(uri)
+                if not image_path.is_absolute():
+                    image_path = self.output_path / image_path
+                if not image_path.exists():
+                    warnings.append(f"Frame '{frame_id}' stream URI not found: {uri}")
+                    break
+
+            for object_uid, object_entry in frame_objects.items():
+                if object_uid not in objects:
+                    warnings.append(f"Frame '{frame_id}' references unknown object UID '{object_uid}'")
+                    continue
+
+                if not isinstance(object_entry, dict):
+                    warnings.append(f"Frame '{frame_id}' object '{object_uid}' must be an object")
+                    continue
+
+                object_data = object_entry.get("object_data")
+                if not isinstance(object_data, dict):
+                    warnings.append(f"Frame '{frame_id}' object '{object_uid}' missing object_data")
+                    continue
+
+                bbox_entries = object_data.get("bbox", [])
+                if not isinstance(bbox_entries, list) or not bbox_entries:
+                    warnings.append(f"Frame '{frame_id}' object '{object_uid}' missing bbox data")
+                    continue
+
+                first_bbox = bbox_entries[0]
+                bbox_val = first_bbox.get("val") if isinstance(first_bbox, dict) else None
+                if not isinstance(bbox_val, list) or len(bbox_val) < 4:
+                    warnings.append(f"Frame '{frame_id}' object '{object_uid}' has invalid bbox payload")
+                    continue
+
+                cuboid_entries = object_data.get("cuboid")
+                if cuboid_entries is None:
+                    continue
+                if not isinstance(cuboid_entries, list):
+                    warnings.append(
+                        f"Frame '{frame_id}' object '{object_uid}' cuboid payload must be a list"
+                    )
+                    continue
+
+                for cuboid_entry in cuboid_entries:
+                    if not isinstance(cuboid_entry, dict):
+                        warnings.append(
+                            f"Frame '{frame_id}' object '{object_uid}' cuboid entry must be an object"
+                        )
+                        break
+                    cuboid_val = cuboid_entry.get("val")
+                    if not isinstance(cuboid_val, list) or len(cuboid_val) != 10:
+                        warnings.append(
+                            f"Frame '{frame_id}' object '{object_uid}' cuboid must contain 10 values"
+                        )
+                        break
+
+        return warnings
