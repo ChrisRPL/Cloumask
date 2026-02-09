@@ -24,7 +24,7 @@ from backend.data.formats.kitti import KITTI_CLASSES, KittiLoader
 from backend.data.formats.nuscenes import NUSCENES_CAMERAS, NuscenesLoader
 from backend.data.formats.openlabel import OpenlabelLoader
 from backend.data.formats.voc import VOC_CLASSES, VocLoader
-from backend.data.formats.yolo import YoloLoader
+from backend.data.formats.yolo import YoloExporter, YoloLoader
 
 # Remaining loaders/exporters:
 # from backend.data.formats import nuscenes
@@ -45,6 +45,7 @@ __all__ = [
     "FusedAnnotation",
     "FusedAnnotationResult",
     # Format loaders
+    "YoloExporter",
     "YoloLoader",
     "CocoLoader",
     "CvatLoader",

@@ -3,8 +3,9 @@
 from pathlib import Path
 
 import pytest
+import yaml
 
-from backend.data.formats.yolo import YoloLoader
+from backend.data.formats.yolo import YoloExporter, YoloLoader
 from backend.data.models import Dataset
 
 
@@ -202,3 +203,100 @@ class TestYoloLoader:
 
         assert len(ds) == 1
         assert len(ds[0].labels) == 0
+
+
+class TestYoloExporter:
+    """Tests for YoloExporter."""
+
+    def test_export_basic(self, yolo_dataset: Path, tmp_path: Path) -> None:
+        """Test basic export writes expected files."""
+        loader = YoloLoader(yolo_dataset)
+        dataset = loader.load()
+
+        output = tmp_path / "export"
+        exporter = YoloExporter(output)
+        exported_path = exporter.export(dataset)
+
+        assert exported_path == output
+        assert (output / "data.yaml").exists()
+        assert (output / "train" / "images").exists()
+        assert (output / "train" / "labels").exists()
+        assert (output / "val" / "images").exists()
+        assert (output / "val" / "labels").exists()
+
+        with (output / "data.yaml").open() as f:
+            data = yaml.safe_load(f)
+
+        assert data["train"] == "train/images"
+        assert data["val"] == "val/images"
+        assert data["names"] == ["person", "car", "bicycle"]
+
+    def test_export_roundtrip(self, yolo_dataset: Path, tmp_path: Path) -> None:
+        """Test load -> export -> load roundtrip."""
+        loader = YoloLoader(yolo_dataset)
+        original = loader.load()
+
+        output = tmp_path / "export"
+        exporter = YoloExporter(output)
+        exporter.export(original)
+
+        reloaded = YoloLoader(output).load()
+
+        assert len(reloaded) == len(original)
+        assert reloaded.class_names == original.class_names
+
+        original_by_stem = {sample.image_path.stem: len(sample.labels) for sample in original}
+        reloaded_by_stem = {sample.image_path.stem: len(sample.labels) for sample in reloaded}
+        assert reloaded_by_stem == original_by_stem
+
+    def test_export_with_splits(self, yolo_dataset: Path, tmp_path: Path) -> None:
+        """Test export with custom split ratios."""
+        dataset = YoloLoader(yolo_dataset).load()
+
+        output = tmp_path / "export"
+        exporter = YoloExporter(
+            output,
+            split_ratios={"train": 0.5, "val": 0.5},
+            split_seed=7,
+        )
+        exporter.export(dataset)
+
+        assert (output / "train").exists()
+        assert (output / "val").exists()
+        assert not (output / "test").exists()
+
+        total_exported = len(list((output / "train" / "labels").glob("*.txt"))) + len(
+            list((output / "val" / "labels").glob("*.txt"))
+        )
+        assert total_exported == len(dataset)
+
+    def test_export_segmentation_polygon(self, yolo_dataset: Path, tmp_path: Path) -> None:
+        """Test exporting segmentation polygons."""
+        dataset = YoloLoader(yolo_dataset).load()
+        dataset[0].labels[0].attributes["polygon"] = [0.1, 0.2, 0.3, 0.2, 0.3, 0.4, 0.1, 0.4]
+
+        output = tmp_path / "export"
+        exporter = YoloExporter(output)
+        exporter.export(dataset)
+
+        label_file = output / "train" / "labels" / f"{dataset[0].image_path.stem}.txt"
+        first_line = label_file.read_text().splitlines()[0]
+        parts = first_line.split()
+
+        assert parts[0] == "0"
+        assert len(parts) == 9  # class_id + 8 polygon values
+
+        reloaded = YoloLoader(output).load()
+        sample = next(s for s in reloaded if s.image_path.stem == dataset[0].image_path.stem)
+        assert "polygon" in sample.labels[0].attributes
+
+    def test_validate_export(self, yolo_dataset: Path, tmp_path: Path) -> None:
+        """Test export validation."""
+        dataset = YoloLoader(yolo_dataset).load()
+
+        output = tmp_path / "export"
+        exporter = YoloExporter(output)
+        exporter.export(dataset)
+
+        warnings = exporter.validate_export()
+        assert warnings == []
