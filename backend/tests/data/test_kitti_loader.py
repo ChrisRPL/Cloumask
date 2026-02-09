@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from backend.data.formats.kitti import KITTI_CLASSES, KittiLoader
-from backend.data.models import Dataset
+from backend.data.formats.kitti import KITTI_CLASSES, KittiExporter, KittiLoader
+from backend.data.models import BBox, Dataset, Label, Sample
 
 
 @pytest.fixture
@@ -238,3 +238,105 @@ class TestKittiLoader:
         """Test class names can be overridden."""
         loader = KittiLoader(kitti_dataset, class_names=["A", "B", "C"])
         assert loader.get_class_names() == ["A", "B", "C"]
+
+
+class TestKittiExporter:
+    """Tests for KittiExporter."""
+
+    def test_export_basic(self, kitti_dataset: Path, tmp_path: Path) -> None:
+        """Test basic export writes expected KITTI structure."""
+        dataset = KittiLoader(kitti_dataset).load()
+
+        output = tmp_path / "export"
+        exporter = KittiExporter(output)
+        exported = exporter.export(dataset)
+
+        assert exported == output
+        assert (output / "training" / "image_2").exists()
+        assert (output / "training" / "label_2").exists()
+        assert len(list((output / "training" / "label_2").glob("*.txt"))) == len(dataset)
+
+    def test_export_roundtrip(self, kitti_dataset: Path, tmp_path: Path) -> None:
+        """Test load -> export -> load roundtrip."""
+        original = KittiLoader(kitti_dataset).load()
+
+        output = tmp_path / "export"
+        KittiExporter(output).export(original)
+
+        reloaded = KittiLoader(output).load()
+        assert len(reloaded) == len(original)
+        assert reloaded.total_labels() == original.total_labels()
+        assert reloaded.class_names == original.class_names
+
+    def test_export_preserves_3d_attributes(self, kitti_dataset: Path, tmp_path: Path) -> None:
+        """Test 3D KITTI attributes are preserved through export and reload."""
+        original = KittiLoader(kitti_dataset).load()
+
+        output = tmp_path / "export"
+        KittiExporter(output).export(original)
+        reloaded = KittiLoader(output).load()
+
+        orig_label = original[0].labels[0]
+        new_label = reloaded[0].labels[0]
+
+        assert new_label.attributes["dimensions_3d"] == orig_label.attributes["dimensions_3d"]
+        assert new_label.attributes["location_3d"] == orig_label.attributes["location_3d"]
+        assert new_label.attributes["rotation_y"] == pytest.approx(orig_label.attributes["rotation_y"])
+        assert new_label.attributes["alpha"] == pytest.approx(orig_label.attributes["alpha"])
+
+    def test_export_defaults_for_missing_3d(self, tmp_path: Path) -> None:
+        """Test missing 3D attributes use KITTI default placeholders."""
+        image_path = tmp_path / "source" / "img.png"
+        image_path.parent.mkdir(parents=True)
+
+        try:
+            from PIL import Image
+
+            Image.new("RGB", (640, 480), color="black").save(image_path)
+        except ImportError:
+            image_path.touch()
+
+        dataset = Dataset(
+            [
+                Sample(
+                    image_path=image_path,
+                    image_width=640,
+                    image_height=480,
+                    labels=[
+                        Label(
+                            class_name="Car",
+                            class_id=0,
+                            bbox=BBox.from_xyxy(0.1, 0.2, 0.5, 0.6),
+                            attributes={},
+                        )
+                    ],
+                )
+            ],
+            name="kitti_defaults",
+            class_names=["Car"],
+        )
+
+        output = tmp_path / "export"
+        KittiExporter(output).export(dataset)
+
+        line = (output / "training" / "label_2" / "000000.txt").read_text(encoding="utf-8").strip()
+        fields = line.split()
+
+        assert len(fields) == 15
+        assert fields[1] == "0.00"
+        assert fields[2] == "0"
+        assert fields[3] == "-10.00"
+        assert fields[8:11] == ["-1.00", "-1.00", "-1.00"]
+        assert fields[11:14] == ["-1000.00", "-1000.00", "-1000.00"]
+        assert fields[14] == "-10.00"
+
+    def test_validate_export(self, kitti_dataset: Path, tmp_path: Path) -> None:
+        """Test export validation."""
+        dataset = KittiLoader(kitti_dataset).load()
+
+        output = tmp_path / "export"
+        exporter = KittiExporter(output)
+        exporter.export(dataset)
+
+        warnings = exporter.validate_export()
+        assert warnings == []
