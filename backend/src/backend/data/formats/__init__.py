@@ -21,6 +21,7 @@ from backend.data.formats.fused_annotation import (
     FusedAnnotationResult,
 )
 from backend.data.formats.kitti import KITTI_CLASSES, KittiLoader
+from backend.data.formats.nuscenes import NUSCENES_CAMERAS, NuscenesLoader
 from backend.data.formats.voc import VOC_CLASSES, VocLoader
 from backend.data.formats.yolo import YoloLoader
 
@@ -48,7 +49,9 @@ __all__ = [
     "CocoLoader",
     "CvatLoader",
     "KittiLoader",
+    "NuscenesLoader",
     "VocLoader",
     "VOC_CLASSES",
     "KITTI_CLASSES",
+    "NUSCENES_CAMERAS",
 ]
