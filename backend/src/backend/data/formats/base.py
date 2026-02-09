@@ -363,8 +363,13 @@ class FormatRegistry:
         if (path / "Annotations").is_dir() and any((path / "Annotations").glob("*.xml")):
             return "voc"
 
-        # KITTI: has label_2/ directory
+        # KITTI: has label_2/ directory (root or split subdirectory)
         if (path / "label_2").is_dir():
+            return "kitti"
+        if any(
+            (path / split / "label_2").is_dir()
+            for split in ("training", "testing", "train", "val", "test")
+        ):
             return "kitti"
 
         # CVAT: single XML file with <annotations> root
