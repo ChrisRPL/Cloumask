@@ -238,7 +238,7 @@ class DatasetSplitter:
             splits[split_name] = Dataset(
                 split_samples,
                 name=f"{dataset.name}_{split_name}",
-                class_names=class_names,
+                class_names=list(class_names),
             )
             actual_ratios[split_name] = (len(indices) / total) if total else 0.0
 
@@ -266,12 +266,12 @@ class DatasetSplitter:
             train_ds = Dataset(
                 train_samples,
                 name=f"{dataset.name}_fold{fold_idx}_train",
-                class_names=class_names,
+                class_names=list(class_names),
             )
             val_ds = Dataset(
                 val_samples,
                 name=f"{dataset.name}_fold{fold_idx}_val",
-                class_names=class_names,
+                class_names=list(class_names),
             )
             datasets.append((train_ds, val_ds))
 

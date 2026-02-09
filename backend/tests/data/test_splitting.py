@@ -229,6 +229,15 @@ class TestDatasetSplitter:
             assert train_ds.class_names == sample_dataset.class_names
             assert val_ds.class_names == sample_dataset.class_names
 
+    def test_split_class_names_are_not_shared(self, sample_dataset: Dataset) -> None:
+        result = split_dataset(sample_dataset, seed=7)
+
+        result.train.class_names.append("new-class")
+
+        assert "new-class" not in result.val.class_names
+        assert "new-class" not in result.test.class_names
+        assert "new-class" not in sample_dataset.class_names
+
     def test_empty_dataset(self) -> None:
         empty = Dataset([], name="empty", class_names=["car"])
         result = split_dataset(empty, seed=1)
