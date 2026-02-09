@@ -10,6 +10,7 @@ from backend.data.formats.base import (
     FormatExporter,
     FormatLoader,
     FormatRegistry,
+    convert,
     detect_format,
     get_exporter,
     get_loader,
@@ -248,3 +249,100 @@ class TestDetectFormat:
     def test_returns_none_for_empty_dir(self, tmp_path: Path) -> None:
         """Test that empty directory returns None."""
         assert detect_format(tmp_path) is None
+
+
+class TestConvert:
+    """Tests for format conversion helper."""
+
+    def test_augmentation_requires_copy_images(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        class _Loader:
+            def load(self) -> Dataset:
+                return Dataset([])
+
+        monkeypatch.setattr(
+            "backend.data.formats.base.get_loader",
+            lambda *args, **kwargs: _Loader(),
+        )
+
+        with pytest.raises(ValueError, match="copy_images=True"):
+            convert(
+                Path("/tmp/input"),
+                Path("/tmp/output"),
+                "mock",
+                augment=True,
+                copy_images=False,
+            )
+
+    def test_augmentation_path_uses_augmented_dataset(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        source_dataset = Dataset([Sample(image_path=tmp_path / "frame.jpg")], name="source")
+        augmented_dataset = Dataset([Sample(image_path=tmp_path / "aug.jpg")], name="augmented")
+        calls: dict[str, object] = {}
+
+        class _Loader:
+            def load(self) -> Dataset:
+                return source_dataset
+
+        class _Exporter:
+            def export(
+                self,
+                dataset: Dataset,
+                *,
+                copy_images: bool = True,
+                image_subdir: str = "images",
+            ) -> Path:
+                calls["export_dataset"] = dataset
+                calls["copy_images"] = copy_images
+                calls["image_subdir"] = image_subdir
+                return tmp_path / "converted"
+
+        def _fake_augment_dataset(
+            dataset: Dataset,
+            *,
+            output_dir: Path,
+            preset: str,
+            copies_per_sample: int,
+            include_original: bool,
+        ) -> Dataset:
+            calls["augment_dataset"] = dataset
+            calls["augment_output_dir"] = output_dir
+            calls["augment_preset"] = preset
+            calls["augment_copies"] = copies_per_sample
+            calls["augment_include_original"] = include_original
+            return augmented_dataset
+
+        monkeypatch.setattr(
+            "backend.data.formats.base.get_loader",
+            lambda *args, **kwargs: _Loader(),
+        )
+        monkeypatch.setattr(
+            "backend.data.formats.base.get_exporter",
+            lambda *args, **kwargs: _Exporter(),
+        )
+        monkeypatch.setattr(
+            "backend.data.augmentation.augment_dataset",
+            _fake_augment_dataset,
+        )
+
+        output = convert(
+            input_path=tmp_path / "input",
+            output_path=tmp_path / "output",
+            target_format="mock",
+            augment=True,
+            augmentation_preset="heavy",
+            augmentation_copies=3,
+            include_original=False,
+            copy_images=True,
+        )
+
+        assert output == tmp_path / "converted"
+        assert calls["augment_dataset"] is source_dataset
+        assert isinstance(calls["augment_output_dir"], Path)
+        assert calls["augment_preset"] == "heavy"
+        assert calls["augment_copies"] == 3
+        assert calls["augment_include_original"] is False
+        assert calls["export_dataset"] is augmented_dataset
+        assert calls["copy_images"] is True

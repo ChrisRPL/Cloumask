@@ -463,6 +463,10 @@ def convert(
     *,
     source_format: str | None = None,
     copy_images: bool = True,
+    augment: bool = False,
+    augmentation_preset: str = "medium",
+    augmentation_copies: int = 1,
+    include_original: bool = True,
     progress_callback: ProgressCallback | None = None,
 ) -> Path:
     """Convert dataset between formats.
@@ -473,6 +477,10 @@ def convert(
         target_format: Target format name
         source_format: Source format (auto-detect if None)
         copy_images: Whether to copy images
+        augment: Whether to augment samples before export
+        augmentation_preset: Augmentation preset name
+        augmentation_copies: Number of augmented copies per source sample
+        include_original: Keep original samples when augmentation is enabled
         progress_callback: Optional progress callback
 
     Returns:
@@ -481,6 +489,25 @@ def convert(
     # Load source
     loader = get_loader(input_path, format_name=source_format, progress_callback=progress_callback)
     dataset = loader.load()
+
+    if augment:
+        if not copy_images:
+            raise ValueError("Augmentation during export requires copy_images=True")
+
+        from tempfile import TemporaryDirectory
+
+        from backend.data.augmentation import augment_dataset
+
+        with TemporaryDirectory(prefix="cloumask-augment-") as temp_dir:
+            dataset = augment_dataset(
+                dataset,
+                output_dir=Path(temp_dir),
+                preset=augmentation_preset,
+                copies_per_sample=augmentation_copies,
+                include_original=include_original,
+            )
+            exporter = get_exporter(output_path, target_format, progress_callback=progress_callback)
+            return exporter.export(dataset, copy_images=copy_images)
 
     # Export to target
     exporter = get_exporter(output_path, target_format, progress_callback=progress_callback)
