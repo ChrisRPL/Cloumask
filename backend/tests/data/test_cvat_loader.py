@@ -1,10 +1,11 @@
 """Tests for CVAT XML format loader."""
 
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
 
-from backend.data.formats.cvat import CvatLoader
+from backend.data.formats.cvat import CvatExporter, CvatLoader
 from backend.data.models import Dataset
 
 
@@ -211,3 +212,98 @@ class TestCvatLoader:
         assert summary["num_labels"] == 1
         assert summary["has_tracks"] is True
         assert summary["xml_file"] is not None
+
+
+class TestCvatExporter:
+    """Tests for CvatExporter."""
+
+    def test_export_basic(self, cvat_dataset: Path, tmp_path: Path) -> None:
+        """Test basic CVAT export creates XML and copies images."""
+        dataset = CvatLoader(cvat_dataset).load()
+        output = tmp_path / "export"
+
+        exporter = CvatExporter(output, task_name="test-export")
+        exported = exporter.export(dataset)
+
+        assert exported == output
+        assert (output / "annotations.xml").exists()
+        assert (output / "images" / "frame_000000.jpg").exists()
+        assert (output / "images" / "frame_000001.jpg").exists()
+
+        root = ET.parse(output / "annotations.xml").getroot()
+        assert root.tag == "annotations"
+        assert root.findtext("version") == "1.1"
+
+        images = root.findall("image")
+        assert len(images) == 2
+
+        first_image = images[0]
+        car_box = first_image.find("box")
+        assert car_box is not None
+        assert car_box.get("label") == "car"
+        color = car_box.find("attribute[@name='color']")
+        assert color is not None
+        assert color.text == "red"
+
+        person_polygon = first_image.find("polygon")
+        assert person_polygon is not None
+        assert person_polygon.get("label") == "person"
+        assert person_polygon.get("occluded") == "1"
+
+    def test_export_roundtrip(self, cvat_dataset: Path, tmp_path: Path) -> None:
+        """Test load -> export -> load roundtrip."""
+        original = CvatLoader(cvat_dataset).load()
+        output = tmp_path / "export"
+
+        CvatExporter(output).export(original)
+        exported = CvatLoader(output).load()
+
+        assert len(exported) == len(original)
+        assert exported.class_names == original.class_names
+
+        original_counts = {sample.image_path.stem: len(sample.labels) for sample in original}
+        exported_counts = {sample.image_path.stem: len(sample.labels) for sample in exported}
+        assert exported_counts == original_counts
+
+        sample = next(item for item in exported if item.image_path.stem == "frame_000000")
+        car = next(label for label in sample.labels if label.class_name == "car")
+        person = next(label for label in sample.labels if label.class_name == "person")
+
+        assert car.attributes["color"] == "red"
+        assert car.attributes["shape_type"] == "box"
+        assert person.attributes["shape_type"] == "polygon"
+        assert "points" in person.attributes
+
+    def test_export_tracks(self, cvat_tracks_dataset: Path, tmp_path: Path) -> None:
+        """Test track annotations are exported as CVAT track entries."""
+        dataset = CvatLoader(cvat_tracks_dataset, load_tracks=True).load()
+        output = tmp_path / "export"
+
+        CvatExporter(output).export(dataset)
+        root = ET.parse(output / "annotations.xml").getroot()
+
+        tracks = root.findall("track")
+        assert len(tracks) == 1
+        track = tracks[0]
+        assert track.get("id") == "7"
+        assert track.get("label") == "car"
+
+        track_boxes = track.findall("box")
+        assert len(track_boxes) == 2
+        assert [box.get("frame") for box in track_boxes] == ["0", "1"]
+
+        roundtrip = CvatLoader(output, load_tracks=True).load()
+        assert len(roundtrip) == 2
+        assert {sample.labels[0].track_id for sample in roundtrip} == {7}
+        assert roundtrip[1].labels[0].attributes["occluded"] is True
+
+    def test_validate_export(self, cvat_dataset: Path, tmp_path: Path) -> None:
+        """Test export validation for CVAT output."""
+        dataset = CvatLoader(cvat_dataset).load()
+        output = tmp_path / "export"
+
+        exporter = CvatExporter(output)
+        exporter.export(dataset)
+        warnings = exporter.validate_export()
+
+        assert warnings == []

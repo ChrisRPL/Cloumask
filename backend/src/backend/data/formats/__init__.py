@@ -15,7 +15,7 @@ from backend.data.formats.base import (
     list_formats,
 )
 from backend.data.formats.coco import CocoExporter, CocoLoader
-from backend.data.formats.cvat import CvatLoader
+from backend.data.formats.cvat import CvatExporter, CvatLoader
 from backend.data.formats.fused_annotation import (
     FusedAnnotation,
     FusedAnnotationResult,
@@ -49,6 +49,7 @@ __all__ = [
     "YoloLoader",
     "CocoExporter",
     "CocoLoader",
+    "CvatExporter",
     "CvatLoader",
     "KittiExporter",
     "KittiLoader",
