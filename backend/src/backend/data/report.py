@@ -122,12 +122,21 @@ body {
 }
 
 .brand-logo {
-    width: 52px;
-    height: 52px;
+    width: auto;
+    max-width: min(46vw, 244px);
+    height: 50px;
     object-fit: contain;
     border-radius: 8px;
     border: 1px solid var(--border);
     background: var(--cream-strong);
+    padding: 4px 8px;
+}
+
+@media (max-width: 720px) {
+    .brand-logo {
+        max-width: 188px;
+        height: 42px;
+    }
 }
 
 .brand-name {
@@ -492,7 +501,7 @@ def _format_timestamp(now: datetime | None = None) -> str:
 
 def _find_default_logo_path() -> Path | None:
     module_path = Path(__file__).resolve()
-    logo_candidates = ("icon_large.png", "icon.png")
+    logo_candidates = ("icon.png", "icon_large.png")
 
     for parent in module_path.parents:
         assets_dir = parent / "assets"
