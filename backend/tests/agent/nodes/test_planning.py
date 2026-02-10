@@ -125,6 +125,18 @@ class TestValidatePlan:
         assert result is not None
         assert "format" in result.lower()
 
+    def test_convert_format_missing_target_format_fails(self) -> None:
+        """convert_format without target_format should fail."""
+        plan = [
+            {
+                "tool_name": "convert_format",
+                "parameters": {"source_path": "/data", "output_path": "/out"},
+            }
+        ]
+        result = validate_plan(plan)
+        assert result is not None
+        assert "target_format" in result.lower()
+
     def test_all_tools_can_pass(self) -> None:
         """All valid tools should be able to pass validation."""
         for tool in VALID_TOOLS:
@@ -138,6 +150,12 @@ class TestValidatePlan:
                 params = {"input_path": "/data", "prompt": "cars"}
             elif tool == "export":
                 params = {"input_path": "/data", "output_path": "/out", "format": "yolo"}
+            elif tool == "convert_format":
+                params = {
+                    "source_path": "/data/source",
+                    "output_path": "/data/converted",
+                    "target_format": "yolo",
+                }
             else:
                 continue
 
@@ -555,5 +573,5 @@ class TestEdgeCases:
 
     def test_valid_tools_constant(self) -> None:
         """VALID_TOOLS should contain expected tools."""
-        expected = {"scan_directory", "anonymize", "detect", "segment", "export"}
+        expected = {"scan_directory", "anonymize", "detect", "segment", "export", "convert_format"}
         assert expected == VALID_TOOLS

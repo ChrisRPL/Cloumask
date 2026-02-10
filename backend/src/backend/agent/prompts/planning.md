@@ -40,6 +40,16 @@ Convert annotations to standard format
   - `output_path` (str, required): Output directory
   - `format` (str, required): "yolo" | "coco" | "pascal"
 
+### convert_format
+Convert labeled datasets between annotation formats
+- **Parameters:**
+  - `source_path` (str, required): Source dataset root directory
+  - `output_path` (str, required): Output directory for converted dataset
+  - `target_format` (str, required): "yolo" | "coco" | "kitti" | "voc" | "cvat" | "nuscenes" | "openlabel"
+  - `source_format` (str, optional): Source format override (auto-detected if omitted)
+  - `copy_images` (bool, optional): Copy images to output (default: true)
+  - `overwrite` (bool, optional): Allow output path to be non-empty (default: true)
+
 ### pointcloud_stats
 Get metadata and statistics for a point cloud file
 - **Parameters:**
