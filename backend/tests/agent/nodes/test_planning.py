@@ -113,17 +113,17 @@ class TestValidatePlan:
         assert result is not None
         assert "prompt" in result.lower()
 
-    def test_export_missing_format_fails(self) -> None:
-        """export without format should fail."""
+    def test_export_missing_output_format_fails(self) -> None:
+        """export without output_format should fail."""
         plan = [
             {
                 "tool_name": "export",
-                "parameters": {"input_path": "/data", "output_path": "/out"},
+                "parameters": {"source_path": "/data", "output_path": "/out"},
             }
         ]
         result = validate_plan(plan)
         assert result is not None
-        assert "format" in result.lower()
+        assert "output_format" in result.lower()
 
     def test_convert_format_missing_target_format_fails(self) -> None:
         """convert_format without target_format should fail."""
@@ -185,7 +185,11 @@ class TestValidatePlan:
             elif tool == "segment":
                 params = {"input_path": "/data", "prompt": "cars"}
             elif tool == "export":
-                params = {"input_path": "/data", "output_path": "/out", "format": "yolo"}
+                params = {
+                    "source_path": "/data/source",
+                    "output_path": "/data/exported",
+                    "output_format": "yolo",
+                }
             elif tool == "convert_format":
                 params = {
                     "source_path": "/data/source",

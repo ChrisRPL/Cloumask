@@ -97,12 +97,12 @@ def validate_plan(plan: list[dict[str, Any]]) -> str | None:
                 return f"Step {step_num} (segment) missing required 'prompt' parameter"
 
         elif tool_name == "export":
-            if "input_path" not in parameters:
-                return f"Step {step_num} (export) missing required 'input_path' parameter"
+            if "source_path" not in parameters:
+                return f"Step {step_num} (export) missing required 'source_path' parameter"
             if "output_path" not in parameters:
                 return f"Step {step_num} (export) missing required 'output_path' parameter"
-            if "format" not in parameters:
-                return f"Step {step_num} (export) missing required 'format' parameter"
+            if "output_format" not in parameters:
+                return f"Step {step_num} (export) missing required 'output_format' parameter"
 
         elif tool_name == "convert_format":
             if "source_path" not in parameters:
