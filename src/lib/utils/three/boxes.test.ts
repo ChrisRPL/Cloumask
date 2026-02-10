@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { describe, expect, it } from 'vitest';
 import { createBoundingBoxes } from '$lib/utils/three';
 
 describe('bounding box labels', () => {

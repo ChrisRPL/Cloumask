@@ -121,7 +121,7 @@
 				return createHeightMaterial({ ...config, heightMin, heightMax });
 			case 'rgb':
 				if (colors) {
-				geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+					geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 					return createRGBMaterial(config);
 				}
 				// Fallback to height if no colors
@@ -216,7 +216,10 @@
 		const geometry = pointsMesh.geometry;
 
 		geometry.setAttribute('position', new THREE.BufferAttribute(visible.positions, 3));
-		geometry.attributes.position.setUsage(THREE.DynamicDrawUsage);
+		const positionAttribute = geometry.getAttribute('position');
+		if (positionAttribute instanceof THREE.BufferAttribute) {
+			positionAttribute.setUsage(THREE.DynamicDrawUsage);
+		}
 
 		if (visible.colors) {
 			geometry.setAttribute('color', new THREE.BufferAttribute(visible.colors, 3));

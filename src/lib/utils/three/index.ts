@@ -43,3 +43,12 @@ export {
 	type BoundingBox3D,
 	type LabelOptions,
 } from './boxes';
+
+// Level-of-detail octree
+export {
+	PointCloudOctree,
+	type OctreeBounds,
+	type OctreeNode,
+	type VisiblePointSet,
+	type OctreeConfig,
+} from './lod';

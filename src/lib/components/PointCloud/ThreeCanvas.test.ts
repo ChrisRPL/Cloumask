@@ -1,5 +1,5 @@
 import { render } from '@testing-library/svelte';
-import { vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import ThreeCanvas from './ThreeCanvas.svelte';
 import { createMockSceneContext } from '$lib/test-utils';
 

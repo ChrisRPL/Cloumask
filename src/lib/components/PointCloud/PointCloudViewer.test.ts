@@ -1,5 +1,5 @@
 import { render, fireEvent, waitFor } from '@testing-library/svelte';
-import { vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import PointCloudViewer from './PointCloudViewer.svelte';
 import { mockInvoke, mockOpen, mockSave, createMockPointCloudData, createMockMetadata } from '$lib/test-utils';
 

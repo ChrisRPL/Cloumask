@@ -72,7 +72,7 @@
 			isDragging && 'bg-primary'
 		)}
 		role="separator"
-		tabindex="0"
+		tabindex="-1"
 		aria-orientation="vertical"
 		aria-valuenow={currentWidth}
 		aria-valuemin={minLeftWidth}

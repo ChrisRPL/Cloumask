@@ -39,7 +39,12 @@ Object.defineProperty(window, 'matchMedia', {
 	}),
 });
 
-HTMLCanvasElement.prototype.getContext = vi.fn(() => mockCanvasContext as unknown as CanvasRenderingContext2D);
+HTMLCanvasElement.prototype.getContext = vi.fn((contextId: unknown) => {
+	if (contextId === '2d') {
+		return mockCanvasContext as unknown as CanvasRenderingContext2D;
+	}
+	return null;
+}) as unknown as HTMLCanvasElement['getContext'];
 
 vi.mock('@tauri-apps/api/core', () => ({
 	invoke: mockInvoke,
