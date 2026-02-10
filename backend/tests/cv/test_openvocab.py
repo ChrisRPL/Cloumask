@@ -622,6 +622,7 @@ class TestYOLOWorldIntegration:
     def detector(self):
         """Get YOLO-World detector."""
         pytest.importorskip("ultralytics")
+        pytest.importorskip("clip")
         from backend.cv.openvocab import YOLOWorldWrapper
 
         d = YOLOWorldWrapper()
