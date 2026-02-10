@@ -70,6 +70,16 @@ def _dataset_stats(dataset: Dataset) -> dict[str, Any]:
     }
 
 
+def _infer_class_names(dataset: Dataset) -> list[str]:
+    class_by_id: dict[int, str] = {}
+    for sample in dataset:
+        for label in sample.labels:
+            if label.class_id not in class_by_id:
+                class_by_id[label.class_id] = label.class_name
+
+    return [class_by_id[class_id] for class_id in sorted(class_by_id.keys())]
+
+
 def _normalize_class_filter(classes: list[str] | None) -> list[str] | None:
     if classes is None:
         return None
@@ -359,6 +369,9 @@ optional train/val/test splitting, and image copy/link behavior."""
                 name=dataset.name,
                 class_names=list(dataset.class_names),
             )
+
+        # Keep stats aligned with labels that remain after filtering.
+        dataset.class_names = _infer_class_names(dataset)
 
         export_stats = _dataset_stats(dataset)
         self.report_progress(2, 4, "Applied dataset filters")

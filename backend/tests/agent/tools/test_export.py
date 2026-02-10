@@ -175,7 +175,7 @@ class TestExportTool:
         assert len(result.data["export_warnings"]) == 3
         assert result.data["num_samples"] == 6
         assert result.data["num_labels"] == 3
-        assert result.data["num_classes"] == 2
+        assert result.data["num_classes"] == 1
 
         splits = result.data["splits"]
         assert splits is not None
