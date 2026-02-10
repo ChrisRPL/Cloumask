@@ -1,7 +1,7 @@
 # Cloumask Development Plan
 
-> **Status:** 🟡 In Progress (Phase 1-4 Complete)
-> **Last Updated:** January 2026
+> **Status:** 🟡 In Progress (Phase 1-4 and 6 Complete)
+> **Last Updated:** February 10, 2026
 
 *From cloud to canvas — Local-first agentic CV data processing*
 
@@ -73,7 +73,7 @@ Cloumask replaces complex CLI tools, fragmented scripts, and cloud-dependent pla
 | **CV Models** | 🟢 Complete | P0 | [SPEC](./03-cv-models/SPEC.md) |
 | **Frontend UI** | 🟢 Complete | P1 | [SPEC](./04-frontend-ui/SPEC.md) |
 | **Point Cloud** | 🟢 Complete | P1 | [SPEC](./05-point-cloud/SPEC.md) |
-| **Data Pipeline** | 🔴 Not Started | P1 | [SPEC](./06-data-pipeline/SPEC.md) |
+| **Data Pipeline** | 🟢 Complete | P1 | [SPEC](./06-data-pipeline/SPEC.md) |
 
 ---
 
@@ -104,6 +104,15 @@ Cloumask replaces complex CLI tools, fragmented scripts, and cloud-dependent pla
 - [ ] 3D viewer (Three.js)
 - [ ] 3D object detection (PV-RCNN++)
 - [ ] 2D-3D fusion
+
+### Phase 6: Data Pipeline
+- [x] Import labels from YOLO, COCO, KITTI, Pascal VOC, CVAT, nuScenes, OpenLABEL
+- [x] Export labels to all supported formats
+- [x] Duplicate/similar image detection (pHash/dHash/aHash/CLIP)
+- [x] Label QA checks + HTML reporting
+- [x] Train/val/test splitting with stratification + CV folds
+- [x] Albumentations integration with preview and dataset augmentation
+- [x] Agent tools: `convert_format`, `find_duplicates`, `label_qa`, `split_dataset`, `export`
 
 ### Phase 5: Polish & Distribution
 - [ ] Cross-platform builds
