@@ -149,6 +149,18 @@ class TestValidatePlan:
         assert result is not None
         assert "path" in result.lower()
 
+    def test_label_qa_missing_path_fails(self) -> None:
+        """label_qa without path should fail."""
+        plan = [
+            {
+                "tool_name": "label_qa",
+                "parameters": {"generate_report": True},
+            }
+        ]
+        result = validate_plan(plan)
+        assert result is not None
+        assert "path" in result.lower()
+
     def test_all_tools_can_pass(self) -> None:
         """All valid tools should be able to pass validation."""
         for tool in VALID_TOOLS:
@@ -170,6 +182,8 @@ class TestValidatePlan:
                 }
             elif tool == "find_duplicates":
                 params = {"path": "/data/images", "method": "phash", "threshold": 0.9}
+            elif tool == "label_qa":
+                params = {"path": "/data/dataset", "generate_report": True}
             else:
                 continue
 
@@ -595,5 +609,6 @@ class TestEdgeCases:
             "export",
             "convert_format",
             "find_duplicates",
+            "label_qa",
         }
         assert expected == VALID_TOOLS
