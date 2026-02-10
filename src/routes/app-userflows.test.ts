@@ -13,6 +13,7 @@ function jsonResponse(body: unknown, init?: ResponseInit): Response {
 function createFetchMock(options?: { llmReady?: boolean; llmReadyAfterPull?: boolean }) {
 	const llmReady = options?.llmReady ?? true;
 	const llmReadyAfterPull = options?.llmReadyAfterPull ?? llmReady;
+	let modelPulled = false;
 
 	return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
 		const url =
@@ -24,12 +25,13 @@ function createFetchMock(options?: { llmReady?: boolean; llmReadyAfterPull?: boo
 		const method = (init?.method ?? 'GET').toUpperCase();
 
 		if (url.endsWith('/llm/ensure-ready') && method === 'GET') {
+			const ready = llmReady || (llmReadyAfterPull && modelPulled);
 			return jsonResponse({
-				ready: llmReady,
+				ready,
 				service_running: true,
 				required_model: 'qwen3:14b',
-				model_available: llmReady,
-				error: llmReady ? null : 'Model missing',
+				model_available: ready,
+				error: ready ? null : 'Model missing',
 			});
 		}
 
@@ -41,6 +43,19 @@ function createFetchMock(options?: { llmReady?: boolean; llmReadyAfterPull?: boo
 				model_available: llmReadyAfterPull,
 				error: llmReadyAfterPull ? null : 'Model download failed',
 			});
+		}
+
+		if (url.endsWith('/llm/pull/stream') && method === 'POST') {
+			modelPulled = true;
+			return new Response(
+				'data: {"status":"pulling manifest"}\n\n' +
+					'data: {"status":"downloading","total":1000,"completed":1000}\n\n' +
+					'data: {"status":"success"}\n\n',
+				{
+					status: 200,
+					headers: { 'content-type': 'text/event-stream' },
+				}
+			);
 		}
 
 		if (url.endsWith('/api/chat/thread/new') && method === 'POST') {
@@ -138,7 +153,7 @@ describe('App user flows', () => {
 			fetchMock.mock.calls.some(([url, init]) => {
 				const requestUrl = typeof url === 'string' ? url : url.toString();
 				const method = (init?.method ?? 'GET').toUpperCase();
-				return requestUrl.endsWith('/llm/ensure-ready') && method === 'POST';
+				return requestUrl.endsWith('/llm/pull/stream') && method === 'POST';
 			})
 		).toBe(true);
 	});

@@ -252,6 +252,17 @@ export async function waitForSidecarReady(timeout = 10000): Promise<boolean> {
 /** Base URL for the Python sidecar */
 const SIDECAR_URL = 'http://127.0.0.1:8765';
 
+/** Streaming progress event from `/llm/pull/stream`. */
+export interface LLMPullProgressEvent {
+	model: string;
+	status: string;
+	digest: string | null;
+	totalBytes: number | null;
+	completedBytes: number | null;
+	progressPercent: number | null;
+	raw: unknown;
+}
+
 /** Information about a chat thread */
 export interface ThreadInfo {
 	thread_id: string;
@@ -276,6 +287,99 @@ export interface SendMessageResponse {
 	status: string;
 	thread_id: string;
 	message_id?: string;
+}
+
+function toOptionalNumber(value: unknown): number | null {
+	return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function toOptionalString(value: unknown): string | null {
+	return typeof value === 'string' && value.trim().length > 0 ? value : null;
+}
+
+function clampPercent(value: number): number {
+	return Math.max(0, Math.min(100, value));
+}
+
+/**
+ * Parse an Ollama pull event payload into normalized progress data.
+ */
+export function parseLLMPullEventData(data: string, model: string): LLMPullProgressEvent {
+	const trimmed = data.trim();
+
+	if (!trimmed) {
+		return {
+			model,
+			status: 'downloading',
+			digest: null,
+			totalBytes: null,
+			completedBytes: null,
+			progressPercent: null,
+			raw: data
+		};
+	}
+
+	if (trimmed === '[DONE]') {
+		return {
+			model,
+			status: 'done',
+			digest: null,
+			totalBytes: null,
+			completedBytes: null,
+			progressPercent: 100,
+			raw: trimmed
+		};
+	}
+
+	try {
+		const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+		const status = toOptionalString(parsed.status) ?? 'downloading';
+		const totalBytes = toOptionalNumber(parsed.total);
+		const completedBytes = toOptionalNumber(parsed.completed);
+		let progressPercent: number | null = null;
+
+		if (totalBytes && totalBytes > 0 && completedBytes !== null) {
+			progressPercent = clampPercent((completedBytes / totalBytes) * 100);
+		} else if (/success|complete|done/i.test(status)) {
+			progressPercent = 100;
+		}
+
+		return {
+			model,
+			status,
+			digest: toOptionalString(parsed.digest),
+			totalBytes,
+			completedBytes,
+			progressPercent,
+			raw: parsed
+		};
+	} catch {
+		return {
+			model,
+			status: trimmed,
+			digest: null,
+			totalBytes: null,
+			completedBytes: null,
+			progressPercent: /success|complete|done/i.test(trimmed) ? 100 : null,
+			raw: trimmed
+		};
+	}
+}
+
+function parseLLMPullStreamBlock(block: string, model: string): LLMPullProgressEvent | null {
+	const normalized = block.replace(/\r\n/g, '\n');
+	const payload = normalized
+		.split('\n')
+		.filter((line) => line.startsWith('data:'))
+		.map((line) => line.slice(5).trim())
+		.join('\n')
+		.trim();
+
+	if (!payload) {
+		return null;
+	}
+
+	return parseLLMPullEventData(payload, model);
 }
 
 /**
@@ -413,6 +517,64 @@ export async function pullLLMModel(model: string): Promise<{ status: string; mes
 	}
 
 	return response.json();
+}
+
+/**
+ * Pull a model and emit streaming progress updates.
+ */
+export async function pullLLMModelWithProgress(
+	model: string,
+	onProgress?: (event: LLMPullProgressEvent) => void
+): Promise<void> {
+	if (!model.trim()) {
+		throw new Error('Invalid model name');
+	}
+
+	const response = await fetch(`${SIDECAR_URL}/llm/pull/stream`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ model })
+	});
+
+	if (!response.ok) {
+		throw new Error(`Failed to pull model: ${response.statusText}`);
+	}
+
+	if (!response.body) {
+		throw new Error('Model pull stream is unavailable');
+	}
+
+	const reader = response.body.getReader();
+	const decoder = new TextDecoder();
+	let buffer = '';
+
+	while (true) {
+		const { done, value } = await reader.read();
+		if (done) break;
+
+		buffer += decoder.decode(value, { stream: true });
+		buffer = buffer.replace(/\r\n/g, '\n');
+		let splitAt = buffer.indexOf('\n\n');
+
+		while (splitAt !== -1) {
+			const block = buffer.slice(0, splitAt);
+			buffer = buffer.slice(splitAt + 2);
+			const event = parseLLMPullStreamBlock(block, model);
+			if (event) {
+				onProgress?.(event);
+			}
+			splitAt = buffer.indexOf('\n\n');
+		}
+	}
+
+	buffer += decoder.decode();
+	buffer = buffer.replace(/\r\n/g, '\n');
+	if (buffer.trim()) {
+		const event = parseLLMPullStreamBlock(buffer, model);
+		if (event) {
+			onProgress?.(event);
+		}
+	}
 }
 
 /**

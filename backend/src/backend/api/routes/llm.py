@@ -8,7 +8,6 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from backend.agent.llm.config import REQUIRED_MODEL
 from backend.api.config import settings
 
 logger = logging.getLogger(__name__)
@@ -325,32 +324,33 @@ async def ensure_ready() -> LLMReadyResponse:
     """
     # Check LLM status
     status = await get_llm_status()
+    required_model = settings.ollama_model
 
     if not status.available:
         return LLMReadyResponse(
             ready=False,
             service_running=False,
-            required_model=REQUIRED_MODEL,
+            required_model=required_model,
             model_available=False,
             error=status.error or "LLM service is not running",
         )
 
     # Check if required model exists
-    model_available = await _check_model_exists(REQUIRED_MODEL)
+    model_available = await _check_model_exists(required_model)
 
     if not model_available:
         return LLMReadyResponse(
             ready=False,
             service_running=True,
-            required_model=REQUIRED_MODEL,
+            required_model=required_model,
             model_available=False,
-            error=f"Required model '{REQUIRED_MODEL}' is not installed",
+            error=f"Required model '{required_model}' is not installed",
         )
 
     return LLMReadyResponse(
         ready=True,
         service_running=True,
-        required_model=REQUIRED_MODEL,
+        required_model=required_model,
         model_available=True,
     )
 
@@ -367,46 +367,47 @@ async def ensure_ready_with_pull() -> LLMReadyResponse:
     """
     # Check LLM status
     status = await get_llm_status()
+    required_model = settings.ollama_model
 
     if not status.available:
         return LLMReadyResponse(
             ready=False,
             service_running=False,
-            required_model=REQUIRED_MODEL,
+            required_model=required_model,
             model_available=False,
             error=status.error or "LLM service is not running. Please start the AI service first.",
         )
 
     # Check if required model exists
-    model_available = await _check_model_exists(REQUIRED_MODEL)
+    model_available = await _check_model_exists(required_model)
 
     if not model_available:
-        logger.info(f"Required model '{REQUIRED_MODEL}' not found, pulling...")
+        logger.info(f"Required model '{required_model}' not found, pulling...")
         try:
             # Pull the model (this can take a while)
             async with httpx.AsyncClient(timeout=1800.0) as client:  # 30 min timeout
                 response = await client.post(
                     f"{settings.ollama_host}/api/pull",
-                    json={"name": REQUIRED_MODEL, "stream": False},
+                    json={"name": required_model, "stream": False},
                 )
                 response.raise_for_status()
 
-            logger.info(f"Successfully pulled model '{REQUIRED_MODEL}'")
+            logger.info(f"Successfully pulled model '{required_model}'")
             model_available = True
 
         except httpx.TimeoutException:
             return LLMReadyResponse(
                 ready=False,
                 service_running=True,
-                required_model=REQUIRED_MODEL,
+                required_model=required_model,
                 model_available=False,
-                error=f"Timed out downloading model '{REQUIRED_MODEL}'",
+                error=f"Timed out downloading model '{required_model}'",
             )
         except Exception as e:
             return LLMReadyResponse(
                 ready=False,
                 service_running=True,
-                required_model=REQUIRED_MODEL,
+                required_model=required_model,
                 model_available=False,
                 error=f"Failed to download model: {e}",
             )
@@ -414,7 +415,7 @@ async def ensure_ready_with_pull() -> LLMReadyResponse:
     return LLMReadyResponse(
         ready=True,
         service_running=True,
-        required_model=REQUIRED_MODEL,
+        required_model=required_model,
         model_available=True,
     )
 
@@ -426,17 +427,19 @@ async def check_llm_ready_on_startup(max_retries: int = 5, delay: float = 2.0) -
     Retries several times to allow for LLM service to start.
     Returns True if ready, False otherwise.
     """
+    required_model = settings.ollama_model
+
     for attempt in range(max_retries):
         try:
             status = await get_llm_status()
             if status.available:
-                model_exists = await _check_model_exists(REQUIRED_MODEL)
+                model_exists = await _check_model_exists(required_model)
                 if model_exists:
-                    logger.info(f"LLM service ready with model '{REQUIRED_MODEL}'")
+                    logger.info(f"LLM service ready with model '{required_model}'")
                     return True
                 else:
                     logger.warning(
-                        f"LLM service running but model '{REQUIRED_MODEL}' not found. "
+                        f"LLM service running but model '{required_model}' not found. "
                         f"The model will be downloaded on first use."
                     )
                     return False
