@@ -12,7 +12,7 @@
 	import { getSSEState } from '$lib/stores/sse.svelte';
 	import { getPipelineState } from '$lib/stores/pipeline.svelte';
 	import { getUIState } from '$lib/stores/ui.svelte';
-	import { createThread, sendMessage, checkLLMReady, ensureLLMReady } from '$lib/utils/tauri';
+	import { createThread, sendMessage, checkLLMReady, ensureLLMReady, isTauri } from '$lib/utils/tauri';
 	import type { UserDecision } from '$lib/types/agent';
 	import type { LLMReadyResponse } from '$lib/types/commands';
 
@@ -30,6 +30,7 @@
 	const sse = getSSEState();
 	const pipeline = getPipelineState();
 	const ui = getUIState();
+	const isInTauri = isTauri();
 
 	// Local state
 	let inputValue = $state('');
@@ -38,6 +39,7 @@
 	let llmStatus = $state<LLMReadyResponse | null>(null);
 	let isCheckingLLM = $state(false);
 	let isPullingModel = $state(false);
+	let autoPullTriggered = $state(false);
 
 	// Derived state
 	const llmNotReady = $derived(llmStatus !== null && !llmStatus.ready);
@@ -73,13 +75,34 @@
 
 		isPullingModel = true;
 		try {
-			llmStatus = await ensureLLMReady();
+			const ensured = await ensureLLMReady();
+			llmStatus = ensured;
+			// Allow re-attempt if backend reports still not ready.
+			if (!ensured.ready) {
+				autoPullTriggered = false;
+			}
 		} catch (error) {
 			console.error('[ChatPanel] Failed to download model:', error);
+			autoPullTriggered = false;
 		} finally {
 			isPullingModel = false;
 		}
 	}
+
+	// Auto-download model when service is up but model is missing.
+	$effect(() => {
+		if (
+			isInTauri &&
+			llmStatus &&
+			llmStatus.service_running &&
+			!llmStatus.model_available &&
+			!isPullingModel &&
+			!autoPullTriggered
+		) {
+			autoPullTriggered = true;
+			void handlePullModel();
+		}
+	});
 
 	// Initialize thread and SSE connection
 	async function initializeChat() {

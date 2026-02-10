@@ -10,8 +10,9 @@ function jsonResponse(body: unknown, init?: ResponseInit): Response {
 	});
 }
 
-function createFetchMock(options?: { llmReady?: boolean }) {
+function createFetchMock(options?: { llmReady?: boolean; llmReadyAfterPull?: boolean }) {
 	const llmReady = options?.llmReady ?? true;
+	const llmReadyAfterPull = options?.llmReadyAfterPull ?? llmReady;
 
 	return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
 		const url =
@@ -29,6 +30,16 @@ function createFetchMock(options?: { llmReady?: boolean }) {
 				required_model: 'qwen3:14b',
 				model_available: llmReady,
 				error: llmReady ? null : 'Model missing',
+			});
+		}
+
+		if (url.endsWith('/llm/ensure-ready') && method === 'POST') {
+			return jsonResponse({
+				ready: llmReadyAfterPull,
+				service_running: true,
+				required_model: 'qwen3:14b',
+				model_available: llmReadyAfterPull,
+				error: llmReadyAfterPull ? null : 'Model download failed',
 			});
 		}
 
@@ -114,21 +125,21 @@ describe('App user flows', () => {
 		});
 	});
 
-	it('offers a friendly first-run choice when AI model is not yet installed', async () => {
-		vi.stubGlobal('fetch', createFetchMock({ llmReady: false }));
+	it('automatically bootstraps AI model on first run when model is missing', async () => {
+		const fetchMock = createFetchMock({ llmReady: false, llmReadyAfterPull: true });
+		vi.stubGlobal('fetch', fetchMock);
 		render(AppTestHost);
 
 		await waitFor(() => {
-			expect(screen.getByText('AI model setup')).toBeTruthy();
-		});
-		expect(screen.getByText('Download now (recommended)')).toBeTruthy();
-		expect(screen.getByText('Continue without model')).toBeTruthy();
-
-		await fireEvent.click(screen.getByText('Continue without model'));
-
-		await waitFor(() => {
 			expect(screen.queryByText('Setting up Cloumask')).toBeNull();
-		});
+		}, { timeout: 4000 });
 		expect(screen.getAllByText('Chat').length).toBeGreaterThan(0);
+		expect(
+			fetchMock.mock.calls.some(([url, init]) => {
+				const requestUrl = typeof url === 'string' ? url : url.toString();
+				const method = (init?.method ?? 'GET').toUpperCase();
+				return requestUrl.endsWith('/llm/ensure-ready') && method === 'POST';
+			})
+		).toBe(true);
 	});
 });

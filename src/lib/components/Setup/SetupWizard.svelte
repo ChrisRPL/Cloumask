@@ -16,12 +16,15 @@
 		Cpu,
 		Sparkles,
 	} from '@lucide/svelte';
-	import { checkLLMReady, ensureLLMReady } from '$lib/utils/tauri';
+	import { checkLLMReady, ensureLLMReady, waitForSidecarReady, isTauri } from '$lib/utils/tauri';
 
 	let { onComplete }: SetupWizardProps = $props();
 
 	const setup = getSetupState();
 	const isDevMode = import.meta.env.DEV;
+	const isInTauri = isTauri();
+	const MODEL_SETUP_RETRIES = 3;
+	const SIDECARE_READY_TIMEOUT_MS = 20000;
 
 	// Step configuration
 	const steps: { id: SetupStep; label: string; icon: typeof Download }[] = [
@@ -51,8 +54,7 @@
 
 	let isSkipping = $state(false);
 	let setupStarted = $state(false);
-	let awaitingModelChoice = $state(false);
-	let isHandlingModelChoice = $state(false);
+	let backgroundModelInit = $state(false);
 
 	async function finishRemainingSetup() {
 		// Step 3: Build executor (local execution defaults)
@@ -70,11 +72,54 @@
 		setTimeout(onComplete, 800);
 	}
 
+	async function autoBootstrapModel() {
+		if (isInTauri) {
+			setup.updateProgress(10, 'Waiting for local services...');
+			const sidecarReady = await waitForSidecarReady(SIDECARE_READY_TIMEOUT_MS);
+			if (!sidecarReady) {
+				backgroundModelInit = true;
+				setup.updateProgress(25, 'Continuing while services finish starting...');
+				void ensureLLMReady().catch((error) => {
+					console.error('[SetupWizard] Deferred model bootstrap failed:', error);
+				});
+				return;
+			}
+		}
+
+		let llmStatus = await checkLLMReady();
+		if (llmStatus.ready) {
+			setup.updateProgress(100, 'AI model already available');
+			return;
+		}
+
+		for (let attempt = 1; attempt <= MODEL_SETUP_RETRIES; attempt++) {
+			setup.updateProgress(
+				Math.min(35 + attempt * 20, 90),
+				`Downloading required AI model (~9GB)... (${attempt}/${MODEL_SETUP_RETRIES})`
+			);
+
+			const ensured = await ensureLLMReady();
+			if (ensured.ready) {
+				setup.updateProgress(100, 'AI model ready');
+				return;
+			}
+
+			llmStatus = ensured;
+			await wait(1200);
+		}
+
+		// Do not block users on first-run if model bootstrap is temporarily unavailable.
+		backgroundModelInit = true;
+		setup.updateProgress(100, 'Continuing setup. AI model download will keep retrying automatically.');
+		void ensureLLMReady().catch((error) => {
+			console.error('[SetupWizard] Background model bootstrap failed:', error);
+		});
+	}
+
 	// Run setup steps
 	async function runSetup() {
 		setupStarted = true;
-		awaitingModelChoice = false;
-		isHandlingModelChoice = false;
+		backgroundModelInit = false;
 		setup.startSetup();
 
 		try {
@@ -86,60 +131,23 @@
 
 			// Step 2: AI model bootstrap (no manual CLI setup)
 			setup.nextStep();
-			setup.updateProgress(10, 'Checking AI service and required model...');
-
-			const llmStatus = await checkLLMReady();
-			if (llmStatus.ready) {
-				setup.updateProgress(100, 'AI model already available');
-			} else {
-				// Let users choose between immediate model download and deferred setup.
-				// This keeps onboarding UX-friendly while avoiding manual configuration.
-				setup.updateProgress(40, 'Required AI model not installed yet');
-				awaitingModelChoice = true;
-				return;
-			}
+			await autoBootstrapModel();
 			await wait(250);
 
 			await finishRemainingSetup();
 		} catch (error) {
-			setup.setError(error instanceof Error ? error.message : 'Setup failed');
-		}
-	}
-
-	async function handleDownloadNow() {
-		awaitingModelChoice = false;
-		isHandlingModelChoice = true;
-		try {
-			setup.updateProgress(45, 'Downloading required AI model (~9GB)...');
-			await ensureLLMReady();
-			setup.updateProgress(100, 'AI model ready');
+			// Never hard-block onboarding on model/bootstrap errors.
+			console.error('[SetupWizard] Setup step failed, continuing with fallback:', error);
+			backgroundModelInit = true;
+			setup.updateProgress(100, 'Continuing setup while background services initialize...');
 			await wait(250);
 			await finishRemainingSetup();
-		} catch (error) {
-			setup.setError(
-				error instanceof Error ? error.message : 'Model setup failed. You can retry or continue later.'
-			);
-		} finally {
-			isHandlingModelChoice = false;
-		}
-	}
-
-	async function handleContinueWithoutModel() {
-		awaitingModelChoice = false;
-		isHandlingModelChoice = true;
-		try {
-			setup.updateProgress(100, 'Model download deferred; Cloumask will auto-download on first AI use');
-			await wait(250);
-			await finishRemainingSetup();
-		} finally {
-			isHandlingModelChoice = false;
 		}
 	}
 
 	function handleRetry() {
 		setup.retry();
-		awaitingModelChoice = false;
-		isHandlingModelChoice = false;
+		backgroundModelInit = false;
 		runSetup();
 	}
 
@@ -230,37 +238,16 @@
 							></div>
 						</div>
 					{/if}
-				</div>
-			{/each}
-		</div>
+			</div>
+		{/each}
+	</div>
 
-		<!-- Model choice -->
-		{#if awaitingModelChoice && !setup.progress.hasError}
+		<!-- Background model bootstrap info -->
+		{#if backgroundModelInit}
 			<div class="mb-6 p-4 rounded-lg border bg-muted/40 border-border">
-				<p class="text-sm font-medium mb-1">AI model setup</p>
-				<p class="text-sm text-muted-foreground mb-3">
-					Choose one option. You never need terminal commands for this.
-				</p>
-				<div class="flex flex-wrap gap-2">
-					<button
-						type="button"
-						class="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50"
-						onclick={handleDownloadNow}
-						disabled={isHandlingModelChoice}
-					>
-						Download now (recommended)
-					</button>
-					<button
-						type="button"
-						class="px-4 py-2 text-sm bg-muted text-foreground rounded-md hover:bg-muted/80 border border-border disabled:opacity-50"
-						onclick={handleContinueWithoutModel}
-						disabled={isHandlingModelChoice}
-					>
-						Continue without model
-					</button>
-				</div>
-				<p class="text-xs text-muted-foreground mt-2">
-					If you continue now, Cloumask will automatically download the model when AI features are first used.
+				<p class="text-sm font-medium mb-1">AI model initialization in progress</p>
+				<p class="text-sm text-muted-foreground">
+					Cloumask will continue automatically and keep retrying model download in the background.
 				</p>
 			</div>
 		{/if}

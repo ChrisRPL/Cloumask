@@ -136,10 +136,8 @@ Installer/artifacts are generated in:
 ### First-Run Wizard UX
 
 - First launch runs an in-app setup wizard (no CLI steps required).
-- The wizard validates prerequisites and handles model setup in-app.
-- If the required AI model is missing, users can:
-  - `Download now (recommended)`, or
-  - `Continue without model` and let Cloumask auto-download on first AI use.
+- The wizard validates prerequisites and automatically bootstraps required AI models in-app.
+- If model download cannot finish immediately, setup still continues and Cloumask retries model initialization automatically in the background.
 
 ## Validation Commands
 
