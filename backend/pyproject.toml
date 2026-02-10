@@ -81,3 +81,9 @@ disallow_untyped_defs = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+markers = [
+    "integration: tests requiring external services or real model assets",
+    "slow: long-running tests",
+    "gpu: tests requiring CUDA-capable GPU",
+    "benchmark: performance/throughput tests",
+]

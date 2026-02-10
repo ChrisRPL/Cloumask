@@ -657,6 +657,7 @@ class TestPlateDetectorIntegration:
     def detector(self):
         """Get real plate detector."""
         pytest.importorskip("ultralytics")
+        pytest.importorskip("clip")
         from backend.cv.plates import PlateDetectorWrapper
 
         d = PlateDetectorWrapper()

@@ -868,7 +868,11 @@ class TestFaceDetectionBenchmarks:
 
     def test_yunet_cpu_speed(self) -> None:
         """YuNet should achieve <5ms per image on CPU."""
+        import os
         import time
+
+        if os.getenv("RUN_BENCHMARK_TESTS") != "1":
+            pytest.skip("CPU benchmark tests are disabled by default")
 
         pytest.importorskip("cv2")
 
