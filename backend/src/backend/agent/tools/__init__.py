@@ -46,6 +46,7 @@ Available Tools:
     - ConvertFormatTool: Convert datasets between annotation formats
     - FindDuplicatesTool: Find duplicate and near-duplicate images in datasets
     - LabelQATool: Run quality assurance checks on dataset labels
+    - SplitDatasetTool: Split datasets into train/val/test subsets and export each split
     - ExportTool: Export annotations to various formats (stub)
     - CustomScriptTool: Execute user-defined Python scripts
 """
@@ -86,6 +87,7 @@ from backend.agent.tools.registry import (
 from backend.agent.tools.rosbag import ExtractRosbagTool
 from backend.agent.tools.scan import ScanDirectoryTool
 from backend.agent.tools.segment import SegmentTool
+from backend.agent.tools.split import SplitDatasetTool
 
 __all__ = [
     # Base types
@@ -117,6 +119,7 @@ __all__ = [
     "ConvertFormatTool",
     "FindDuplicatesTool",
     "LabelQATool",
+    "SplitDatasetTool",
     "ExportTool",
     "CustomScriptTool",
     "ProcessPointCloudTool",

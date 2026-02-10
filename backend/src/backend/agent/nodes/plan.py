@@ -34,6 +34,7 @@ VALID_TOOLS = frozenset([
     "convert_format",
     "find_duplicates",
     "label_qa",
+    "split_dataset",
 ])
 
 
@@ -119,6 +120,12 @@ def validate_plan(plan: list[dict[str, Any]]) -> str | None:
 
         elif tool_name == "label_qa" and "path" not in parameters:
             return f"Step {step_num} (label_qa) missing required 'path' parameter"
+
+        elif tool_name == "split_dataset":
+            if "path" not in parameters:
+                return f"Step {step_num} (split_dataset) missing required 'path' parameter"
+            if "output_path" not in parameters:
+                return f"Step {step_num} (split_dataset) missing required 'output_path' parameter"
 
     return None
 

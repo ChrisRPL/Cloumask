@@ -161,6 +161,18 @@ class TestValidatePlan:
         assert result is not None
         assert "path" in result.lower()
 
+    def test_split_dataset_missing_output_path_fails(self) -> None:
+        """split_dataset without output_path should fail."""
+        plan = [
+            {
+                "tool_name": "split_dataset",
+                "parameters": {"path": "/data/source"},
+            }
+        ]
+        result = validate_plan(plan)
+        assert result is not None
+        assert "output_path" in result.lower()
+
     def test_all_tools_can_pass(self) -> None:
         """All valid tools should be able to pass validation."""
         for tool in VALID_TOOLS:
@@ -184,6 +196,8 @@ class TestValidatePlan:
                 params = {"path": "/data/images", "method": "phash", "threshold": 0.9}
             elif tool == "label_qa":
                 params = {"path": "/data/dataset", "generate_report": True}
+            elif tool == "split_dataset":
+                params = {"path": "/data/source", "output_path": "/data/split"}
             else:
                 continue
 
@@ -610,5 +624,6 @@ class TestEdgeCases:
             "convert_format",
             "find_duplicates",
             "label_qa",
+            "split_dataset",
         }
         assert expected == VALID_TOOLS
