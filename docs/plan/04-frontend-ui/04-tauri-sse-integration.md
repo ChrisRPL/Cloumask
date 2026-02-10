@@ -1,6 +1,6 @@
 # Tauri IPC & SSE Integration
 
-> **Status:** 🔴 Not Started
+> **Status:** 🟢 Complete (Implemented; checklist backfill pending)
 > **Priority:** P0 (Critical - enables backend communication)
 > **Dependencies:** 01-design-system, 03-stores-state, 01-foundation (Tauri setup)
 > **Estimated Complexity:** High

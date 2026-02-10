@@ -1,6 +1,6 @@
 # State Types
 
-> **Status:** 🔴 Not Started
+> **Status:** 🟢 Complete (Implemented; checklist backfill pending)
 > **Priority:** P0 (Critical)
 > **Dependencies:** 01-foundation (Python sidecar running)
 > **Estimated Complexity:** Low

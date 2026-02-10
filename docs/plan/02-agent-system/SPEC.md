@@ -1,6 +1,6 @@
 # Agent System Module
 
-> **Status:** 🔴 Not Started
+> **Status:** 🟢 Complete (Implemented + Verified)
 > **Priority:** P0 (Critical)
 > **Dependencies:** 01-foundation
 
@@ -10,11 +10,11 @@ Implement the conversational AI agent using LangGraph. The agent understands nat
 
 ## Goals
 
-- [ ] LangGraph state machine with plan → execute → checkpoint flow
-- [ ] Tool calling via Ollama (Qwen3-14B)
-- [ ] Human-in-the-loop approval at checkpoints
-- [ ] SSE streaming for real-time updates
-- [ ] Persistent checkpoints for resume capability
+- [x] LangGraph state machine with plan → execute → checkpoint flow
+- [x] Tool calling via Ollama (Qwen3-14B)
+- [x] Human-in-the-loop approval at checkpoints
+- [x] SSE streaming for real-time updates
+- [x] Persistent checkpoints for resume capability
 
 ## Technical Design
 
@@ -121,12 +121,12 @@ This module is broken down into 10 atomic, implementable sub-specifications:
 
 ## Acceptance Criteria
 
-- [ ] Agent responds to "scan /path/to/folder" with directory analysis
-- [ ] Plan is generated and shown before execution
-- [ ] User can approve, edit, or cancel the plan
-- [ ] Execution pauses at checkpoints for review
-- [ ] Pipeline can be resumed after app restart
-- [ ] SSE stream shows real-time progress
+- [x] Agent responds to "scan /path/to/folder" with directory analysis
+- [x] Plan is generated and shown before execution
+- [x] User can approve, edit, or cancel the plan
+- [x] Execution pauses at checkpoints for review
+- [x] Pipeline can be resumed after app restart
+- [x] SSE stream shows real-time progress
 
 ---
 

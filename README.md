@@ -1,225 +1,145 @@
 # Cloumask
 
-> *From cloud to canvas — Local-first agentic CV data processing*
+Local-first agentic computer vision data processing for images, video, and point clouds.
 
-Cloumask is a conversational AI desktop application for computer vision data processing. It replaces complex CLI tools, fragmented scripts, and cloud-dependent platforms with natural language commands like:
+From cloud to canvas.
 
-> "Take my dashcam footage in /data/drive_001, anonymize all faces and plates, then label vehicles and pedestrians, export to YOLO format"
+## Project Status
 
-## Key Features
+Cloumask core development is complete through `06-data-pipeline`.
 
-- **Conversational-first UX** — Chat with your data pipeline, not config files
-- **Human-in-the-loop execution** — Checkpoints, live previews, course correction
-- **Local & private** — All processing on your machine, no cloud dependency
-- **Unified 2D + 3D** — Images, videos, AND point clouds in one tool
-- **Modern CV models** — SAM3, YOLO11, Florence-2, GroundingDINO running locally
+| Area | Status |
+|------|--------|
+| Foundation (Tauri + FastAPI + IPC) | Complete |
+| Agent System (LangGraph + tools + checkpoints) | Complete |
+| CV Models (2D anonymization/detection/segmentation) | Complete |
+| Frontend UI (chat/plan/execute/review/point cloud views) | Complete |
+| Point Cloud (I/O, processing, fusion, 3D tools) | Complete |
+| Data Pipeline (formats, QA, split, augmentation, duplicates) | Complete |
+| Release Engineering (packaging/distribution hardening) | In progress |
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        Tauri 2.0 Shell                          │
-│  ┌───────────────────────────────────────────────────────────┐  │
-│  │                    Frontend (Svelte 5)                     │  │
-│  │  ┌─────────┐ ┌─────────────┐ ┌─────────────────────────┐  │  │
-│  │  │  Chat   │ │    Plan     │ │    Execution View       │  │  │
-│  │  │  Panel  │ │   Editor    │ │  (Live Preview + Stats) │  │  │
-│  │  └─────────┘ └─────────────┘ └─────────────────────────┘  │  │
-│  │  ┌─────────────────────┐ ┌───────────────────────────────┐│  │
-│  │  │  Point Cloud Viewer │ │      Review/Annotation UI     ││  │
-│  │  │    (Three.js)       │ │         (Canvas-based)        ││  │
-│  │  └─────────────────────┘ └───────────────────────────────┘│  │
-│  └───────────────────────────────────────────────────────────┘  │
-│                              │ IPC                              │
-│  ┌───────────────────────────────────────────────────────────┐  │
-│  │                    Rust Core                               │  │
-│  │  ┌─────────────┐ ┌─────────────┐ ┌─────────────────────┐  │  │
-│  │  │  File I/O   │ │  Point Cloud│ │   Sidecar Manager   │  │  │
-│  │  │  (pasture)  │ │  Processing │ │  (spawn/kill/stream)│  │  │
-│  │  └─────────────┘ └─────────────┘ └─────────────────────┘  │  │
-│  └───────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────┘
-                              │ HTTP/SSE (port 8765)
-┌─────────────────────────────────────────────────────────────────┐
-│                  Python Sidecar (FastAPI)                       │
-│  ┌───────────────────────────────────────────────────────────┐  │
-│  │                    Agent Brain (LangGraph)                 │  │
-│  │  ┌─────────────┐ ┌─────────────┐ ┌─────────────────────┐  │  │
-│  │  │  Planner    │ │  Executor   │ │  Checkpoint Manager │  │  │
-│  │  └─────────────┘ └─────────────┘ └─────────────────────┘  │  │
-│  ├───────────────────────────────────────────────────────────┤  │
-│  │                       CV Models                            │  │
-│  │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────────────┐  │  │
-│  │  │  SAM3   │ │ YOLO11  │ │ SCRFD   │ │    PV-RCNN++    │  │  │
-│  │  └─────────┘ └─────────┘ └─────────┘ └─────────────────┘  │  │
-│  └───────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-┌─────────────────────────────────────────────────────────────────┐
-│                    Local LLM (Ollama)                           │
-│                    Qwen3-14B / Llama 4                          │
-└─────────────────────────────────────────────────────────────────┘
+```plantuml
+@startuml
+skinparam backgroundColor transparent
+skinparam componentStyle rectangle
+skinparam shadowing false
+
+component "Desktop App\nTauri 2 + Svelte 5 UI" as desktop
+component "Rust Core\nIPC bridge, sidecar lifecycle,\npoint cloud I/O" as rust
+component "Python Sidecar\nFastAPI + LangGraph" as py
+component "CV + Data Modules\nDetection, segmentation, anonymization,\nformats, QA, splitting, augmentation" as cv
+component "Local LLM Service\nOllama API" as llm
+
+desktop --> rust : invoke commands
+rust --> py : HTTP / SSE
+py --> cv : tool and pipeline calls
+py --> llm : chat/tool-calling requests
+
+@enduml
 ```
 
-## Quick Start
+## Implemented Capabilities
+
+### Agent and Orchestration
+- Conversational planning with clarify-plan-execute flow
+- Human-in-the-loop checkpointing and resume support
+- Tool registry for CV, data pipeline, and point cloud operations
+- Streaming execution updates over SSE
+
+### CV and Privacy
+- Face and plate anonymization workflows
+- 2D object detection and segmentation tool integrations
+- 3D detection, projection, and point-cloud anonymization routes/tools
+
+### Data Pipeline
+- Import/export: YOLO, COCO, KITTI, Pascal VOC, CVAT, nuScenes, OpenLABEL
+- Duplicate and similarity detection (hash-based + embedding-based options)
+- Label QA checks with report generation
+- Dataset splitting (train/val/test, stratified, CV folds)
+- Dataset augmentation via Albumentations
+
+### Frontend
+- Chat, plan editor, execution monitoring, review queue
+- Point cloud viewer and related controls
+- Keyboard-driven workflows and command palette
+- Design system aligned to current brand tokens:
+  - Primary `#166534` (forest green)
+  - Background `#FAF7F0` (cream)
+  - Monospace-first typography
+
+## Repository Layout
+
+```text
+src/                 Svelte frontend
+src-tauri/           Rust shell and native commands
+backend/             FastAPI sidecar, agent, CV/data pipeline
+assets/              App icon and branding assets
+docs/plan/           Phase specs and module plans
+scripts/             Utility scripts
+```
+
+## Local Development
 
 ### Prerequisites
-
-- **Node.js 20+** and npm
-- **Rust 1.75+** with cargo
-- **Python 3.11+**
-- [Ollama](https://ollama.ai) (optional, for LLM features)
+- Node.js 20+
+- Rust 1.75+
+- Python 3.11+
+- Ollama (optional, required for local LLM chat/tool-calling)
 
 ### Setup
 
 ```bash
-# Install frontend dependencies
 npm install
-
-# Install Python sidecar dependencies
-cd backend && pip install -r requirements.txt && cd ..
-
-# Start development (launches Tauri + Python sidecar)
-cargo tauri dev
+npm run backend:install
 ```
 
-### Verify Installation
-
-- Open app → Status dashboard shows all systems green
-- Python sidecar health: http://localhost:8765/health
-- API docs: http://localhost:8765/docs
-
-## Current Features (v0.1.0)
-
-- Tauri 2.0 desktop shell with Svelte 5 frontend
-- Python FastAPI sidecar with auto-start/stop lifecycle
-- Real-time health monitoring dashboard
-- Ollama LLM integration (status, models, generation)
-- Type-safe IPC across all layers (Frontend ↔ Rust ↔ Python)
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|------------|
-| Desktop Shell | Tauri 2.0 (Rust) |
-| Frontend | Svelte 5 + shadcn/ui + Tailwind |
-| 3D Visualization | Three.js |
-| Agent Framework | LangGraph |
-| Local LLM | Ollama (Qwen3-14B) |
-| CV Models | SAM3, YOLO11, SCRFD, PV-RCNN++ |
-| Point Cloud | pasture (Rust), Open3D (Python) |
-
-## Supported Data
-
-### Formats
-
-| Type | Formats |
-|------|---------|
-| Images | JPEG, PNG, WebP, TIFF |
-| Video | MP4, AVI, MKV |
-| Point Cloud | PCD, PLY, LAS/LAZ, E57, ROS bags |
-| Labels | YOLO, COCO, KITTI, Pascal VOC, nuScenes |
-
-### CV Capabilities
-
-| Task | Primary Model | Notes |
-|------|---------------|-------|
-| Segmentation | SAM3 | Text prompts, 4M+ concepts |
-| Detection | YOLO11m | 2.4ms inference |
-| Open-Vocab | YOLO-World | 50+ FPS, text prompts |
-| Faces | SCRFD-10G | 95%+ accuracy |
-| 3D Detection | PV-RCNN++ | 84% 3D AP on KITTI |
-
-## Development Status
-
-See [docs/plan/](docs/plan/) for detailed implementation plans.
-
-| Module | Status |
-|--------|--------|
-| Foundation (Tauri + FastAPI) | 🟢 Complete |
-| Chat Interface | 🟢 Complete |
-| Plan Editor | 🟢 Complete |
-| Execution View | 🟢 Complete |
-| Review Queue | 🟢 Complete |
-| LangGraph Agent | 🟡 In Progress |
-| CV Model Integration | 🟡 In Progress |
-| Custom Script Builder | 🟡 In Progress |
-| Point Cloud Viewer | 🔴 Not Started |
-
-## Roadmap
-
-### v0.2 — Local MVP (Current)
-- [x] Chat-based interface with LLM (Ollama)
-- [x] Visual plan editor with drag-and-drop
-- [x] Live execution monitoring
-- [x] Review queue with annotation editing
-- [ ] Behavior cards for custom scripts (no code visible)
-- [ ] Docker-based script execution (isolated)
-- [ ] First-time setup wizard
-
-### v0.3 — CV Integration
-- [ ] SAM2/SAM3 segmentation
-- [ ] YOLO11 detection
-- [ ] Face anonymization (SCRFD + blur)
-- [ ] Batch processing with progress
-- [ ] Export to COCO/YOLO formats
-
-### v0.4 — 3D Support
-- [ ] Point cloud viewer (Three.js)
-- [ ] LAS/LAZ/PCD file support
-- [ ] 3D bounding box annotation
-- [ ] 2D-3D fusion (camera calibration)
-
-### v1.0 — Team Edition
-- [ ] Multi-user support (PostgreSQL)
-- [ ] Organization management
-- [ ] Role-based permissions
-- [ ] vLLM backend option (high throughput)
-- [ ] Docker Compose deployment
-
-### v2.0 — Cloud Edition (Future)
-- [ ] Kubernetes deployment
-- [ ] S3/GCS storage backend
-- [ ] API keys & billing
-- [ ] Webhook integrations
-
-See [ARCHITECTURE_MULTI_USER.md](docs/ARCHITECTURE_MULTI_USER.md) for detailed multi-user design.
-
-## Requirements
-
-### Minimum Hardware
-- GPU: NVIDIA RTX 3070 (8GB VRAM)
-- RAM: 32GB
-- Storage: 50GB
-
-### Recommended Hardware
-- GPU: NVIDIA RTX 4090 (24GB VRAM)
-- RAM: 64GB
-- Storage: 500GB SSD
-
-## Development
+### Run
 
 ```bash
-# Start development
-cargo tauri dev                           # Full app with hot reload
-npm run dev                               # Frontend only
-cd backend && python -m uvicorn backend.api.main:app --reload --port 8765  # Python sidecar
+# Full desktop app (frontend + Rust + sidecar lifecycle)
+npm run tauri:dev
 
-# Testing
-cd src-tauri && cargo test               # Rust tests (8 tests)
-cd backend && PYTHONPATH=src pytest tests/ -v  # Python tests (22 tests)
-npm run check                            # Frontend type checking
+# Frontend only
+npm run dev
 
-# Build
-cargo tauri build                        # Production build
+# Backend only (from repo root)
+npm run backend:dev
 ```
+
+## Validation Commands
+
+```bash
+# Backend tests
+cd backend && PYTHONPATH=src pytest -q
+
+# Rust tests
+cd src-tauri && cargo test
+
+# Frontend static checks
+npm run check
+```
+
+Current known state (February 10, 2026):
+- `backend`: `1309 passed, 39 skipped`
+- `src-tauri`: `24 passed, 2 ignored`
+- `npm run check`: currently reports frontend TypeScript/a11y/test-typing issues (tracked for release hardening)
+
+## Backend Endpoints
+
+When running locally (`127.0.0.1:8765`):
+- `GET /health`
+- `GET /docs`
+- LLM/agent, streaming, scripts, review, point cloud, ROS bag, 3D detect, fusion, and 3D anonymization routes under the FastAPI app
 
 ## Documentation
 
-- [Project Description](PROJECT_DESCRIPTION.md) — Full specification
-- [Development Plan](docs/plan/) — Implementation roadmap
-- [CLAUDE.md](CLAUDE.md) — Claude Code guidance
+- [Project Description](PROJECT_DESCRIPTION.md)
+- [Development Plan](docs/plan/README.md)
+- [Data Pipeline Spec](docs/plan/06-data-pipeline/SPEC.md)
+- [Backend Guide](backend/README.md)
 
 ## License
 
-TBD (Apache 2.0 or MIT)
+MIT

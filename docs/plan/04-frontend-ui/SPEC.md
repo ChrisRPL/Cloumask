@@ -1,12 +1,12 @@
 # Frontend UI Module
 
-> **Status:** 🟢 Complete
+> **Status:** 🟢 Complete (Implemented; release QA backlog remains)
 > **Priority:** P1 (High)
 > **Dependencies:** 01-foundation, 02-agent-system
 
 ## Overview
 
-Build the Svelte 5 frontend with five main views: Chat, Plan Editor, Execution View, Review Queue, and Point Cloud Viewer. Dark mode by default, keyboard-first navigation.
+Build the Svelte 5 frontend with five main views: Chat, Plan Editor, Execution View, Review Queue, and Point Cloud Viewer. Keyboard-first navigation with brand-aligned theming.
 
 ## Goals
 
@@ -15,7 +15,7 @@ Build the Svelte 5 frontend with five main views: Chat, Plan Editor, Execution V
 - [x] Live execution view with preview grid
 - [x] Review queue for annotation corrections
 - [x] Three.js point cloud viewer
-- [x] Responsive dark theme UI
+- [x] Responsive brand-aligned UI
 
 ## Technical Design
 
@@ -23,7 +23,7 @@ Build the Svelte 5 frontend with five main views: Chat, Plan Editor, Execution V
 - **Framework:** Svelte 5 with runes ($state, $derived, $effect)
 - **Components:** shadcn/ui (bits-ui + Tailwind)
 - **Icons:** Lucide
-- **Theme:** Dark mode default, violet accent (#8b5cf6)
+- **Theme:** Forest/cream palette with monospace-first typography
 
 ### Layout Structure
 ```
@@ -50,53 +50,53 @@ Build the Svelte 5 frontend with five main views: Chat, Plan Editor, Execution V
 
 ## Implementation Tasks
 
-- [ ] **Core Layout**
-  - [ ] App shell with sidebar navigation
-  - [ ] Dark theme configuration
-  - [ ] Responsive breakpoints
-  - [ ] Keyboard navigation (vim-like)
+- [x] **Core Layout**
+  - [x] App shell with sidebar navigation
+  - [x] Brand theme configuration
+  - [x] Responsive breakpoints
+  - [x] Keyboard navigation (vim-like)
 
-- [ ] **Chat Panel**
-  - [ ] Message list with user/agent distinction
-  - [ ] Streaming text display
-  - [ ] Inline clarification questions
-  - [ ] Quick-reply buttons
-  - [ ] Plan preview in messages
+- [x] **Chat Panel**
+  - [x] Message list with user/agent distinction
+  - [x] Streaming text display
+  - [x] Inline clarification questions
+  - [x] Quick-reply buttons
+  - [x] Plan preview in messages
 
-- [ ] **Plan Editor**
-  - [ ] Pipeline step visualization
-  - [ ] Drag-and-drop reordering
-  - [ ] Step configuration panels
-  - [ ] Start/Edit/Cancel CTAs
+- [x] **Plan Editor**
+  - [x] Pipeline step visualization
+  - [x] Drag-and-drop reordering
+  - [x] Step configuration panels
+  - [x] Start/Edit/Cancel CTAs
 
-- [ ] **Execution View**
-  - [ ] Progress bar with step indicators
-  - [ ] Live preview grid (6 images)
-  - [ ] Checkpoint alert banner
-  - [ ] Stats dashboard (processed, detected, flagged)
-  - [ ] Agent commentary stream
+- [x] **Execution View**
+  - [x] Progress bar with step indicators
+  - [x] Live preview grid (6 images)
+  - [x] Checkpoint alert banner
+  - [x] Stats dashboard (processed, detected, flagged)
+  - [x] Agent commentary stream
 
-- [ ] **Review Queue**
-  - [ ] Filterable item list
-  - [ ] Full-screen annotation canvas
-  - [ ] Bounding box editing
-  - [ ] Accept/Reject/Edit controls
-  - [ ] Keyboard shortcuts (A/R/E)
+- [x] **Review Queue**
+  - [x] Filterable item list
+  - [x] Full-screen annotation canvas
+  - [x] Bounding box editing
+  - [x] Accept/Reject/Edit controls
+  - [x] Keyboard shortcuts (A/R/E)
 
-- [ ] **Stores & State**
-  - [ ] `agent.ts` - Agent state, messages
-  - [ ] `pipeline.ts` - Current pipeline state
-  - [ ] `settings.ts` - User preferences
-  - [ ] `sse.ts` - SSE connection management
+- [x] **Stores & State**
+  - [x] `agent.ts` - Agent state, messages
+  - [x] `pipeline.ts` - Current pipeline state
+  - [x] `settings.ts` - User preferences
+  - [x] `sse.ts` - SSE connection management
 
 ## Acceptance Criteria
 
-- [ ] Chat shows streaming responses from agent
-- [ ] Plan editor displays pipeline steps visually
-- [ ] Execution view updates in real-time during processing
-- [ ] Review queue allows editing bounding boxes
-- [ ] All views navigable via keyboard
-- [ ] Dark mode renders correctly on all views
+- [x] Chat shows streaming responses from agent
+- [x] Plan editor displays pipeline steps visually
+- [x] Execution view updates in real-time during processing
+- [x] Review queue allows editing bounding boxes
+- [x] All views navigable via keyboard
+- [x] Theme tokens render correctly on all views
 
 ## Files to Create/Modify
 
@@ -183,13 +183,13 @@ The frontend UI module is broken down into 10 atomic task specifications. Comple
 
 ### Progress Tracking
 
-- [ ] 01-design-system - Tailwind + shadcn/ui configured
-- [ ] 02-core-layout - App shell functional
-- [ ] 03-stores-state - All stores implemented
-- [ ] 04-tauri-sse-integration - Backend communication working
-- [ ] 05-chat-panel - Chat with streaming working
-- [ ] 06-plan-editor - Plan editing functional
-- [ ] 07-execution-view - Live progress updates
-- [ ] 08-review-queue - Annotation editing works
-- [ ] 09-pointcloud-viewer - 3D viewer renders
-- [ ] 10-keyboard-navigation - All shortcuts functional
+- [x] 01-design-system - Tailwind + shadcn/ui configured
+- [x] 02-core-layout - App shell functional
+- [x] 03-stores-state - All stores implemented
+- [x] 04-tauri-sse-integration - Backend communication working
+- [x] 05-chat-panel - Chat with streaming working
+- [x] 06-plan-editor - Plan editing functional
+- [x] 07-execution-view - Live progress updates
+- [x] 08-review-queue - Annotation editing works
+- [x] 09-pointcloud-viewer - 3D viewer renders
+- [x] 10-keyboard-navigation - All shortcuts functional

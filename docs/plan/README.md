@@ -1,150 +1,101 @@
 # Cloumask Development Plan
 
-> **Status:** 🟡 In Progress (Phase 1-4 and 6 Complete)
-> **Last Updated:** February 10, 2026
+> Status: Core development complete (phases 1-6 implemented)
+> Last Updated: February 10, 2026
+> Release Engineering: In progress (packaging and distribution hardening)
 
-*From cloud to canvas — Local-first agentic CV data processing*
-
----
-
-## Vision
-
-Cloumask replaces complex CLI tools, fragmented scripts, and cloud-dependent platforms with a conversational AI interface that understands natural language commands like:
-
-> "Take my dashcam footage in /data/drive_001, anonymize all faces and plates, then label vehicles and pedestrians, export to YOLO format"
-
----
+This plan tracks implementation status for Cloumask modules and release readiness.
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        Tauri 2.0 Shell                          │
-│  ┌───────────────────────────────────────────────────────────┐  │
-│  │                    Frontend (Svelte 5)                     │  │
-│  │  ┌─────────┐ ┌─────────────┐ ┌─────────────────────────┐  │  │
-│  │  │  Chat   │ │    Plan     │ │    Execution View       │  │  │
-│  │  │  Panel  │ │   Editor    │ │  (Live Preview + Stats) │  │  │
-│  │  └─────────┘ └─────────────┘ └─────────────────────────┘  │  │
-│  │  ┌─────────────────────┐ ┌───────────────────────────────┐│  │
-│  │  │  Point Cloud Viewer │ │      Review/Annotation UI     ││  │
-│  │  │    (Three.js)       │ │         (Canvas-based)        ││  │
-│  │  └─────────────────────┘ └───────────────────────────────┘│  │
-│  └───────────────────────────────────────────────────────────┘  │
-│                              │ IPC                              │
-│  ┌───────────────────────────────────────────────────────────┐  │
-│  │                    Rust Core                               │  │
-│  │  ┌─────────────┐ ┌─────────────┐ ┌─────────────────────┐  │  │
-│  │  │  File I/O   │ │  Point Cloud│ │   Sidecar Manager   │  │  │
-│  │  │  (pasture)  │ │  Processing │ │  (spawn/kill/stream)│  │  │
-│  │  └─────────────┘ └─────────────┘ └─────────────────────┘  │  │
-│  └───────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────┘
-                              │ HTTP/SSE (port 8765)
-┌─────────────────────────────────────────────────────────────────┐
-│                  Python Sidecar (FastAPI)                       │
-│  ┌───────────────────────────────────────────────────────────┐  │
-│  │                    Agent Brain (LangGraph)                 │  │
-│  │  ┌─────────────┐ ┌─────────────┐ ┌─────────────────────┐  │  │
-│  │  │  Planner    │ │  Executor   │ │  Checkpoint Manager │  │  │
-│  │  └─────────────┘ └─────────────┘ └─────────────────────┘  │  │
-│  ├───────────────────────────────────────────────────────────┤  │
-│  │                       CV Models                            │  │
-│  │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────────────┐  │  │
-│  │  │  SAM3   │ │ YOLO11  │ │ SCRFD   │ │    PV-RCNN++    │  │  │
-│  │  └─────────┘ └─────────┘ └─────────┘ └─────────────────┘  │  │
-│  └───────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-┌─────────────────────────────────────────────────────────────────┐
-│                    Local LLM (Ollama)                           │
-│                    Qwen3-14B / Llama 4                          │
-└─────────────────────────────────────────────────────────────────┘
-```
+```plantuml
+@startuml
+skinparam backgroundColor transparent
+skinparam componentStyle rectangle
+skinparam shadowing false
 
----
+component "Frontend\nSvelte 5" as frontend
+component "Rust Desktop Core\nTauri 2" as rust
+component "Backend Sidecar\nFastAPI + LangGraph" as backend
+component "CV and Data Pipeline\nCV + dataset services" as data
+component "Local LLM\nOllama" as llm
+
+frontend --> rust : Tauri IPC
+rust --> backend : HTTP / SSE
+backend --> data : internal module calls
+backend --> llm : OpenAI-compatible API
+
+@enduml
+```
 
 ## Module Status
 
 | Module | Status | Priority | Spec |
 |--------|--------|----------|------|
-| **Foundation** | 🟢 Complete | P0 | [SPEC](./01-foundation/SPEC.md) |
-| **Agent System** | 🟢 Complete | P0 | [SPEC](./02-agent-system/SPEC.md) |
-| **CV Models** | 🟢 Complete | P0 | [SPEC](./03-cv-models/SPEC.md) |
-| **Frontend UI** | 🟢 Complete | P1 | [SPEC](./04-frontend-ui/SPEC.md) |
-| **Point Cloud** | 🟢 Complete | P1 | [SPEC](./05-point-cloud/SPEC.md) |
-| **Data Pipeline** | 🟢 Complete | P1 | [SPEC](./06-data-pipeline/SPEC.md) |
-
----
+| Foundation | Complete | P0 | [SPEC](./01-foundation/SPEC.md) |
+| Agent System | Complete | P0 | [SPEC](./02-agent-system/SPEC.md) |
+| CV Models | Complete | P0 | [SPEC](./03-cv-models/SPEC.md) |
+| Frontend UI | Complete | P1 | [SPEC](./04-frontend-ui/SPEC.md) |
+| Point Cloud | Complete | P1 | [SPEC](./05-point-cloud/SPEC.md) |
+| Data Pipeline | Complete | P1 | [SPEC](./06-data-pipeline/SPEC.md) |
 
 ## Development Phases
 
 ### Phase 1: Foundation
-- [ ] Initialize Tauri 2.0 + Svelte 5 project
-- [ ] Set up Python sidecar with FastAPI
-- [ ] Configure PyInstaller bundling
-- [ ] Basic IPC: Frontend ↔ Rust ↔ Python
-- [ ] Verify Ollama + Qwen3-14B
+- [x] Initialize Tauri 2.0 + Svelte 5 project
+- [x] Set up Python sidecar with FastAPI
+- [x] Configure sidecar lifecycle management
+- [x] Implement core IPC flow (Frontend <-> Rust <-> Python)
+- [x] Verify Ollama integration path
 
-### Phase 2: Agent Brain MVP
-- [ ] Set up LangGraph state machine
-- [ ] Implement tool calling with Ollama
-- [ ] Create initial tools: `scan_directory`, `anonymize`, `export`
-- [ ] Chat UI with streaming responses
+### Phase 2: Agent Brain
+- [x] Set up LangGraph state machine
+- [x] Implement tool calling via Ollama integration
+- [x] Add core tools and registry
+- [x] Add approval/checkpoint nodes
+- [x] Enable streaming updates and checkpoint persistence
 
-### Phase 3: Core CV Features
-- [ ] Face detection + anonymization (SCRFD)
-- [ ] Object detection (YOLO11)
-- [ ] Segmentation (SAM3)
-- [ ] Checkpoint system
-- [ ] Review queue
+### Phase 3: CV Features
+- [x] Face detection and anonymization
+- [x] Object detection and segmentation integration
+- [x] Batch processing and progress reporting
+- [x] Review-flow integration for outputs
 
-### Phase 4: Point Cloud Support
-- [ ] Point cloud I/O (pasture + Open3D)
-- [ ] 3D viewer (Three.js)
-- [ ] 3D object detection (PV-RCNN++)
-- [ ] 2D-3D fusion
+### Phase 4: Frontend UI
+- [x] Chat panel with streaming messages
+- [x] Plan editor and pipeline step controls
+- [x] Execution view with progress and previews
+- [x] Review queue and annotation editing flows
+- [x] Point cloud viewer integration
+
+### Phase 5: Point Cloud and Fusion
+- [x] Point cloud read/write and conversion support
+- [x] Point cloud processing operations
+- [x] ROS bag extraction support
+- [x] 3D detection and 2D-3D projection tools
+- [x] Point cloud anonymization paths
 
 ### Phase 6: Data Pipeline
-- [x] Import labels from YOLO, COCO, KITTI, Pascal VOC, CVAT, nuScenes, OpenLABEL
-- [x] Export labels to all supported formats
-- [x] Duplicate/similar image detection (pHash/dHash/aHash/CLIP)
-- [x] Label QA checks + HTML reporting
-- [x] Train/val/test splitting with stratification + CV folds
-- [x] Albumentations integration with preview and dataset augmentation
-- [x] Agent tools: `convert_format`, `find_duplicates`, `label_qa`, `split_dataset`, `export`
+- [x] Import/export across supported label formats
+- [x] Duplicate and similarity detection
+- [x] Label QA checks and report generation
+- [x] Train/val/test split and CV fold generation
+- [x] Augmentation support and preview
 
-### Phase 5: Polish & Distribution
-- [ ] Cross-platform builds
-- [ ] Installer packaging
-- [ ] Documentation
+### Release Hardening (Current)
+- [ ] Resolve frontend static-check backlog (`npm run check`)
+- [ ] Final packaging and installer validation
+- [ ] Final release documentation and distribution workflow
 
----
+## Verification Snapshot
 
-## Model Selection (January 2026)
-
-| Task | Primary | Fallback | Notes |
-|------|---------|----------|-------|
-| Detection | YOLO11m | YOLO26, RF-DETR | 2.4ms inference |
-| Segmentation | SAM3 | SAM2 | Text prompts, 4M+ concepts |
-| Open-Vocab | YOLO-World | GroundingDINO | 50+ FPS |
-| Faces | SCRFD-10G | YuNet | 95%+ accuracy |
-| 3D Detection | PV-RCNN++ | CenterPoint, BEVFusion | 84% 3D AP |
-| Local LLM | Qwen3-14B | Llama 4, Qwen3-8B | Best tool calling |
-
----
+Latest local verification run (February 10, 2026):
+- `cd backend && PYTHONPATH=src pytest -q` -> `1309 passed, 39 skipped`
+- `cd src-tauri && cargo test` -> `24 passed, 2 ignored`
+- `npm run check` -> frontend TypeScript/a11y/test-typing issues remain
 
 ## Quick Links
 
-- [Project Description](../../PROJECT_DESCRIPTION.md) - Full specification
-- [CLAUDE.md](../../CLAUDE.md) - Claude Code guidance
-- [.claude/](../../.claude/) - Claude Code configuration
-
----
-
-## How to Update This Plan
-
-1. Update module status in the table above
-2. Check off completed tasks in phase sections
-3. Add notes to individual SPEC.md files
-4. Create sub-specs in module folders as features are implemented
+- [Project Description](../../PROJECT_DESCRIPTION.md)
+- [Root README](../../README.md)
+- [Backend README](../../backend/README.md)

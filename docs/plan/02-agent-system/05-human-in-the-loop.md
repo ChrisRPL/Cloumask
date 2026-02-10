@@ -1,6 +1,6 @@
 # Human-in-the-Loop
 
-> **Status:** 🔴 Not Started
+> **Status:** 🟢 Complete (Implemented; checklist backfill pending)
 > **Priority:** P0 (Critical)
 > **Dependencies:** 01-state-types, 02-langgraph-core
 > **Estimated Complexity:** Medium
