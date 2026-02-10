@@ -25,7 +25,17 @@ logger = logging.getLogger(__name__)
 MAX_RETRIES = 3
 
 # Valid tool names that can appear in plans
-VALID_TOOLS = frozenset(["scan_directory", "anonymize", "detect", "segment", "export"])
+VALID_TOOLS = frozenset([
+    "scan_directory",
+    "anonymize",
+    "detect",
+    "segment",
+    "export",
+    "convert_format",
+    "find_duplicates",
+    "label_qa",
+    "split_dataset",
+])
 
 
 def validate_plan(plan: list[dict[str, Any]]) -> str | None:
@@ -87,12 +97,35 @@ def validate_plan(plan: list[dict[str, Any]]) -> str | None:
                 return f"Step {step_num} (segment) missing required 'prompt' parameter"
 
         elif tool_name == "export":
-            if "input_path" not in parameters:
-                return f"Step {step_num} (export) missing required 'input_path' parameter"
+            if "source_path" not in parameters:
+                return f"Step {step_num} (export) missing required 'source_path' parameter"
             if "output_path" not in parameters:
                 return f"Step {step_num} (export) missing required 'output_path' parameter"
-            if "format" not in parameters:
-                return f"Step {step_num} (export) missing required 'format' parameter"
+            if "output_format" not in parameters:
+                return f"Step {step_num} (export) missing required 'output_format' parameter"
+
+        elif tool_name == "convert_format":
+            if "source_path" not in parameters:
+                return f"Step {step_num} (convert_format) missing required 'source_path' parameter"
+            if "output_path" not in parameters:
+                return f"Step {step_num} (convert_format) missing required 'output_path' parameter"
+            if "target_format" not in parameters:
+                return (
+                    f"Step {step_num} (convert_format) "
+                    "missing required 'target_format' parameter"
+                )
+
+        elif tool_name == "find_duplicates" and "path" not in parameters:
+            return f"Step {step_num} (find_duplicates) missing required 'path' parameter"
+
+        elif tool_name == "label_qa" and "path" not in parameters:
+            return f"Step {step_num} (label_qa) missing required 'path' parameter"
+
+        elif tool_name == "split_dataset":
+            if "path" not in parameters:
+                return f"Step {step_num} (split_dataset) missing required 'path' parameter"
+            if "output_path" not in parameters:
+                return f"Step {step_num} (split_dataset) missing required 'output_path' parameter"
 
     return None
 

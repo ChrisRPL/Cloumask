@@ -34,11 +34,65 @@ Instance segmentation using SAM3
   - `model` (str, optional): "sam3" | "sam2" (default: "sam3")
 
 ### export
-Convert annotations to standard format
+Export a dataset with optional filtering, confidence thresholding, and splitting
 - **Parameters:**
-  - `input_path` (str, required): Path to annotation files
-  - `output_path` (str, required): Output directory
-  - `format` (str, required): "yolo" | "coco" | "pascal"
+  - `source_path` (str, required): Source dataset root directory
+  - `output_path` (str, required): Output directory for exported dataset
+  - `output_format` (str, required): "yolo" | "coco" | "kitti" | "voc" (or "pascal") | "cvat" | "nuscenes" | "openlabel"
+  - `source_format` (str, optional): Source format override (auto-detected if omitted)
+  - `classes` (list[str], optional): Class filter list (include only these classes)
+  - `min_confidence` (float, optional): Confidence threshold in range [0, 1]
+  - `split` (bool, optional): Split into train/val/test before export (default: false)
+  - `train_ratio` (float, optional): Train split ratio (default: 0.8)
+  - `val_ratio` (float, optional): Validation split ratio (default: 0.1)
+  - `test_ratio` (float, optional): Test split ratio (default: 0.1)
+  - `stratify` (bool, optional): Preserve class distribution across splits (default: true)
+  - `seed` (int, optional): Random seed for reproducible split assignment (default: 42)
+  - `copy_images` (bool, optional): Copy images to output (default: true)
+  - `overwrite` (bool, optional): Allow output path to be non-empty (default: true)
+
+### convert_format
+Convert labeled datasets between annotation formats
+- **Parameters:**
+  - `source_path` (str, required): Source dataset root directory
+  - `output_path` (str, required): Output directory for converted dataset
+  - `target_format` (str, required): "yolo" | "coco" | "kitti" | "voc" | "cvat" | "nuscenes" | "openlabel"
+  - `source_format` (str, optional): Source format override (auto-detected if omitted)
+  - `copy_images` (bool, optional): Copy images to output (default: true)
+  - `overwrite` (bool, optional): Allow output path to be non-empty (default: true)
+
+### find_duplicates
+Find duplicate and near-duplicate images in datasets
+- **Parameters:**
+  - `path` (str, required): Image file or dataset directory to analyze
+  - `method` (str, optional): "phash" | "dhash" | "ahash" | "clip" (default: "phash")
+  - `threshold` (float, optional): Similarity threshold from 0 to 1 (default: 0.9)
+  - `auto_remove` (bool, optional): Remove duplicates and keep representatives (default: false)
+  - `max_groups` (int, optional): Maximum duplicate groups returned (default: 50)
+
+### label_qa
+Run QA checks on dataset annotations and generate a quality report
+- **Parameters:**
+  - `path` (str, required): Dataset root path to validate
+  - `format` (str, optional): Dataset format override (auto-detected if omitted)
+  - `generate_report` (bool, optional): Generate HTML report (default: true)
+  - `checks` (list[str], optional): Subset of checks to run (default: all)
+  - `iou_threshold` (float, optional): Overlap threshold for box QA (default: 0.8)
+
+### split_dataset
+Split an annotated dataset into train/val/test subsets and export each split
+- **Parameters:**
+  - `path` (str, required): Source dataset root directory
+  - `output_path` (str, required): Output root for train/val/test split directories
+  - `format` (str, optional): Source format override (auto-detected if omitted)
+  - `train_ratio` (float, optional): Train split ratio (default: 0.8)
+  - `val_ratio` (float, optional): Validation split ratio (default: 0.1)
+  - `test_ratio` (float, optional): Test split ratio (default: 0.1)
+  - `stratify` (bool, optional): Preserve class distribution across splits (default: true)
+  - `seed` (int, optional): Random seed for reproducibility (default: 42)
+  - `output_format` (str, optional): Output format override (default: source format)
+  - `copy_images` (bool, optional): Copy images into split outputs (default: true)
+  - `overwrite` (bool, optional): Allow non-empty split output directories (default: true)
 
 ### pointcloud_stats
 Get metadata and statistics for a point cloud file
@@ -160,9 +214,9 @@ Plan:
     {
         "tool_name": "export",
         "parameters": {
-            "input_path": "/images",
+            "source_path": "/images",
             "output_path": "/images_labels",
-            "format": "yolo"
+            "output_format": "yolo"
         },
         "description": "Export annotations in YOLO format"
     }

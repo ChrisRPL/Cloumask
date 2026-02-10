@@ -36,10 +36,10 @@ class FusedAnnotation(BaseModel):
     """
 
     # 2D bounding box (normalized coordinates)
-    bbox_2d: "BBox" = Field(..., description="2D bounding box")
+    bbox_2d: BBox = Field(..., description="2D bounding box")
 
     # 3D detection (optional - may be 2D-only)
-    detection_3d: "Detection3D | None" = Field(
+    detection_3d: Detection3D | None = Field(
         None, description="3D detection if available"
     )
 

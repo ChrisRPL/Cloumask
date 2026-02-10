@@ -43,7 +43,11 @@ Available Tools:
     - PointCloudStatsTool: Get point cloud metadata and statistics
     - AnonymizePointCloudTool: 3D point cloud face anonymization (remove/noise)
     - ExtractRosbagTool: Extract point clouds and images from ROS bags
-    - ExportTool: Export annotations to various formats (stub)
+    - ConvertFormatTool: Convert datasets between annotation formats
+    - FindDuplicatesTool: Find duplicate and near-duplicate images in datasets
+    - LabelQATool: Run quality assurance checks on dataset labels
+    - SplitDatasetTool: Split datasets into train/val/test subsets and export each split
+    - ExportTool: Export datasets with filtering, splitting, and format conversion
     - CustomScriptTool: Execute user-defined Python scripts
 """
 
@@ -59,19 +63,22 @@ from backend.agent.tools.base import (
     error_result,
     success_result,
 )
+from backend.agent.tools.convert import ConvertFormatTool
 from backend.agent.tools.custom import CustomScriptTool
 from backend.agent.tools.detect import DetectTool
 from backend.agent.tools.detect_3d import Detect3DTool
-from backend.agent.tools.pointcloud_process import PointCloudStatsTool, ProcessPointCloudTool
 from backend.agent.tools.discovery import (
     discover_tools,
     initialize_tools,
     list_available_tools,
     reload_tools,
 )
+from backend.agent.tools.duplicates import FindDuplicatesTool
 from backend.agent.tools.export import ExportTool
-from backend.agent.tools.fusion import Project3DTo2DTool
 from backend.agent.tools.faces import FaceDetectTool
+from backend.agent.tools.fusion import Project3DTo2DTool
+from backend.agent.tools.pointcloud_process import PointCloudStatsTool, ProcessPointCloudTool
+from backend.agent.tools.qa import LabelQATool
 from backend.agent.tools.registry import (
     ToolRegistry,
     get_tool_registry,
@@ -80,6 +87,7 @@ from backend.agent.tools.registry import (
 from backend.agent.tools.rosbag import ExtractRosbagTool
 from backend.agent.tools.scan import ScanDirectoryTool
 from backend.agent.tools.segment import SegmentTool
+from backend.agent.tools.split import SplitDatasetTool
 
 __all__ = [
     # Base types
@@ -108,6 +116,10 @@ __all__ = [
     "FaceDetectTool",
     "Detect3DTool",
     "Project3DTo2DTool",
+    "ConvertFormatTool",
+    "FindDuplicatesTool",
+    "LabelQATool",
+    "SplitDatasetTool",
     "ExportTool",
     "CustomScriptTool",
     "ProcessPointCloudTool",

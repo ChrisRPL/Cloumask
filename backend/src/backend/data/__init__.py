@@ -2,9 +2,62 @@
 
 This module provides data loading and extraction utilities including:
 - ROS bag parsing and sensor data extraction
-- Format conversion utilities (planned for 06-data-pipeline)
+- Core data models for label representation (BBox, Label, Sample, Dataset)
+- Format loaders and exporters (YOLO, COCO, KITTI, VOC, CVAT)
+- Format conversion utilities
 """
 
+from backend.data.augmentation import (
+    ALBUMENTATIONS_AVAILABLE,
+    AugmentationPipeline,
+    AugmentedSample,
+    augment_dataset,
+    augment_sample,
+    available_presets,
+    get_preset_pipeline,
+    preview_augmentations,
+)
+from backend.data.duplicates import (
+    DuplicateDetector,
+    DuplicateGroup,
+    DuplicateResult,
+    EmbeddingComparator,
+    PerceptualHasher,
+    find_duplicates,
+)
+from backend.data.formats import (
+    FormatExporter,
+    FormatLoader,
+    FormatRegistry,
+    convert,
+    detect_format,
+    get_exporter,
+    get_loader,
+    list_formats,
+)
+from backend.data.models import (
+    BBox,
+    BBoxFormat,
+    BBoxSchema,
+    Dataset,
+    DatasetStatsSchema,
+    Label,
+    LabelSchema,
+    Sample,
+    SampleSchema,
+)
+from backend.data.qa import (
+    IssueType,
+    LabelQA,
+    QAIssue,
+    QAResult,
+    run_qa,
+)
+from backend.data.report import (
+    ReportGenerator,
+    generate_dataset_report,
+    generate_qa_report,
+)
 from backend.data.ros_types import (
     BagFormat,
     BagInfo,
@@ -26,18 +79,80 @@ from backend.data.rosbag_parser import (
     RosbagParser,
     get_parser,
 )
+from backend.data.splitting import (
+    DatasetSplitter,
+    SplitResult,
+    create_folds,
+    cross_validation_indices,
+    split_dataset,
+    split_indices,
+    stratified_split_indices,
+)
 
 __all__ = [
-    # Enums
+    # Data Pipeline Models
+    "BBox",
+    "BBoxFormat",
+    "Label",
+    "Sample",
+    "Dataset",
+    # Data Pipeline Pydantic Schemas
+    "BBoxSchema",
+    "LabelSchema",
+    "SampleSchema",
+    "DatasetStatsSchema",
+    # Format handling
+    "FormatLoader",
+    "FormatExporter",
+    "FormatRegistry",
+    "get_loader",
+    "get_exporter",
+    "detect_format",
+    "list_formats",
+    "convert",
+    # Duplicate detection
+    "PerceptualHasher",
+    "EmbeddingComparator",
+    "DuplicateGroup",
+    "DuplicateResult",
+    "DuplicateDetector",
+    "find_duplicates",
+    # Augmentation
+    "ALBUMENTATIONS_AVAILABLE",
+    "AugmentedSample",
+    "AugmentationPipeline",
+    "get_preset_pipeline",
+    "available_presets",
+    "augment_sample",
+    "preview_augmentations",
+    "augment_dataset",
+    # Label QA
+    "IssueType",
+    "QAIssue",
+    "QAResult",
+    "LabelQA",
+    "run_qa",
+    "ReportGenerator",
+    "generate_dataset_report",
+    "generate_qa_report",
+    # Dataset splitting
+    "SplitResult",
+    "DatasetSplitter",
+    "split_indices",
+    "stratified_split_indices",
+    "cross_validation_indices",
+    "split_dataset",
+    "create_folds",
+    # ROS Enums
     "BagFormat",
-    # Dataclasses
+    # ROS Dataclasses
     "TopicInfo",
     "BagInfo",
     "PointCloud2Message",
     "ImageMessage",
     "CameraInfoMessage",
     "SyncedFrame",
-    # Pydantic models
+    # ROS Pydantic models
     "TopicInfoResponse",
     "BagInfoResponse",
     "ExtractPointcloudRequest",

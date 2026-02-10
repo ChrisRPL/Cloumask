@@ -113,17 +113,65 @@ class TestValidatePlan:
         assert result is not None
         assert "prompt" in result.lower()
 
-    def test_export_missing_format_fails(self) -> None:
-        """export without format should fail."""
+    def test_export_missing_output_format_fails(self) -> None:
+        """export without output_format should fail."""
         plan = [
             {
                 "tool_name": "export",
-                "parameters": {"input_path": "/data", "output_path": "/out"},
+                "parameters": {"source_path": "/data", "output_path": "/out"},
             }
         ]
         result = validate_plan(plan)
         assert result is not None
-        assert "format" in result.lower()
+        assert "output_format" in result.lower()
+
+    def test_convert_format_missing_target_format_fails(self) -> None:
+        """convert_format without target_format should fail."""
+        plan = [
+            {
+                "tool_name": "convert_format",
+                "parameters": {"source_path": "/data", "output_path": "/out"},
+            }
+        ]
+        result = validate_plan(plan)
+        assert result is not None
+        assert "target_format" in result.lower()
+
+    def test_find_duplicates_missing_path_fails(self) -> None:
+        """find_duplicates without path should fail."""
+        plan = [
+            {
+                "tool_name": "find_duplicates",
+                "parameters": {"threshold": 0.95},
+            }
+        ]
+        result = validate_plan(plan)
+        assert result is not None
+        assert "path" in result.lower()
+
+    def test_label_qa_missing_path_fails(self) -> None:
+        """label_qa without path should fail."""
+        plan = [
+            {
+                "tool_name": "label_qa",
+                "parameters": {"generate_report": True},
+            }
+        ]
+        result = validate_plan(plan)
+        assert result is not None
+        assert "path" in result.lower()
+
+    def test_split_dataset_missing_output_path_fails(self) -> None:
+        """split_dataset without output_path should fail."""
+        plan = [
+            {
+                "tool_name": "split_dataset",
+                "parameters": {"path": "/data/source"},
+            }
+        ]
+        result = validate_plan(plan)
+        assert result is not None
+        assert "output_path" in result.lower()
 
     def test_all_tools_can_pass(self) -> None:
         """All valid tools should be able to pass validation."""
@@ -137,7 +185,23 @@ class TestValidatePlan:
             elif tool == "segment":
                 params = {"input_path": "/data", "prompt": "cars"}
             elif tool == "export":
-                params = {"input_path": "/data", "output_path": "/out", "format": "yolo"}
+                params = {
+                    "source_path": "/data/source",
+                    "output_path": "/data/exported",
+                    "output_format": "yolo",
+                }
+            elif tool == "convert_format":
+                params = {
+                    "source_path": "/data/source",
+                    "output_path": "/data/converted",
+                    "target_format": "yolo",
+                }
+            elif tool == "find_duplicates":
+                params = {"path": "/data/images", "method": "phash", "threshold": 0.9}
+            elif tool == "label_qa":
+                params = {"path": "/data/dataset", "generate_report": True}
+            elif tool == "split_dataset":
+                params = {"path": "/data/source", "output_path": "/data/split"}
             else:
                 continue
 
@@ -555,5 +619,15 @@ class TestEdgeCases:
 
     def test_valid_tools_constant(self) -> None:
         """VALID_TOOLS should contain expected tools."""
-        expected = {"scan_directory", "anonymize", "detect", "segment", "export"}
+        expected = {
+            "scan_directory",
+            "anonymize",
+            "detect",
+            "segment",
+            "export",
+            "convert_format",
+            "find_duplicates",
+            "label_qa",
+            "split_dataset",
+        }
         assert expected == VALID_TOOLS
