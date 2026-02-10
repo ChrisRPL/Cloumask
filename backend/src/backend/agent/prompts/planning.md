@@ -68,6 +68,21 @@ Run QA checks on dataset annotations and generate a quality report
   - `checks` (list[str], optional): Subset of checks to run (default: all)
   - `iou_threshold` (float, optional): Overlap threshold for box QA (default: 0.8)
 
+### split_dataset
+Split an annotated dataset into train/val/test subsets and export each split
+- **Parameters:**
+  - `path` (str, required): Source dataset root directory
+  - `output_path` (str, required): Output root for train/val/test split directories
+  - `format` (str, optional): Source format override (auto-detected if omitted)
+  - `train_ratio` (float, optional): Train split ratio (default: 0.8)
+  - `val_ratio` (float, optional): Validation split ratio (default: 0.1)
+  - `test_ratio` (float, optional): Test split ratio (default: 0.1)
+  - `stratify` (bool, optional): Preserve class distribution across splits (default: true)
+  - `seed` (int, optional): Random seed for reproducibility (default: 42)
+  - `output_format` (str, optional): Output format override (default: source format)
+  - `copy_images` (bool, optional): Copy images into split outputs (default: true)
+  - `overwrite` (bool, optional): Allow non-empty split output directories (default: true)
+
 ### pointcloud_stats
 Get metadata and statistics for a point cloud file
 - **Parameters:**
