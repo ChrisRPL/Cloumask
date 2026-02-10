@@ -1,7 +1,24 @@
 import { render, fireEvent, waitFor } from '@testing-library/svelte';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import PointCloudViewer from './PointCloudViewer.svelte';
-import { mockInvoke, mockOpen, mockSave, createMockPointCloudData, createMockMetadata } from '$lib/test-utils';
+import PointCloudViewerTestHarness from './PointCloudViewerTestHarness.svelte';
+import {
+	mockInvoke,
+	mockOpen,
+	mockSave,
+	createMockPointCloudData,
+	createMockMetadata,
+	createMockSceneContext,
+} from '$lib/test-utils';
+
+const mockSceneContext = createMockSceneContext();
+
+vi.mock('$lib/utils/three', async () => {
+	const actual = await vi.importActual<typeof import('$lib/utils/three')>('$lib/utils/three');
+	return {
+		...actual,
+		createScene: vi.fn(() => mockSceneContext),
+	};
+});
 
 describe('PointCloudViewer', () => {
 	beforeEach(() => {
@@ -11,7 +28,7 @@ describe('PointCloudViewer', () => {
 	});
 
 	it('opens settings modal from header action', async () => {
-		const { getByLabelText, getByText } = render(PointCloudViewer);
+		const { getByLabelText, getByText } = render(PointCloudViewerTestHarness);
 		await fireEvent.click(getByLabelText('Open settings'));
 		expect(getByText('Viewer Settings')).toBeTruthy();
 	});
@@ -35,7 +52,7 @@ describe('PointCloudViewer', () => {
 			return Promise.reject(new Error(`Unknown command: ${command}`));
 		});
 
-		const { getByText } = render(PointCloudViewer);
+		const { getByText } = render(PointCloudViewerTestHarness);
 
 		await fireEvent.click(getByText('Load'));
 

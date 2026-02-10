@@ -21,6 +21,7 @@
 	let { onComplete }: SetupWizardProps = $props();
 
 	const setup = getSetupState();
+	const isDevMode = import.meta.env.DEV;
 
 	// Step configuration
 	const steps: { id: SetupStep; label: string; icon: typeof Download }[] = [
@@ -44,63 +45,107 @@
 		return setup.progress.currentStep === step && setup.isInProgress;
 	}
 
+	function wait(ms: number) {
+		return new Promise((resolve) => setTimeout(resolve, ms));
+	}
+
+	let isSkipping = $state(false);
+	let setupStarted = $state(false);
+	let awaitingModelChoice = $state(false);
+	let isHandlingModelChoice = $state(false);
+
+	async function finishRemainingSetup() {
+		// Step 3: Build executor (local execution defaults)
+		setup.nextStep();
+		setup.updateProgress(0, 'Configuring local executor...');
+		await wait(400);
+		setup.updateProgress(100, 'Local executor configured');
+		await wait(300);
+
+		// Step 4: Complete
+		setup.nextStep();
+		setup.markComplete();
+
+		// Notify parent
+		setTimeout(onComplete, 800);
+	}
+
 	// Run setup steps
 	async function runSetup() {
+		setupStarted = true;
+		awaitingModelChoice = false;
+		isHandlingModelChoice = false;
 		setup.startSetup();
 
 		try {
-			// Step 1: Check prerequisites (Docker)
-			setup.updateProgress(0, 'Checking Docker availability...');
-			await new Promise((resolve) => setTimeout(resolve, 1000));
+			// Step 1: Check prerequisites
+			setup.updateProgress(0, 'Checking desktop prerequisites...');
+			await wait(300);
+			setup.updateProgress(100, 'Requirements validated');
+			await wait(250);
 
-			// For now, we'll skip Docker check and use local execution
-			// In production, this would check for Docker daemon
-			setup.updateProgress(100, 'Prerequisites checked');
-			await new Promise((resolve) => setTimeout(resolve, 500));
-
-			// Step 2: Download LLM
+			// Step 2: AI model bootstrap (no manual CLI setup)
 			setup.nextStep();
-			setup.updateProgress(0, 'Checking AI model...');
+			setup.updateProgress(10, 'Checking AI service and required model...');
 
 			const llmStatus = await checkLLMReady();
 			if (llmStatus.ready) {
 				setup.updateProgress(100, 'AI model already available');
 			} else {
-				setup.updateProgress(10, 'Downloading AI model (this may take a while)...');
-				try {
-					await ensureLLMReady();
-					setup.updateProgress(100, 'AI model ready');
-				} catch (e) {
-					// Model download failed, but we can continue
-					setup.updateProgress(100, 'AI model setup skipped (will retry on first use)');
-				}
+				// Let users choose between immediate model download and deferred setup.
+				// This keeps onboarding UX-friendly while avoiding manual configuration.
+				setup.updateProgress(40, 'Required AI model not installed yet');
+				awaitingModelChoice = true;
+				return;
 			}
-			await new Promise((resolve) => setTimeout(resolve, 500));
+			await wait(250);
 
-			// Step 3: Build executor (skip for now - uses local execution)
-			setup.nextStep();
-			setup.updateProgress(0, 'Configuring script executor...');
-			await new Promise((resolve) => setTimeout(resolve, 1000));
-			setup.updateProgress(100, 'Script executor configured');
-			await new Promise((resolve) => setTimeout(resolve, 500));
-
-			// Step 4: Complete
-			setup.nextStep();
-			setup.markComplete();
-
-			// Notify parent
-			setTimeout(onComplete, 1500);
+			await finishRemainingSetup();
 		} catch (error) {
 			setup.setError(error instanceof Error ? error.message : 'Setup failed');
 		}
 	}
 
-	// Start setup automatically when component mounts
-	// Track if user wants to skip
-	let isSkipping = $state(false);
+	async function handleDownloadNow() {
+		awaitingModelChoice = false;
+		isHandlingModelChoice = true;
+		try {
+			setup.updateProgress(45, 'Downloading required AI model (~9GB)...');
+			await ensureLLMReady();
+			setup.updateProgress(100, 'AI model ready');
+			await wait(250);
+			await finishRemainingSetup();
+		} catch (error) {
+			setup.setError(
+				error instanceof Error ? error.message : 'Model setup failed. You can retry or continue later.'
+			);
+		} finally {
+			isHandlingModelChoice = false;
+		}
+	}
 
+	async function handleContinueWithoutModel() {
+		awaitingModelChoice = false;
+		isHandlingModelChoice = true;
+		try {
+			setup.updateProgress(100, 'Model download deferred; Cloumask will auto-download on first AI use');
+			await wait(250);
+			await finishRemainingSetup();
+		} finally {
+			isHandlingModelChoice = false;
+		}
+	}
+
+	function handleRetry() {
+		setup.retry();
+		awaitingModelChoice = false;
+		isHandlingModelChoice = false;
+		runSetup();
+	}
+
+	// Start setup automatically when component mounts
 	$effect(() => {
-		if (!setup.isComplete && !setup.isInProgress && !isSkipping) {
+		if (!setup.isComplete && !setup.isInProgress && !isSkipping && !setupStarted) {
 			runSetup();
 		}
 	});
@@ -119,12 +164,12 @@
 		<div class="text-center mb-8">
 			<h1 class="text-3xl font-bold mb-2">Setting up Cloumask</h1>
 			<p class="text-muted-foreground">
-				First-time setup to prepare your AI-powered annotation environment
+				Preparing your desktop app. No CLI configuration required.
 			</p>
 		</div>
 
 		<!-- Progress Steps -->
-		<div class="space-y-4 mb-8">
+		<div class="space-y-4 mb-6">
 			{#each steps as step, i}
 				{@const IconComponent = step.icon}
 				{@const complete = isStepComplete(step.id)}
@@ -189,24 +234,52 @@
 			{/each}
 		</div>
 
+		<!-- Model choice -->
+		{#if awaitingModelChoice && !setup.progress.hasError}
+			<div class="mb-6 p-4 rounded-lg border bg-muted/40 border-border">
+				<p class="text-sm font-medium mb-1">AI model setup</p>
+				<p class="text-sm text-muted-foreground mb-3">
+					Choose one option. You never need terminal commands for this.
+				</p>
+				<div class="flex flex-wrap gap-2">
+					<button
+						type="button"
+						class="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50"
+						onclick={handleDownloadNow}
+						disabled={isHandlingModelChoice}
+					>
+						Download now (recommended)
+					</button>
+					<button
+						type="button"
+						class="px-4 py-2 text-sm bg-muted text-foreground rounded-md hover:bg-muted/80 border border-border disabled:opacity-50"
+						onclick={handleContinueWithoutModel}
+						disabled={isHandlingModelChoice}
+					>
+						Continue without model
+					</button>
+				</div>
+				<p class="text-xs text-muted-foreground mt-2">
+					If you continue now, Cloumask will automatically download the model when AI features are first used.
+				</p>
+			</div>
+		{/if}
+
 		<!-- Error Retry Button -->
 		{#if setup.progress.hasError}
 			<div class="flex justify-center">
 				<button
 					type="button"
 					class="px-6 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-					onclick={() => {
-						setup.retry();
-						runSetup();
-					}}
+					onclick={handleRetry}
 				>
 					Retry Setup
 				</button>
 			</div>
 		{/if}
 
-		<!-- Skip Setup (for development) -->
-		{#if !setup.isComplete}
+		<!-- Skip Setup (development only) -->
+		{#if !setup.isComplete && isDevMode}
 			<div class="text-center mt-8 relative z-50">
 				<button
 					type="button"
