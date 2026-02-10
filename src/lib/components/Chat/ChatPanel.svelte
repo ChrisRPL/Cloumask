@@ -43,7 +43,8 @@
 
 	// Derived state
 	const llmNotReady = $derived(llmStatus !== null && !llmStatus.ready);
-	const isInputDisabled = $derived(agent.isBusy || !sse.isConnected || isInitializing || llmNotReady);
+	const isTypingDisabled = $derived(agent.isBusy || !sse.isConnected || isInitializing);
+	const isSendDisabled = $derived(isTypingDisabled || llmNotReady);
 	const showClarification = $derived(agent.pendingClarification !== null);
 	const showPlanPreview = $derived(
 		pipeline.steps.length > 0 &&
@@ -337,7 +338,8 @@
 	<!-- Input -->
 	<ChatInput
 		value={inputValue}
-		disabled={isInputDisabled}
+		disabled={isTypingDisabled}
+		disableSend={isSendDisabled}
 		placeholder={isInitializing ? 'Connecting...' : 'Type a message...'}
 		onSend={handleSend}
 		onValueChange={(v) => (inputValue = v)}

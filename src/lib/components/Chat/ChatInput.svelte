@@ -4,6 +4,7 @@
 	export interface ChatInputProps {
 		value: string;
 		disabled?: boolean;
+		disableSend?: boolean;
 		placeholder?: string;
 		class?: string;
 		onSend: (message: string) => void;
@@ -18,6 +19,7 @@
 	let {
 		value,
 		disabled = false,
+		disableSend = false,
 		placeholder = 'Type a message...',
 		class: className,
 		onSend,
@@ -46,7 +48,7 @@
 		// Enter to send (without shift)
 		if (event.key === 'Enter' && !event.shiftKey) {
 			event.preventDefault();
-			if (value.trim() && !disabled) {
+			if (value.trim() && !disableSend) {
 				onSend(value.trim());
 			}
 		}
@@ -54,7 +56,7 @@
 
 	// Submit via button
 	function handleSubmit() {
-		if (value.trim() && !disabled) {
+		if (value.trim() && !disableSend) {
 			onSend(value.trim());
 		}
 	}
@@ -104,7 +106,7 @@
 		variant="default"
 		size="icon"
 		class="h-9 w-9 shrink-0"
-		disabled={disabled || !value.trim()}
+		disabled={disableSend || !value.trim()}
 		onclick={handleSubmit}
 	>
 		<CornerDownLeft class="h-4 w-4" />
