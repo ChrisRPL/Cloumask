@@ -324,6 +324,32 @@ class TestDataset:
         assert len(merged) == 2
         assert merged.class_names == ["car", "person"]
 
+    def test_merge_infers_class_names_when_missing_metadata(self) -> None:
+        """Merge should preserve inferred class names when metadata is absent."""
+        bbox = BBox(cx=0.5, cy=0.5, w=0.2, h=0.2)
+        ds1 = Dataset(
+            [
+                Sample(
+                    image_path=Path("/data/a/img1.jpg"),
+                    labels=[Label(class_name="car", class_id=0, bbox=bbox)],
+                )
+            ],
+            name="ds1",
+        )
+        ds2 = Dataset(
+            [
+                Sample(
+                    image_path=Path("/data/b/img2.jpg"),
+                    labels=[Label(class_name="person", class_id=1, bbox=bbox)],
+                )
+            ],
+            name="ds2",
+        )
+
+        merged = ds1.merge(ds2)
+        assert len(merged) == 2
+        assert merged.class_names == ["car", "person"]
+
     def test_filter_by_class(self) -> None:
         """Test filtering dataset by class."""
         bbox = BBox(cx=0.5, cy=0.5, w=0.2, h=0.2)

@@ -420,12 +420,22 @@ class Dataset:
     def merge(self, other: Dataset) -> Dataset:
         """Merge with another dataset."""
         combined = self._samples + other._samples
-        # Merge class names preserving order
-        names = list(self._class_names or [])
-        for name in other._class_names or []:
-            if name not in names:
-                names.append(name)
-        return Dataset(combined, name=f"{self.name}+{other.name}", class_names=names)
+
+        # Merge class names preserving order. Use resolved class names so datasets
+        # without explicit metadata still contribute inferred labels.
+        names: list[str] = []
+        for class_name in self.class_names:
+            if class_name not in names:
+                names.append(class_name)
+        for class_name in other.class_names:
+            if class_name not in names:
+                names.append(class_name)
+
+        return Dataset(
+            combined,
+            name=f"{self.name}+{other.name}",
+            class_names=names or None,
+        )
 
     def stats(self) -> dict:
         """Compute dataset statistics."""
