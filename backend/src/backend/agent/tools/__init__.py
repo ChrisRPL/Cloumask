@@ -44,6 +44,7 @@ Available Tools:
     - AnonymizePointCloudTool: 3D point cloud face anonymization (remove/noise)
     - ExtractRosbagTool: Extract point clouds and images from ROS bags
     - ConvertFormatTool: Convert datasets between annotation formats
+    - FindDuplicatesTool: Find duplicate and near-duplicate images in datasets
     - ExportTool: Export annotations to various formats (stub)
     - CustomScriptTool: Execute user-defined Python scripts
 """
@@ -70,6 +71,7 @@ from backend.agent.tools.discovery import (
     list_available_tools,
     reload_tools,
 )
+from backend.agent.tools.duplicates import FindDuplicatesTool
 from backend.agent.tools.export import ExportTool
 from backend.agent.tools.faces import FaceDetectTool
 from backend.agent.tools.fusion import Project3DTo2DTool
@@ -111,6 +113,7 @@ __all__ = [
     "Detect3DTool",
     "Project3DTo2DTool",
     "ConvertFormatTool",
+    "FindDuplicatesTool",
     "ExportTool",
     "CustomScriptTool",
     "ProcessPointCloudTool",
