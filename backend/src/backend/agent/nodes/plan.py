@@ -25,7 +25,14 @@ logger = logging.getLogger(__name__)
 MAX_RETRIES = 3
 
 # Valid tool names that can appear in plans
-VALID_TOOLS = frozenset(["scan_directory", "anonymize", "detect", "segment", "export"])
+VALID_TOOLS = frozenset([
+    "scan_directory",
+    "anonymize",
+    "detect",
+    "segment",
+    "export",
+    "convert_format",
+])
 
 
 def validate_plan(plan: list[dict[str, Any]]) -> str | None:
@@ -93,6 +100,17 @@ def validate_plan(plan: list[dict[str, Any]]) -> str | None:
                 return f"Step {step_num} (export) missing required 'output_path' parameter"
             if "format" not in parameters:
                 return f"Step {step_num} (export) missing required 'format' parameter"
+
+        elif tool_name == "convert_format":
+            if "source_path" not in parameters:
+                return f"Step {step_num} (convert_format) missing required 'source_path' parameter"
+            if "output_path" not in parameters:
+                return f"Step {step_num} (convert_format) missing required 'output_path' parameter"
+            if "target_format" not in parameters:
+                return (
+                    f"Step {step_num} (convert_format) "
+                    "missing required 'target_format' parameter"
+                )
 
     return None
 

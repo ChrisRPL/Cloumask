@@ -43,6 +43,7 @@ Available Tools:
     - PointCloudStatsTool: Get point cloud metadata and statistics
     - AnonymizePointCloudTool: 3D point cloud face anonymization (remove/noise)
     - ExtractRosbagTool: Extract point clouds and images from ROS bags
+    - ConvertFormatTool: Convert datasets between annotation formats
     - ExportTool: Export annotations to various formats (stub)
     - CustomScriptTool: Execute user-defined Python scripts
 """
@@ -59,10 +60,10 @@ from backend.agent.tools.base import (
     error_result,
     success_result,
 )
+from backend.agent.tools.convert import ConvertFormatTool
 from backend.agent.tools.custom import CustomScriptTool
 from backend.agent.tools.detect import DetectTool
 from backend.agent.tools.detect_3d import Detect3DTool
-from backend.agent.tools.pointcloud_process import PointCloudStatsTool, ProcessPointCloudTool
 from backend.agent.tools.discovery import (
     discover_tools,
     initialize_tools,
@@ -70,8 +71,9 @@ from backend.agent.tools.discovery import (
     reload_tools,
 )
 from backend.agent.tools.export import ExportTool
-from backend.agent.tools.fusion import Project3DTo2DTool
 from backend.agent.tools.faces import FaceDetectTool
+from backend.agent.tools.fusion import Project3DTo2DTool
+from backend.agent.tools.pointcloud_process import PointCloudStatsTool, ProcessPointCloudTool
 from backend.agent.tools.registry import (
     ToolRegistry,
     get_tool_registry,
@@ -108,6 +110,7 @@ __all__ = [
     "FaceDetectTool",
     "Detect3DTool",
     "Project3DTo2DTool",
+    "ConvertFormatTool",
     "ExportTool",
     "CustomScriptTool",
     "ProcessPointCloudTool",
