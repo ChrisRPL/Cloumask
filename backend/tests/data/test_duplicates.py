@@ -199,3 +199,38 @@ class TestDuplicateDetector:
         with pytest.raises(ValueError, match="threshold must be between 0 and 1"):
             detector.find_duplicates(list(sample_images.values()), threshold=1.5)
 
+    def test_near_duplicate_recall_meets_target(self, tmp_path: Path) -> None:
+        """Near-duplicate detection should recover at least 95% of synthetic variants."""
+        base_path = tmp_path / "base.png"
+        base_image = _create_base_image()
+        Image.fromarray(base_image).save(base_path)
+
+        near_duplicate_paths: list[Path] = []
+        for idx in range(20):
+            variant = base_image.copy()
+            patch_y = 8 + (idx % 5) * 12
+            patch_x = 8 + (idx // 5) * 12
+            patch = variant[patch_y : patch_y + 6, patch_x : patch_x + 6].astype(np.int16)
+            patch = np.clip(patch + ((idx % 3) - 1) * 8, 0, 255).astype(np.uint8)
+            variant[patch_y : patch_y + 6, patch_x : patch_x + 6] = patch
+
+            near_path = tmp_path / f"near_{idx:02d}.png"
+            Image.fromarray(variant).save(near_path)
+            near_duplicate_paths.append(near_path)
+
+        distractor_path = tmp_path / "distractor.png"
+        Image.fromarray(_create_different_image()).save(distractor_path)
+
+        detector = DuplicateDetector(method="dhash")
+        result = detector.find_duplicates(
+            [base_path, *near_duplicate_paths, distractor_path],
+            threshold=0.85,
+        )
+
+        recovered: set[Path] = set()
+        for group in result.groups:
+            if base_path in group.images:
+                recovered.update(path for path in group.images if path != base_path)
+
+        recall = len(recovered & set(near_duplicate_paths)) / len(near_duplicate_paths)
+        assert recall >= 0.95
