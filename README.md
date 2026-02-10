@@ -108,6 +108,39 @@ npm run dev
 npm run backend:dev
 ```
 
+## User Delivery
+
+### Web App
+
+```bash
+# Terminal 1
+npm run backend:dev
+
+# Terminal 2
+npm run dev
+```
+
+Open `http://localhost:5173`.
+
+### Desktop App (Installer)
+
+```bash
+npm run tauri:build
+```
+
+Installer/artifacts are generated in:
+
+- `src-tauri/target/release/bundle/dmg/Cloumask_0.1.0_aarch64.dmg`
+- `src-tauri/target/release/bundle/macos/Cloumask.app`
+
+### First-Run Wizard UX
+
+- First launch runs an in-app setup wizard (no CLI steps required).
+- The wizard validates prerequisites and handles model setup in-app.
+- If the required AI model is missing, users can:
+  - `Download now (recommended)`, or
+  - `Continue without model` and let Cloumask auto-download on first AI use.
+
 ## Validation Commands
 
 ```bash
@@ -119,12 +152,17 @@ cd src-tauri && cargo test
 
 # Frontend static checks
 npm run check
+
+# Frontend tests (component + user flows)
+npm test -- --run
 ```
 
 Current known state (February 10, 2026):
 - `backend`: `1309 passed, 39 skipped`
 - `src-tauri`: `24 passed, 2 ignored`
-- `npm run check`: currently reports frontend TypeScript/a11y/test-typing issues (tracked for release hardening)
+- `npm run check`: `0 errors, 0 warnings`
+- `npm test -- --run`: `10 passed`
+- `npm run tauri:build`: macOS app bundle + DMG generated successfully
 
 ## Backend Endpoints
 
@@ -139,6 +177,7 @@ When running locally (`127.0.0.1:8765`):
 - [Development Plan](docs/plan/README.md)
 - [Data Pipeline Spec](docs/plan/06-data-pipeline/SPEC.md)
 - [Backend Guide](backend/README.md)
+- [Contributing Guide](CONTRIBUTING.md)
 
 ## License
 
