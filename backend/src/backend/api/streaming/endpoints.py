@@ -472,13 +472,15 @@ async def process_agent_request(
         initial_state: PipelineState
         if thread.pipeline_state and decision is not None:
             # Resume from existing state with decision
-            initial_state = thread.pipeline_state  # type: ignore[assignment]
+            initial_state = dict(thread.pipeline_state)  # type: ignore[assignment]
             # Update state with user decision
             _apply_user_decision(initial_state, decision, content, plan_edits)
         else:
             # New request - create initial state
             pipeline_id = str(uuid.uuid4())
             initial_state = create_initial_state(content, pipeline_id)
+            # Reset thread state to a full baseline for this run.
+            thread.pipeline_state = dict(initial_state)
             # Reset tracking for new conversation
             thread.last_emitted_message_count = 0
             thread.last_emitted_plan_hash = None
@@ -488,11 +490,15 @@ async def process_agent_request(
         # Run agent and stream events
         async with compile_agent(":memory:") as compiled:
             async for state_update in run_agent(compiled, initial_state, thread_id):
-                # Store latest state
-                thread.pipeline_state = state_update
+                # Merge partial updates into full thread state so resume/approval
+                # decisions retain plan + metadata across node outputs.
+                thread.pipeline_state = {
+                    **thread.pipeline_state,
+                    **state_update,
+                }
 
                 # Convert state updates to SSE events with deduplication
-                events = state_to_events(state_update, thread_id, thread)
+                events = state_to_events(thread.pipeline_state, thread_id, thread)
                 for event in events:
                     # Apply batching for progress events
                     batched = batcher.add(event)
@@ -504,7 +510,7 @@ async def process_agent_request(
                     await queue.put(pending)
 
                 # Check if we should pause for user input
-                if state_update.get("awaiting_user", False):
+                if thread.pipeline_state.get("awaiting_user", False):
                     break
 
     except asyncio.CancelledError:
