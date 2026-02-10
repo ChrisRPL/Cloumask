@@ -1,6 +1,6 @@
 # Tool System
 
-> **Status:** 🔴 Not Started
+> **Status:** 🟢 Complete (Implemented; checklist backfill pending)
 > **Priority:** P0 (Critical)
 > **Dependencies:** 01-state-types
 > **Estimated Complexity:** Medium

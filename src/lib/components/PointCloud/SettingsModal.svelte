@@ -61,6 +61,7 @@
 				</Dialog.Description>
 			</div>
 			<button
+				type="button"
 				class="h-8 w-8 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
 				onclick={() => (open = false)}
 			>
@@ -143,7 +144,7 @@
 								)}
 								style={`background-color: ${color.value}`}
 								onclick={() => pcState.setBackgroundColor(color.value)}
-							/>
+							></button>
 						{/each}
 					</div>
 					<div class="flex items-center gap-2">

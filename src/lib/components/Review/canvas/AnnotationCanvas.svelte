@@ -282,7 +282,7 @@
 		'focus:outline-none focus-visible:ring-2 focus-visible:ring-primary',
 		className
 	)}
-	tabindex="0"
+	tabindex="-1"
 	role="application"
 	aria-label="Annotation canvas"
 	onkeydown={handleKeydown}

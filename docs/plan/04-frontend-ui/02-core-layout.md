@@ -1,6 +1,6 @@
 # Core Layout & Navigation
 
-> **Status:** 🔴 Not Started
+> **Status:** 🟢 Complete (Implemented; checklist backfill pending)
 > **Priority:** P0 (Critical - provides app shell for all views)
 > **Dependencies:** 01-design-system
 > **Estimated Complexity:** Medium

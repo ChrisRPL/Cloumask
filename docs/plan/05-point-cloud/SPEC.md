@@ -1,6 +1,6 @@
 # Point Cloud Module
 
-> **Status:** 🟢 Complete
+> **Status:** 🟢 Complete (Implemented; release QA backlog remains)
 > **Priority:** P1 (High)
 > **Dependencies:** 01-foundation, 03-cv-models
 
@@ -10,12 +10,12 @@ Support 3D point cloud data across the stack: Rust (pasture) for efficient I/O, 
 
 ## Goals
 
-- [ ] Read/write PCD, PLY, LAS/LAZ formats
-- [ ] Parse ROS bags for PointCloud2 topics
-- [ ] Three.js viewer with orbit controls
-- [ ] 3D object detection (PV-RCNN++)
-- [ ] Camera-LiDAR projection and fusion
-- [ ] Point cloud anonymization
+- [x] Read/write PCD, PLY, LAS/LAZ formats
+- [x] Parse ROS bags for PointCloud2 topics
+- [x] Three.js viewer with orbit controls
+- [x] 3D object detection (PV-RCNN++)
+- [x] Camera-LiDAR projection and fusion
+- [x] Point cloud anonymization
 
 ## Technical Design
 
@@ -63,57 +63,57 @@ Camera Image + LiDAR Points
 
 ## Implementation Tasks
 
-- [ ] **Rust I/O (pasture)**
-  - [ ] PCD/PLY reader with streaming
-  - [ ] LAS/LAZ support via pasture-io
-  - [ ] Point cloud decimation
-  - [ ] Format conversion commands
+- [x] **Rust I/O (pasture)**
+  - [x] PCD/PLY reader with streaming
+  - [x] LAS/LAZ support via pasture-io
+  - [x] Point cloud decimation
+  - [x] Format conversion commands
 
-- [ ] **Python Processing (Open3D)**
-  - [ ] Point cloud loading/saving
-  - [ ] Downsampling (voxel, random)
-  - [ ] Filtering (statistical, radius)
-  - [ ] Normal estimation
+- [x] **Python Processing (Open3D)**
+  - [x] Point cloud loading/saving
+  - [x] Downsampling (voxel, random)
+  - [x] Filtering (statistical, radius)
+  - [x] Normal estimation
 
-- [ ] **ROS Bag Extraction**
-  - [ ] Topic discovery
-  - [ ] PointCloud2 extraction
-  - [ ] Camera image extraction
-  - [ ] Timestamp alignment
+- [x] **ROS Bag Extraction**
+  - [x] Topic discovery
+  - [x] PointCloud2 extraction
+  - [x] Camera image extraction
+  - [x] Timestamp alignment
 
-- [ ] **3D Detection (OpenPCDet)**
-  - [ ] PV-RCNN++ integration
-  - [ ] CenterPoint fallback
-  - [ ] Inference pipeline
-  - [ ] 3D bounding box output
+- [x] **3D Detection (OpenPCDet)**
+  - [x] PV-RCNN++ integration
+  - [x] CenterPoint fallback
+  - [x] Inference pipeline
+  - [x] 3D bounding box output
 
-- [ ] **2D-3D Fusion**
-  - [ ] Calibration matrix handling
-  - [ ] 3D→2D projection
-  - [ ] 2D→3D lifting (with depth)
-  - [ ] Multi-sensor sync
+- [x] **2D-3D Fusion**
+  - [x] Calibration matrix handling
+  - [x] 3D→2D projection
+  - [x] 2D→3D lifting (with depth)
+  - [x] Multi-sensor sync
 
-- [ ] **Frontend Viewer (Three.js)**
-  - [ ] Point cloud rendering
-  - [ ] Color by: intensity, height, RGB
-  - [ ] 3D bounding box visualization
-  - [ ] Orbit/pan/zoom controls
-  - [ ] LOD for large clouds
+- [x] **Frontend Viewer (Three.js)**
+  - [x] Point cloud rendering
+  - [x] Color by: intensity, height, RGB
+  - [x] 3D bounding box visualization
+  - [x] Orbit/pan/zoom controls
+  - [x] LOD for large clouds
 
-- [ ] **Agent Tools**
-  - [ ] `parse_pointcloud` tool
-  - [ ] `detect_3d` tool
-  - [ ] `project_3d_to_2d` tool
-  - [ ] `anonymize_pointcloud` tool
+- [x] **Agent Tools**
+  - [x] `parse_pointcloud` tool
+  - [x] `detect_3d` tool
+  - [x] `project_3d_to_2d` tool
+  - [x] `anonymize_pointcloud` tool
 
 ## Acceptance Criteria
 
-- [ ] Load 10M point PCD file in <2 seconds
-- [ ] Three.js viewer renders with 60fps for 1M points
-- [ ] PV-RCNN++ detects cars in KITTI sample
-- [ ] 3D boxes project correctly to camera image
-- [ ] ROS bag extraction produces synced frames
-- [ ] Point cloud anonymization removes face points
+- [x] Load 10M point PCD file in <2 seconds
+- [x] Three.js viewer renders with 60fps for 1M points
+- [x] PV-RCNN++ detects cars in KITTI sample
+- [x] 3D boxes project correctly to camera image
+- [x] ROS bag extraction produces synced frames
+- [x] Point cloud anonymization removes face points
 
 ## Files to Create/Modify
 
@@ -153,13 +153,13 @@ Detailed implementation specs for each component:
 
 | # | Spec | Description | Status |
 |---|------|-------------|--------|
-| 1 | [01-rust-io.md](./01-rust-io.md) | Rust pasture I/O (PCD, PLY, LAS) | 🔴 Not Started |
-| 2 | [02-python-open3d.md](./02-python-open3d.md) | Open3D geometry processing | 🔴 Not Started |
-| 3 | [03-rosbag-extraction.md](./03-rosbag-extraction.md) | ROS bag parsing & extraction | 🔴 Not Started |
-| 4 | [04-3d-detection.md](./04-3d-detection.md) | OpenPCDet (PV-RCNN++, CenterPoint) | 🔴 Not Started |
-| 5 | [05-2d-3d-fusion.md](./05-2d-3d-fusion.md) | Camera-LiDAR sensor fusion | 🔴 Not Started |
-| 6 | [06-threejs-viewer.md](./06-threejs-viewer.md) | Three.js frontend visualization | 🔴 Not Started |
-| 7 | [07-anonymization-3d.md](./07-anonymization-3d.md) | 3D point cloud anonymization | 🔴 Not Started |
+| 1 | [01-rust-io.md](./01-rust-io.md) | Rust pasture I/O (PCD, PLY, LAS) | 🟢 Complete |
+| 2 | [02-python-open3d.md](./02-python-open3d.md) | Open3D geometry processing | 🟢 Complete |
+| 3 | [03-rosbag-extraction.md](./03-rosbag-extraction.md) | ROS bag parsing & extraction | 🟢 Complete |
+| 4 | [04-3d-detection.md](./04-3d-detection.md) | OpenPCDet (PV-RCNN++, CenterPoint) | 🟢 Complete |
+| 5 | [05-2d-3d-fusion.md](./05-2d-3d-fusion.md) | Camera-LiDAR sensor fusion | 🟢 Complete |
+| 6 | [06-threejs-viewer.md](./06-threejs-viewer.md) | Three.js frontend visualization | 🟢 Complete |
+| 7 | [07-anonymization-3d.md](./07-anonymization-3d.md) | 3D point cloud anonymization | 🟢 Complete |
 | 8 | [08-agent-tools.md](./08-agent-tools.md) | LangGraph agent tools | 🟢 Complete |
 
 ### Implementation Order

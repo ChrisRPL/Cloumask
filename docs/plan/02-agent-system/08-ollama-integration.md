@@ -1,6 +1,6 @@
 # Ollama Integration
 
-> **Status:** 🔴 Not Started
+> **Status:** 🟢 Complete (Implemented; checklist backfill pending)
 > **Priority:** P0 (Critical)
 > **Dependencies:** 01-foundation (Ollama verified), 06-tool-system
 > **Estimated Complexity:** Medium

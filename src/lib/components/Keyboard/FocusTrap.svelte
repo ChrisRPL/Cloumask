@@ -41,6 +41,9 @@
 	// Handle keydown for Tab and Escape
 	function handleKeydown(event: KeyboardEvent) {
 		if (!active) return;
+		if (containerRef && document.activeElement && !containerRef.contains(document.activeElement)) {
+			return;
+		}
 
 		if (event.key === 'Escape' && onEscape) {
 			event.preventDefault();
@@ -92,9 +95,10 @@
 	});
 </script>
 
+<svelte:window onkeydown={handleKeydown} />
+
 <div
 	bind:this={containerRef}
-	onkeydown={handleKeydown}
 	tabindex="-1"
 	class="outline-none"
 	role="group"
