@@ -383,14 +383,23 @@ class TestNodeStubs:
         """create_checkpoint node should create checkpoint record."""
         from backend.agent.nodes import create_checkpoint
 
-        state = _create_minimal_state(current_step=5)
+        state = _create_minimal_state(
+            current_step=5,
+            plan=[
+                {"id": "step-1", "tool_name": "scan_directory"},
+                {"id": "step-2", "tool_name": "detect"},
+                {"id": "step-3", "tool_name": "segment"},
+                {"id": "step-4", "tool_name": "export"},
+                {"id": "step-5", "tool_name": "anonymize"},
+            ],
+        )
         result = create_checkpoint(state)
 
         assert "checkpoints" in result
         assert len(result["checkpoints"]) == 1
         cp = result["checkpoints"][0]
         assert cp["step_index"] == 5
-        assert cp["trigger_reason"] == "percentage"
+        assert cp["trigger_reason"] == "critical_step"
         assert result["awaiting_user"] is True
 
     @pytest.mark.asyncio
