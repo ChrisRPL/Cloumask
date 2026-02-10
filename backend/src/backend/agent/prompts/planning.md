@@ -59,6 +59,15 @@ Find duplicate and near-duplicate images in datasets
   - `auto_remove` (bool, optional): Remove duplicates and keep representatives (default: false)
   - `max_groups` (int, optional): Maximum duplicate groups returned (default: 50)
 
+### label_qa
+Run QA checks on dataset annotations and generate a quality report
+- **Parameters:**
+  - `path` (str, required): Dataset root path to validate
+  - `format` (str, optional): Dataset format override (auto-detected if omitted)
+  - `generate_report` (bool, optional): Generate HTML report (default: true)
+  - `checks` (list[str], optional): Subset of checks to run (default: all)
+  - `iou_threshold` (float, optional): Overlap threshold for box QA (default: 0.8)
+
 ### pointcloud_stats
 Get metadata and statistics for a point cloud file
 - **Parameters:**
