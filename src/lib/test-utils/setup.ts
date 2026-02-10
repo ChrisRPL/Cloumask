@@ -7,6 +7,23 @@ class ResizeObserverMock {
 	disconnect() {}
 }
 
+class EventSourceMock {
+	url: string;
+	readyState = 1;
+	onopen: ((this: EventSource, ev: Event) => unknown) | null = null;
+	onerror: ((this: EventSource, ev: Event) => unknown) | null = null;
+
+	constructor(url: string) {
+		this.url = url;
+	}
+
+	addEventListener() {}
+	removeEventListener() {}
+	close() {
+		this.readyState = 2;
+	}
+}
+
 const mockCanvasContext = {
 	canvas: document.createElement('canvas'),
 	measureText: () => ({ width: 120 }),
@@ -26,6 +43,7 @@ const mockCanvasContext = {
 };
 
 Object.defineProperty(globalThis, 'ResizeObserver', { value: ResizeObserverMock });
+Object.defineProperty(globalThis, 'EventSource', { value: EventSourceMock });
 Object.defineProperty(window, 'matchMedia', {
 	value: (query: string) => ({
 		matches: false,
@@ -39,6 +57,13 @@ Object.defineProperty(window, 'matchMedia', {
 	}),
 });
 
+Object.defineProperty(navigator, 'clipboard', {
+	value: {
+		writeText: vi.fn(),
+		readText: vi.fn(),
+	},
+});
+
 HTMLCanvasElement.prototype.getContext = vi.fn((contextId: unknown) => {
 	if (contextId === '2d') {
 		return mockCanvasContext as unknown as CanvasRenderingContext2D;
@@ -46,8 +71,14 @@ HTMLCanvasElement.prototype.getContext = vi.fn((contextId: unknown) => {
 	return null;
 }) as unknown as HTMLCanvasElement['getContext'];
 
+Object.defineProperty(Element.prototype, 'scrollIntoView', {
+	value: vi.fn(),
+	writable: true,
+});
+
 vi.mock('@tauri-apps/api/core', () => ({
 	invoke: mockInvoke,
+	convertFileSrc: (path: string) => `tauri://localhost/${path}`,
 }));
 
 vi.mock('@tauri-apps/api/event', () => ({
@@ -57,4 +88,8 @@ vi.mock('@tauri-apps/api/event', () => ({
 vi.mock('@tauri-apps/plugin-dialog', () => ({
 	open: mockOpen,
 	save: mockSave,
+}));
+
+vi.mock('@tauri-apps/plugin-shell', () => ({
+	open: vi.fn(),
 }));
