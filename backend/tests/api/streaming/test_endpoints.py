@@ -1,13 +1,17 @@
 """Tests for SSE streaming endpoints."""
 
+from contextlib import asynccontextmanager
 
 import pytest
 from fastapi.testclient import TestClient
 
+from backend.agent.state import UserDecision
 from backend.api.main import app
 from backend.api.streaming.endpoints import (
     ThreadState,
+    process_agent_request,
     _event_queues,
+    _get_or_create_thread,
     _sanitize_error_message,
     _thread_states,
     _threads,
@@ -578,3 +582,79 @@ class TestThreadState:
         thread.last_activity = time.time() - 7200  # 2 hours ago
 
         assert thread.is_expired()
+
+
+class TestProcessAgentRequestStatePersistence:
+    """Regression tests for state persistence across approval/resume."""
+
+    @pytest.mark.asyncio
+    async def test_resume_keeps_plan_after_partial_updates(self, monkeypatch) -> None:
+        """Partial node outputs must not drop plan before approval resume."""
+        thread_id = "thread-resume"
+        _get_or_create_thread(thread_id)
+
+        @asynccontextmanager
+        async def fake_compile_agent(_db_path: str):
+            yield object()
+
+        first_run_updates = [
+            {
+                "messages": [{"role": "assistant", "content": "Here's my proposed plan"}],
+                "plan": [{"id": "step-1", "tool_name": "scan_directory", "description": "Scan"}],
+                "plan_approved": False,
+                "current_step": 0,
+                "checkpoints": [],
+                "awaiting_user": False,
+            },
+            {
+                # Simulate a partial node update that only carries waiting markers.
+                "messages": [{"role": "system", "content": "AWAIT_PLAN_APPROVAL"}],
+                "awaiting_user": True,
+            },
+        ]
+
+        async def fake_run_agent_first(_compiled, _initial_state, _thread_id):
+            for update in first_run_updates:
+                yield update
+
+        monkeypatch.setattr(
+            "backend.api.streaming.endpoints.compile_agent",
+            fake_compile_agent,
+        )
+        monkeypatch.setattr(
+            "backend.api.streaming.endpoints.run_agent",
+            fake_run_agent_first,
+        )
+
+        await process_agent_request(thread_id, "user request")
+
+        persisted = _threads[thread_id].pipeline_state
+        assert persisted.get("awaiting_user") is True
+        assert persisted.get("plan")
+        assert persisted["plan"][0]["tool_name"] == "scan_directory"
+
+        captured_resume_initial: dict[str, object] = {}
+
+        async def fake_run_agent_resume(_compiled, initial_state, _thread_id):
+            captured_resume_initial.update(initial_state)
+            yield {
+                "plan_approved": True,
+                "awaiting_user": False,
+                "current_step": 0,
+                "plan": initial_state.get("plan", []),
+            }
+
+        monkeypatch.setattr(
+            "backend.api.streaming.endpoints.run_agent",
+            fake_run_agent_resume,
+        )
+
+        await process_agent_request(
+            thread_id,
+            "Approved",
+            decision=UserDecision.APPROVE,
+        )
+
+        assert captured_resume_initial.get("plan")
+        assert captured_resume_initial.get("plan_approved") is True
+        assert captured_resume_initial.get("awaiting_user") is False
