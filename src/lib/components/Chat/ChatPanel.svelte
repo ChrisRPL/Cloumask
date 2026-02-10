@@ -12,7 +12,15 @@
 	import { getSSEState } from '$lib/stores/sse.svelte';
 	import { getPipelineState } from '$lib/stores/pipeline.svelte';
 	import { getUIState } from '$lib/stores/ui.svelte';
-	import { createThread, sendMessage, checkLLMReady, ensureLLMReady, isTauri } from '$lib/utils/tauri';
+	import {
+		createThread,
+		sendMessage,
+		checkLLMReady,
+		ensureLLMReady,
+		pullLLMModelWithProgress,
+		isTauri
+	} from '$lib/utils/tauri';
+	import type { LLMPullProgressEvent } from '$lib/utils/tauri';
 	import type { UserDecision } from '$lib/types/agent';
 	import type { LLMReadyResponse } from '$lib/types/commands';
 
@@ -40,6 +48,8 @@
 	let isCheckingLLM = $state(false);
 	let isPullingModel = $state(false);
 	let autoPullTriggered = $state(false);
+	let modelPullProgress = $state<LLMPullProgressEvent | null>(null);
+	let modelPullError = $state<string | null>(null);
 
 	// Derived state
 	const llmNotReady = $derived(llmStatus !== null && !llmStatus.ready);
@@ -56,6 +66,10 @@
 		isCheckingLLM = true;
 		try {
 			llmStatus = await checkLLMReady();
+			if (llmStatus.ready) {
+				modelPullProgress = null;
+				modelPullError = null;
+			}
 		} catch (error) {
 			console.error('[ChatPanel] Failed to check LLM service:', error);
 			llmStatus = {
@@ -70,20 +84,55 @@
 		}
 	}
 
+	function formatBytes(bytes: number | null): string {
+		if (bytes === null || bytes < 0) return '0 B';
+		const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+		let size = bytes;
+		let unitIndex = 0;
+		while (size >= 1024 && unitIndex < units.length - 1) {
+			size /= 1024;
+			unitIndex += 1;
+		}
+		return `${size.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+	}
+
 	// Pull the required model
 	async function handlePullModel() {
 		if (!llmStatus || isPullingModel) return;
 
 		isPullingModel = true;
+		modelPullError = null;
 		try {
-			const ensured = await ensureLLMReady();
-			llmStatus = ensured;
+			const modelName = llmStatus.required_model;
+			modelPullProgress = {
+				model: modelName,
+				status: 'Starting model download',
+				digest: null,
+				totalBytes: null,
+				completedBytes: null,
+				progressPercent: 0,
+				raw: null
+			};
+			await pullLLMModelWithProgress(modelName, (event) => {
+				modelPullProgress = event;
+			});
+
+			const refreshed = await checkLLMReady();
+			llmStatus = refreshed;
+
+			// Fallback readiness check in case the stream ends before the model is fully indexed.
+			if (!refreshed.ready) {
+				const ensured = await ensureLLMReady();
+				llmStatus = ensured;
+			}
+
 			// Allow re-attempt if backend reports still not ready.
-			if (!ensured.ready) {
+			if (!llmStatus.ready) {
 				autoPullTriggered = false;
 			}
 		} catch (error) {
 			console.error('[ChatPanel] Failed to download model:', error);
+			modelPullError = error instanceof Error ? error.message : 'Failed to download model';
 			autoPullTriggered = false;
 		} finally {
 			isPullingModel = false;
@@ -306,8 +355,26 @@
 					{:else if !llmStatus.model_available}
 						<p class="font-medium">Downloading AI model...</p>
 						<p class="text-xs mt-1 text-amber-600">
-							First-time setup requires downloading the AI model (~9GB).
+							{#if modelPullProgress?.progressPercent !== null}
+								{Math.round(modelPullProgress?.progressPercent ?? 0)}%
+								({formatBytes(modelPullProgress?.completedBytes ?? null)} / {formatBytes(modelPullProgress?.totalBytes ?? null)})
+							{:else if modelPullProgress?.status}
+								{modelPullProgress.status}
+							{:else}
+								First-time setup requires downloading the AI model (~9GB).
+							{/if}
 						</p>
+						{#if modelPullError}
+							<p class="text-xs mt-1 text-destructive">{modelPullError}</p>
+						{/if}
+						{#if modelPullProgress?.progressPercent !== null}
+							<div class="mt-2 h-2 w-full max-w-md bg-amber-200/60 rounded-full overflow-hidden">
+								<div
+									class="h-full bg-forest transition-all duration-300"
+									style={`width: ${modelPullProgress?.progressPercent ?? 0}%`}
+								></div>
+							</div>
+						{/if}
 					{:else}
 						<p class="font-medium">AI service not ready</p>
 						<p class="text-xs mt-1 text-amber-600">{llmStatus.error}</p>
@@ -320,13 +387,13 @@
 							onclick={handlePullModel}
 							disabled={isPullingModel}
 						>
-							{isPullingModel ? 'Downloading...' : 'Download Model'}
+							{isPullingModel ? 'Downloading...' : 'Download model'}
 						</button>
 					{/if}
 					<button
 						class="px-2 py-1 text-xs underline"
 						onclick={checkLLM}
-						disabled={isCheckingLLM}
+						disabled={isCheckingLLM || isPullingModel}
 					>
 						{isCheckingLLM ? 'Checking...' : 'Refresh'}
 					</button>

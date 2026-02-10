@@ -128,6 +128,12 @@ Open `http://localhost:5173`.
 npm run tauri:build
 ```
 
+If you build in a non-GUI shell/CI environment on macOS, use:
+
+```bash
+CI=true npm run tauri:build
+```
+
 Installer/artifacts are generated in:
 
 - `src-tauri/target/release/bundle/dmg/Cloumask_0.1.0_aarch64.dmg`
@@ -138,6 +144,28 @@ Installer/artifacts are generated in:
 - First launch runs an in-app setup wizard (no CLI steps required).
 - The wizard validates prerequisites and automatically bootstraps required AI models in-app.
 - If model download cannot finish immediately, setup still continues and Cloumask retries model initialization automatically in the background.
+- While a model is downloading, the wizard and chat panel show live progress (percent + downloaded bytes).
+- Chat input stays editable during model bootstrap; sending is enabled automatically once the model is ready.
+
+### Model Choice (Desktop/Web)
+
+Default model is `qwen3:14b` for stronger planning/tool-calling quality.
+
+To reduce first-run download size and improve startup on lower-memory machines, set:
+
+```bash
+CLOUMASK_OLLAMA_MODEL=qwen3:8b
+```
+
+Examples:
+
+```bash
+# Backend-only/web flow
+CLOUMASK_OLLAMA_MODEL=qwen3:8b npm run backend:dev
+
+# Desktop dev flow
+CLOUMASK_OLLAMA_MODEL=qwen3:8b npm run tauri:dev
+```
 
 ## Validation Commands
 
@@ -159,7 +187,7 @@ Current known state (February 10, 2026):
 - `backend`: `1309 passed, 39 skipped`
 - `src-tauri`: `24 passed, 2 ignored`
 - `npm run check`: `0 errors, 0 warnings`
-- `npm test -- --run`: `10 passed`
+- `npm test -- --run`: `14 passed`
 - `npm run tauri:build`: macOS app bundle + DMG generated successfully
 
 ## Backend Endpoints

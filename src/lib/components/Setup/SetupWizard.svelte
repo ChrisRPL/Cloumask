@@ -16,7 +16,14 @@
 		Cpu,
 		Sparkles,
 	} from '@lucide/svelte';
-	import { checkLLMReady, ensureLLMReady, waitForSidecarReady, isTauri } from '$lib/utils/tauri';
+	import {
+		checkLLMReady,
+		ensureLLMReady,
+		pullLLMModelWithProgress,
+		waitForSidecarReady,
+		isTauri,
+		type LLMPullProgressEvent
+	} from '$lib/utils/tauri';
 
 	let { onComplete }: SetupWizardProps = $props();
 
@@ -24,7 +31,7 @@
 	const isDevMode = import.meta.env.DEV;
 	const isInTauri = isTauri();
 	const MODEL_SETUP_RETRIES = 3;
-	const SIDECARE_READY_TIMEOUT_MS = 20000;
+	const SIDECAR_READY_TIMEOUT_MS = 20000;
 
 	// Step configuration
 	const steps: { id: SetupStep; label: string; icon: typeof Download }[] = [
@@ -52,6 +59,26 @@
 		return new Promise((resolve) => setTimeout(resolve, ms));
 	}
 
+	function formatBytes(bytes: number | null): string {
+		if (bytes === null || bytes < 0) return '0 B';
+		const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+		let size = bytes;
+		let unitIndex = 0;
+		while (size >= 1024 && unitIndex < units.length - 1) {
+			size /= 1024;
+			unitIndex += 1;
+		}
+		return `${size.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+	}
+
+	function getPullProgressMessage(event: LLMPullProgressEvent): string {
+		if (event.progressPercent !== null) {
+			const percent = Math.round(event.progressPercent);
+			return `Downloading required AI model... ${percent}% (${formatBytes(event.completedBytes)} / ${formatBytes(event.totalBytes)})`;
+		}
+		return event.status || 'Downloading required AI model...';
+	}
+
 	let isSkipping = $state(false);
 	let setupStarted = $state(false);
 	let backgroundModelInit = $state(false);
@@ -75,7 +102,7 @@
 	async function autoBootstrapModel() {
 		if (isInTauri) {
 			setup.updateProgress(10, 'Waiting for local services...');
-			const sidecarReady = await waitForSidecarReady(SIDECARE_READY_TIMEOUT_MS);
+			const sidecarReady = await waitForSidecarReady(SIDECAR_READY_TIMEOUT_MS);
 			if (!sidecarReady) {
 				backgroundModelInit = true;
 				setup.updateProgress(25, 'Continuing while services finish starting...');
@@ -94,11 +121,23 @@
 
 		for (let attempt = 1; attempt <= MODEL_SETUP_RETRIES; attempt++) {
 			setup.updateProgress(
-				Math.min(35 + attempt * 20, 90),
-				`Downloading required AI model (~9GB)... (${attempt}/${MODEL_SETUP_RETRIES})`
+				Math.min(20 + attempt * 10, 50),
+				`Preparing AI model download... (${attempt}/${MODEL_SETUP_RETRIES})`
 			);
 
-			const ensured = await ensureLLMReady();
+			try {
+				await pullLLMModelWithProgress(llmStatus.required_model, (event) => {
+					const progress =
+						event.progressPercent === null
+							? Math.min(35 + attempt * 20, 90)
+							: Math.min(Math.max(Math.round(event.progressPercent), 10), 95);
+					setup.updateProgress(progress, getPullProgressMessage(event));
+				});
+			} catch (streamError) {
+				console.error('[SetupWizard] Streaming model download failed:', streamError);
+			}
+
+			const ensured = await checkLLMReady();
 			if (ensured.ready) {
 				setup.updateProgress(100, 'AI model ready');
 				return;
