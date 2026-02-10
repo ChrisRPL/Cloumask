@@ -47,7 +47,7 @@ Available Tools:
     - FindDuplicatesTool: Find duplicate and near-duplicate images in datasets
     - LabelQATool: Run quality assurance checks on dataset labels
     - SplitDatasetTool: Split datasets into train/val/test subsets and export each split
-    - ExportTool: Export annotations to various formats (stub)
+    - ExportTool: Export datasets with filtering, splitting, and format conversion
     - CustomScriptTool: Execute user-defined Python scripts
 """
 

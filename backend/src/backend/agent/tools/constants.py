@@ -53,9 +53,12 @@ ANNOTATION_EXTENSIONS: frozenset[str] = frozenset({
 SUPPORTED_EXPORT_FORMATS: list[str] = [
     "yolo",
     "coco",
+    "kitti",
+    "voc",
     "pascal",
-    "labelme",
     "cvat",
+    "nuscenes",
+    "openlabel",
 ]
 
 # Default 2D detection classes (common COCO subset)
