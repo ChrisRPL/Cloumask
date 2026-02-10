@@ -50,6 +50,15 @@ Convert labeled datasets between annotation formats
   - `copy_images` (bool, optional): Copy images to output (default: true)
   - `overwrite` (bool, optional): Allow output path to be non-empty (default: true)
 
+### find_duplicates
+Find duplicate and near-duplicate images in datasets
+- **Parameters:**
+  - `path` (str, required): Image file or dataset directory to analyze
+  - `method` (str, optional): "phash" | "dhash" | "ahash" | "clip" (default: "phash")
+  - `threshold` (float, optional): Similarity threshold from 0 to 1 (default: 0.9)
+  - `auto_remove` (bool, optional): Remove duplicates and keep representatives (default: false)
+  - `max_groups` (int, optional): Maximum duplicate groups returned (default: 50)
+
 ### pointcloud_stats
 Get metadata and statistics for a point cloud file
 - **Parameters:**

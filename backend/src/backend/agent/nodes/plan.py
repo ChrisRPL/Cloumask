@@ -32,6 +32,7 @@ VALID_TOOLS = frozenset([
     "segment",
     "export",
     "convert_format",
+    "find_duplicates",
 ])
 
 
@@ -111,6 +112,9 @@ def validate_plan(plan: list[dict[str, Any]]) -> str | None:
                     f"Step {step_num} (convert_format) "
                     "missing required 'target_format' parameter"
                 )
+
+        elif tool_name == "find_duplicates" and "path" not in parameters:
+            return f"Step {step_num} (find_duplicates) missing required 'path' parameter"
 
     return None
 

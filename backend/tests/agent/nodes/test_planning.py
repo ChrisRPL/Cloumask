@@ -137,6 +137,18 @@ class TestValidatePlan:
         assert result is not None
         assert "target_format" in result.lower()
 
+    def test_find_duplicates_missing_path_fails(self) -> None:
+        """find_duplicates without path should fail."""
+        plan = [
+            {
+                "tool_name": "find_duplicates",
+                "parameters": {"threshold": 0.95},
+            }
+        ]
+        result = validate_plan(plan)
+        assert result is not None
+        assert "path" in result.lower()
+
     def test_all_tools_can_pass(self) -> None:
         """All valid tools should be able to pass validation."""
         for tool in VALID_TOOLS:
@@ -156,6 +168,8 @@ class TestValidatePlan:
                     "output_path": "/data/converted",
                     "target_format": "yolo",
                 }
+            elif tool == "find_duplicates":
+                params = {"path": "/data/images", "method": "phash", "threshold": 0.9}
             else:
                 continue
 
@@ -573,5 +587,13 @@ class TestEdgeCases:
 
     def test_valid_tools_constant(self) -> None:
         """VALID_TOOLS should contain expected tools."""
-        expected = {"scan_directory", "anonymize", "detect", "segment", "export", "convert_format"}
+        expected = {
+            "scan_directory",
+            "anonymize",
+            "detect",
+            "segment",
+            "export",
+            "convert_format",
+            "find_duplicates",
+        }
         assert expected == VALID_TOOLS
