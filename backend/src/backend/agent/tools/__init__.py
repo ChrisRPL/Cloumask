@@ -45,6 +45,7 @@ Available Tools:
     - ExtractRosbagTool: Extract point clouds and images from ROS bags
     - ConvertFormatTool: Convert datasets between annotation formats
     - FindDuplicatesTool: Find duplicate and near-duplicate images in datasets
+    - LabelQATool: Run quality assurance checks on dataset labels
     - ExportTool: Export annotations to various formats (stub)
     - CustomScriptTool: Execute user-defined Python scripts
 """
@@ -76,6 +77,7 @@ from backend.agent.tools.export import ExportTool
 from backend.agent.tools.faces import FaceDetectTool
 from backend.agent.tools.fusion import Project3DTo2DTool
 from backend.agent.tools.pointcloud_process import PointCloudStatsTool, ProcessPointCloudTool
+from backend.agent.tools.qa import LabelQATool
 from backend.agent.tools.registry import (
     ToolRegistry,
     get_tool_registry,
@@ -114,6 +116,7 @@ __all__ = [
     "Project3DTo2DTool",
     "ConvertFormatTool",
     "FindDuplicatesTool",
+    "LabelQATool",
     "ExportTool",
     "CustomScriptTool",
     "ProcessPointCloudTool",
