@@ -89,6 +89,34 @@ def route_after_approval(
     return "execute_step"
 
 
+def route_from_start(
+    state: PipelineState,
+) -> Literal["understand", "await_approval", "execute_step", "complete"]:
+    """
+    Determine the correct entry node when (re)starting graph execution.
+
+    This allows resuming from a persisted in-memory state without always
+    re-running understand -> generate_plan. In particular, after a user approves
+    a plan, execution should continue at execute_step instead of planning again.
+    """
+    # If state is terminal, route directly to completion.
+    if state.get("last_error") and not state.get("plan"):
+        return "complete"
+
+    plan = state.get("plan", [])
+    if not plan:
+        return "understand"
+
+    if state.get("awaiting_user", False):
+        return "await_approval"
+
+    if state.get("plan_approved", False):
+        return "execute_step"
+
+    # Plan exists but is not approved yet; wait for user approval.
+    return "await_approval"
+
+
 def route_after_execution(
     state: PipelineState,
 ) -> Literal["create_checkpoint", "execute_step", "complete"]:
@@ -228,8 +256,17 @@ def create_agent_graph() -> StateGraph:
     graph.add_node("create_checkpoint", create_checkpoint)
     graph.add_node("complete", complete)
 
-    # Entry edge: START -> understand
-    graph.add_edge(START, "understand")
+    # Entry routing: support both fresh requests and resume paths.
+    graph.add_conditional_edges(
+        START,
+        route_from_start,
+        {
+            "understand": "understand",
+            "await_approval": "await_approval",
+            "execute_step": "execute_step",
+            "complete": "complete",
+        },
+    )
 
     # Linear flow: understand -> generate_plan -> await_approval
     graph.add_edge("understand", "generate_plan")
@@ -346,6 +383,7 @@ __all__ = [
     "compile_agent",
     "run_agent",
     # Routing functions
+    "route_from_start",
     "route_after_approval",
     "route_after_execution",
     "route_after_checkpoint",

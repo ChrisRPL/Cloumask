@@ -13,6 +13,7 @@ from backend.agent.graph import (
     route_after_approval,
     route_after_checkpoint,
     route_after_execution,
+    route_from_start,
     should_checkpoint,
 )
 from backend.agent.state import (
@@ -107,6 +108,30 @@ class TestRouteAfterApproval:
         )
         # Latest is approve, so should execute
         assert route_after_approval(state) == "execute_step"
+
+
+class TestRouteFromStart:
+    """Tests for route_from_start entry routing."""
+
+    def test_routes_fresh_requests_to_understand(self) -> None:
+        state = _create_minimal_state(plan=[], awaiting_user=False, plan_approved=False)
+        assert route_from_start(state) == "understand"
+
+    def test_routes_unapproved_plan_to_await_approval(self) -> None:
+        state = _create_minimal_state(
+            plan=[{"id": "step-1", "tool_name": "scan_directory"}],
+            awaiting_user=False,
+            plan_approved=False,
+        )
+        assert route_from_start(state) == "await_approval"
+
+    def test_routes_approved_plan_to_execute_step(self) -> None:
+        state = _create_minimal_state(
+            plan=[{"id": "step-1", "tool_name": "scan_directory"}],
+            awaiting_user=False,
+            plan_approved=True,
+        )
+        assert route_from_start(state) == "execute_step"
 
 
 class TestRouteAfterExecution:
