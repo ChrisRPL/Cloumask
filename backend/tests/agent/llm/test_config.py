@@ -104,7 +104,7 @@ class TestLLMConfigs:
 
         assert config.temperature == 0.1
         assert config.max_tokens == 2048
-        assert "qwen3:8b" in config.fallback_models
+        assert "mistral:7b-instruct" in config.fallback_models
 
     def test_conversation_config(self):
         """Conversation should have higher temperature."""

@@ -10,9 +10,14 @@ function jsonResponse(body: unknown, init?: ResponseInit): Response {
 	});
 }
 
-function createFetchMock(options?: { llmReady?: boolean; llmReadyAfterPull?: boolean }) {
+function createFetchMock(options?: {
+	llmReady?: boolean;
+	llmReadyAfterPull?: boolean;
+	failThreadCreate?: boolean;
+}) {
 	const llmReady = options?.llmReady ?? true;
 	const llmReadyAfterPull = options?.llmReadyAfterPull ?? llmReady;
+	const failThreadCreate = options?.failThreadCreate ?? false;
 	let modelPulled = false;
 
 	return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -29,7 +34,7 @@ function createFetchMock(options?: { llmReady?: boolean; llmReadyAfterPull?: boo
 			return jsonResponse({
 				ready,
 				service_running: true,
-				required_model: 'qwen3:14b',
+				required_model: 'qwen3:8b',
 				model_available: ready,
 				error: ready ? null : 'Model missing',
 			});
@@ -39,7 +44,7 @@ function createFetchMock(options?: { llmReady?: boolean; llmReadyAfterPull?: boo
 			return jsonResponse({
 				ready: llmReadyAfterPull,
 				service_running: true,
-				required_model: 'qwen3:14b',
+				required_model: 'qwen3:8b',
 				model_available: llmReadyAfterPull,
 				error: llmReadyAfterPull ? null : 'Model download failed',
 			});
@@ -59,6 +64,9 @@ function createFetchMock(options?: { llmReady?: boolean; llmReadyAfterPull?: boo
 		}
 
 		if (url.endsWith('/api/chat/thread/new') && method === 'POST') {
+			if (failThreadCreate) {
+				throw new TypeError('Load failed');
+			}
 			return jsonResponse({
 				thread_id: 'thread-test-1',
 				created: true,
@@ -156,5 +164,19 @@ describe('App user flows', () => {
 				return requestUrl.endsWith('/llm/pull/stream') && method === 'POST';
 			})
 		).toBe(true);
+	});
+
+	it('keeps the message textbox editable when initial backend connection fails', async () => {
+		localStorage.setItem('cloumask:setup', 'complete');
+		vi.stubGlobal('fetch', createFetchMock({ failThreadCreate: true }));
+		render(AppTestHost);
+
+		await waitFor(() => {
+			expect(screen.getByText('Retry')).toBeTruthy();
+		});
+
+		const input = screen.getByLabelText('Message input') as HTMLTextAreaElement;
+		expect(input.disabled).toBe(false);
+		expect(input.placeholder).toContain('Reconnecting');
 	});
 });

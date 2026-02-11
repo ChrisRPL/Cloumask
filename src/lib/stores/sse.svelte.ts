@@ -21,6 +21,7 @@ import type {
 	ErrorEventData
 } from '$lib/types/sse';
 import { getSSEManager } from '$lib/utils/sse';
+import { inferStepType } from '$lib/utils/pipeline-step-type';
 import type { AgentState } from './agent.svelte';
 import type { ExecutionState } from './execution.svelte';
 import type { PipelineState, PipelineStep } from './pipeline.svelte';
@@ -169,6 +170,13 @@ function routeEventToStores(
 					role: data.role,
 					content: data.content
 				});
+
+				// Some flows emit assistant messages without a terminal "complete" event.
+				// Clear streaming/thinking state so the UI does not remain stuck.
+				agent.setStreaming(false);
+				if (agent.phase === 'understanding' || agent.phase === 'planning') {
+					agent.setPhase('idle');
+				}
 			}
 			break;
 		}
@@ -191,7 +199,7 @@ function routeEventToStores(
 			const steps: PipelineStep[] = data.steps.map((step, index) => ({
 				id: step.id,
 				toolName: step.tool_name,
-				type: 'custom' as const, // Backend doesn't send type, default to custom
+				type: inferStepType(step.tool_name),
 				description: step.description,
 				config: { params: step.parameters || {} },
 				status: 'pending' as const,

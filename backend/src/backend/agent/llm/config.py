@@ -93,44 +93,48 @@ class LLMConfig:
 
 
 # Required model for the app to function
-REQUIRED_MODEL = "qwen3:14b"
+REQUIRED_MODEL = "qwen3:8b"
+DEFAULT_FALLBACK_MODELS = [
+    "llama3.1:8b-instruct-q4_0",
+    "mistral:7b-instruct",
+    "qwen3:14b",
+]
 
 # Default configurations by use case (all local Ollama models only)
 LLM_CONFIGS: dict[LLMUseCase, LLMConfig] = {
     LLMUseCase.TOOL_CALLING: LLMConfig(
-        model="qwen3:14b",
+        model=REQUIRED_MODEL,
         temperature=0.1,  # Low for deterministic tool selection
         max_tokens=2048,
-        fallback_models=["qwen3:8b"],
+        fallback_models=DEFAULT_FALLBACK_MODELS.copy(),
     ),
     LLMUseCase.CONVERSATION: LLMConfig(
-        model="qwen3:14b",
+        model=REQUIRED_MODEL,
         temperature=0.7,  # Higher for natural conversation
         max_tokens=4096,
-        fallback_models=["qwen3:8b"],
+        fallback_models=DEFAULT_FALLBACK_MODELS.copy(),
     ),
     LLMUseCase.PLANNING: LLMConfig(
-        model="qwen3:14b",
+        model=REQUIRED_MODEL,
         temperature=0.3,  # Moderate for creative but structured plans
         max_tokens=4096,
-        fallback_models=["qwen3:8b"],
+        fallback_models=DEFAULT_FALLBACK_MODELS.copy(),
     ),
     LLMUseCase.JSON_OUTPUT: LLMConfig(
-        model="qwen3:14b",
+        model=REQUIRED_MODEL,
         temperature=0.0,  # Zero for deterministic JSON
         max_tokens=2048,
-        fallback_models=["qwen3:8b"],
+        fallback_models=DEFAULT_FALLBACK_MODELS.copy(),
     ),
     LLMUseCase.CODE_GENERATION: LLMConfig(
-        model="qwen2.5-coder:14b",  # Best local coding model
+        model="qwen2.5-coder:7b",  # Smaller local coding model for desktop thermals
         temperature=0.2,  # Low for deterministic but creative code
         max_tokens=4096,
         num_ctx=16384,  # Larger context for code
         timeout=180,  # Longer timeout for code generation
         fallback_models=[
-            "qwen2.5-coder:7b",  # Smaller coding model
-            "qwen3:14b",  # General-purpose fallback
-            "qwen3:8b",  # Smaller general-purpose
+            "qwen2.5-coder:14b",  # Larger coding model when available
+            *DEFAULT_FALLBACK_MODELS,
         ],
     ),
 }

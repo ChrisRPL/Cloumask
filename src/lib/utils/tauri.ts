@@ -251,6 +251,7 @@ export async function waitForSidecarReady(timeout = 10000): Promise<boolean> {
 
 /** Base URL for the Python sidecar */
 const SIDECAR_URL = 'http://127.0.0.1:8765';
+export const DEFAULT_REQUIRED_MODEL = 'qwen3:8b';
 
 /** Streaming progress event from `/llm/pull/stream`. */
 export interface LLMPullProgressEvent {
@@ -503,7 +504,7 @@ export async function ensureLLMReady(): Promise<LLMReadyResponse> {
 
 /**
  * Pull a specific model.
- * @param model - Model name (e.g., "qwen3:14b")
+ * @param model - Model name (e.g., "qwen3:8b")
  */
 export async function pullLLMModel(model: string): Promise<{ status: string; message: string }> {
 	const response = await fetch(`${SIDECAR_URL}/llm/pull`, {
@@ -600,7 +601,7 @@ export async function waitForLLMReady(timeout = 15000): Promise<LLMReadyResponse
 	return lastResult ?? {
 		ready: false,
 		service_running: false,
-		required_model: 'qwen3:14b',
+		required_model: DEFAULT_REQUIRED_MODEL,
 		model_available: false,
 		error: 'Timeout waiting for LLM service'
 	};

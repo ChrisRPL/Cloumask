@@ -149,22 +149,28 @@ Installer/artifacts are generated in:
 
 ### Model Choice (Desktop/Web)
 
-Default model is `qwen3:14b` for stronger planning/tool-calling quality.
+Default model is `qwen3:8b` to balance reasoning/tool-calling quality with lower thermal load than 14B models.
 
-To reduce first-run download size and improve startup on lower-memory machines, set:
+If your machine has enough memory and you prefer stronger reasoning quality, set:
 
 ```bash
-CLOUMASK_OLLAMA_MODEL=qwen3:8b
+CLOUMASK_OLLAMA_MODEL=qwen3:14b
+```
+
+If you need the lightest footprint, set:
+
+```bash
+CLOUMASK_OLLAMA_MODEL=mistral:7b-instruct
 ```
 
 Examples:
 
 ```bash
 # Backend-only/web flow
-CLOUMASK_OLLAMA_MODEL=qwen3:8b npm run backend:dev
+CLOUMASK_OLLAMA_MODEL=qwen3:14b npm run backend:dev
 
 # Desktop dev flow
-CLOUMASK_OLLAMA_MODEL=qwen3:8b npm run tauri:dev
+CLOUMASK_OLLAMA_MODEL=qwen3:14b npm run tauri:dev
 ```
 
 ## Validation Commands

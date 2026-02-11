@@ -174,8 +174,9 @@ impl SidecarManager {
                 "info",
             ])
             .env("PYTHONPATH", &self.config.backend_src_path)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
+            // Avoid pipe backpressure deadlocks when no reader is attached.
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
             .spawn()?;
 
         log::info!("Sidecar spawned with PID: {}", child.id());

@@ -6,7 +6,7 @@ logic that controls the flow between understanding, planning, execution,
 and checkpoints.
 
 Graph Structure:
-    START -> understand -> plan -> await_approval
+    START -> intent_router -> (chat_reply | understand -> plan -> await_approval)
                                        |
                +-----------------------+-----------------------+
                |                       |                       |
@@ -36,10 +36,12 @@ from langgraph.graph import END, START, StateGraph
 
 from backend.agent.nodes import (
     await_approval,
+    chat_reply,
     complete,
     create_checkpoint,
     execute_step,
     generate_plan,
+    route_intent,
     understand,
 )
 from backend.agent.state import (
@@ -91,7 +93,7 @@ def route_after_approval(
 
 def route_from_start(
     state: PipelineState,
-) -> Literal["understand", "await_approval", "execute_step", "complete"]:
+) -> Literal["intent_router", "await_approval", "execute_step", "complete"]:
     """
     Determine the correct entry node when (re)starting graph execution.
 
@@ -105,7 +107,7 @@ def route_from_start(
 
     plan = state.get("plan", [])
     if not plan:
-        return "understand"
+        return "intent_router"
 
     if state.get("awaiting_user", False):
         return "await_approval"
@@ -115,6 +117,22 @@ def route_from_start(
 
     # Plan exists but is not approved yet; wait for user approval.
     return "await_approval"
+
+
+def route_after_intent_router(
+    state: PipelineState,
+) -> Literal["chat_reply", "understand"]:
+    """
+    Route requests after deterministic intent classification.
+
+    - chat: Send a lightweight conversational reply and end turn.
+    - task: Continue to LLM understanding + planning flow.
+    """
+    metadata = state.get("metadata", {})
+    route = str(metadata.get("intent_route", "task")).lower()
+    if route == "chat":
+        return "chat_reply"
+    return "understand"
 
 
 def route_after_execution(
@@ -236,12 +254,14 @@ def create_agent_graph() -> StateGraph:
     Create the agent StateGraph with all nodes and edges.
 
     The graph follows this flow:
-    1. understand: Parse user request
-    2. plan: Generate execution plan
-    3. await_approval: Wait for user approval
-    4. execute_step: Execute plan steps (loops until done)
-    5. checkpoint: Pause for human review at milestones
-    6. complete: Finalize execution
+    1. intent_router: Deterministic chat/task routing
+    2. chat_reply: Fast-path response for smalltalk
+    3. understand: Parse task requests
+    4. plan: Generate execution plan
+    5. await_approval: Wait for user approval
+    6. execute_step: Execute plan steps (loops until done)
+    7. checkpoint: Pause for human review at milestones
+    8. complete: Finalize execution
 
     Returns:
         Configured StateGraph ready for compilation.
@@ -249,6 +269,8 @@ def create_agent_graph() -> StateGraph:
     graph = StateGraph(PipelineState)
 
     # Add all nodes
+    graph.add_node("intent_router", route_intent)
+    graph.add_node("chat_reply", chat_reply)
     graph.add_node("understand", understand)
     graph.add_node("generate_plan", generate_plan)
     graph.add_node("await_approval", await_approval)
@@ -261,16 +283,27 @@ def create_agent_graph() -> StateGraph:
         START,
         route_from_start,
         {
-            "understand": "understand",
+            "intent_router": "intent_router",
             "await_approval": "await_approval",
             "execute_step": "execute_step",
             "complete": "complete",
         },
     )
 
+    # Fast-path chat routing.
+    graph.add_conditional_edges(
+        "intent_router",
+        route_after_intent_router,
+        {
+            "chat_reply": "chat_reply",
+            "understand": "understand",
+        },
+    )
+
     # Linear flow: understand -> generate_plan -> await_approval
     graph.add_edge("understand", "generate_plan")
     graph.add_edge("generate_plan", "await_approval")
+    graph.add_edge("chat_reply", END)
 
     # Conditional edge after approval
     graph.add_conditional_edges(
@@ -384,6 +417,7 @@ __all__ = [
     "run_agent",
     # Routing functions
     "route_from_start",
+    "route_after_intent_router",
     "route_after_approval",
     "route_after_execution",
     "route_after_checkpoint",
