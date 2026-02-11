@@ -47,6 +47,7 @@
 	function handleKeydown(event: KeyboardEvent) {
 		// Enter to send (without shift)
 		if (event.key === 'Enter' && !event.shiftKey) {
+			if (event.repeat) return;
 			event.preventDefault();
 			if (value.trim() && !disableSend) {
 				onSend(value.trim());

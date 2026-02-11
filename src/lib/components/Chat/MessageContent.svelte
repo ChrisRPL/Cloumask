@@ -3,6 +3,7 @@
 	import type { MessageRole } from '$lib/types/agent';
 
 	export interface MessageContentProps {
+		messageId?: string;
 		content: string;
 		role: MessageRole;
 		isStreaming?: boolean;
@@ -11,10 +12,71 @@
 </script>
 
 <script lang="ts">
-	let { content, role, isStreaming = false, class: className }: MessageContentProps = $props();
+	let {
+		messageId = '',
+		content,
+		role,
+		isStreaming = false,
+		class: className
+	}: MessageContentProps = $props();
 
-	// Simple text processing: preserve newlines and basic formatting
-	const processedContent = $derived(content.trim());
+	let renderedContent = $state('');
+	let isAnimating = $state(false);
+	let animatedMessageId = $state<string | null>(null);
+
+	function shouldAnimateMessage(text: string): boolean {
+		// Skip very large payloads to keep UI responsive.
+		return text.length > 0 && text.length <= 2400;
+	}
+
+	function calculateChunkSize(textLength: number): number {
+		// Keep animation time roughly between 350ms and 3.5s so typing is visible.
+		const targetDurationMs = Math.max(350, Math.min(3500, textLength * 15));
+		const frameMs = 24;
+		const frames = Math.max(1, Math.floor(targetDurationMs / frameMs));
+		return Math.max(1, Math.ceil(textLength / frames));
+	}
+
+	$effect(() => {
+		const trimmed = content.trim();
+
+		if (!trimmed) {
+			renderedContent = '';
+			isAnimating = false;
+			return;
+		}
+
+		const shouldAnimate =
+			role === 'assistant' &&
+			shouldAnimateMessage(trimmed) &&
+			messageId !== '' &&
+			animatedMessageId !== messageId;
+
+		if (!shouldAnimate) {
+			renderedContent = trimmed;
+			isAnimating = false;
+			if (messageId && role === 'assistant') {
+				animatedMessageId = messageId;
+			}
+			return;
+		}
+
+		renderedContent = '';
+		isAnimating = true;
+		const chunkSize = calculateChunkSize(trimmed.length);
+		let cursor = 0;
+		const timer = setInterval(() => {
+			cursor = Math.min(trimmed.length, cursor + chunkSize);
+			renderedContent = trimmed.slice(0, cursor);
+			if (cursor >= trimmed.length) {
+				clearInterval(timer);
+				isAnimating = false;
+				animatedMessageId = messageId;
+			}
+		}, 24);
+
+		return () => clearInterval(timer);
+	});
 </script>
 
 <div
@@ -25,8 +87,8 @@
 		className
 	)}
 >
-	{processedContent}
-	{#if isStreaming}
+	{renderedContent}
+	{#if isStreaming || isAnimating}
 		<span class="animate-blink text-forest-light ml-0.5">|</span>
 	{/if}
 </div>

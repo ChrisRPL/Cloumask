@@ -287,7 +287,7 @@ class SimpleLLMConfig:
     """Simple configuration for backward-compatible LLM access."""
 
     host: str = "http://localhost:11434"
-    model: str = "qwen3:14b"
+    model: str = "qwen3:8b"
     temperature: float = 0.1
     timeout: int = 120
     num_ctx: int = 8192

@@ -19,7 +19,7 @@ class Settings(BaseSettings):
 
     # Ollama/LLM settings (for 12-dev-workflow-ollama)
     ollama_host: str = "http://localhost:11434"
-    ollama_model: str = "qwen3:14b"
+    ollama_model: str = "qwen3:8b"
     llm_cache_size: int = 4  # Max cached LLM instances
 
     # Model settings (for 03-cv-models)

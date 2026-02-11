@@ -17,12 +17,36 @@ import pytest
 
 from backend.agent.nodes.plan import (
     VALID_TOOLS,
+    build_rule_based_plan,
     format_plan_for_display,
     generate_plan,
     validate_plan,
 )
 from backend.agent.nodes.understand import understand
 from backend.agent.state import MessageRole, PipelineState, StepStatus
+
+
+def _state_with_message(content: str) -> PipelineState:
+    return PipelineState(
+        messages=[
+            {
+                "role": MessageRole.USER.value,
+                "content": content,
+                "timestamp": "2024-01-01T00:00:00",
+                "tool_calls": [],
+                "tool_call_id": None,
+            }
+        ],
+        metadata={},
+        plan=[],
+        plan_approved=False,
+        current_step=0,
+        execution_results={},
+        checkpoints=[],
+        awaiting_user=False,
+        last_error=None,
+        retry_count=0,
+    )
 
 # -----------------------------------------------------------------------------
 # validate_plan() tests
@@ -415,6 +439,39 @@ class TestUnderstandNode:
             assert "metadata" in result
             assert result["metadata"]["understanding"]["intent"] == "anonymize"
 
+    @pytest.mark.asyncio
+    async def test_fast_path_multistep_task_skips_llm(self) -> None:
+        """Clear multi-operation tasks should bypass LLM understanding."""
+        state = _state_with_message(
+            "detect cars and people in /tmp/images, anonymize faces, then export yolo"
+        )
+
+        with patch("backend.agent.nodes.understand.get_llm") as mock_get_llm:
+            result = await understand(state)
+            mock_get_llm.assert_not_called()
+
+        understanding = result["metadata"]["understanding"]
+        assert understanding["input_path"] == "/tmp/images"
+        assert "detect" in understanding["operations"]
+        assert "anonymize" in understanding["operations"]
+        assert "export" in understanding["operations"]
+
+    @pytest.mark.asyncio
+    async def test_fast_path_detect_classes_excludes_anonymization_targets(self) -> None:
+        """Detection classes should not be polluted by anonymization targets."""
+        state = _state_with_message(
+            "detect cars, people, traffic lights and road signs in /tmp/images, "
+            "then anonymize faces and plates and export yolo"
+        )
+
+        with patch("backend.agent.nodes.understand.get_llm") as mock_get_llm:
+            result = await understand(state)
+            mock_get_llm.assert_not_called()
+
+        params = result["metadata"]["understanding"]["parameters"]
+        assert set(params["classes"]) == {"car", "person", "traffic light", "road sign"}
+        assert params["target"] == "all"
+
 
 # -----------------------------------------------------------------------------
 # generate_plan() tests (mocked LLM)
@@ -589,6 +646,49 @@ class TestGeneratePlanNode:
             last_msg = messages[-1]
             assert "scan_directory" in last_msg["content"]
             assert "proceed" in last_msg["content"].lower()
+
+    @pytest.mark.asyncio
+    async def test_rule_based_plan_skips_llm_for_multistep_task(self) -> None:
+        """Deterministic planner should bypass LLM for common workflows."""
+        state = PipelineState(
+            messages=[
+                {
+                    "role": MessageRole.USER.value,
+                    "content": "detect and export",
+                    "timestamp": "2024-01-01T00:00:00",
+                    "tool_calls": [],
+                    "tool_call_id": None,
+                }
+            ],
+            metadata={
+                "understanding": {
+                    "intent": "detect",
+                    "input_path": "/tmp/images",
+                    "input_type": "images",
+                    "operations": ["detect", "export"],
+                    "parameters": {"classes": ["car", "person"], "format": "yolo"},
+                    "output_path": None,
+                    "clarification_needed": None,
+                }
+            },
+            plan=[],
+            plan_approved=False,
+            current_step=0,
+            execution_results={},
+            checkpoints=[],
+            awaiting_user=False,
+            last_error=None,
+            retry_count=0,
+        )
+
+        with patch("backend.agent.nodes.plan.get_llm") as mock_get_llm:
+            result = await generate_plan(state)
+            mock_get_llm.assert_not_called()
+
+        tool_names = [step["tool_name"] for step in result["plan"]]
+        assert tool_names[0] == "scan_directory"
+        assert "detect" in tool_names
+        assert "export" in tool_names
 
 
 # -----------------------------------------------------------------------------

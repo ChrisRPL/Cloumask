@@ -18,6 +18,9 @@
 		checkLLMReady,
 		ensureLLMReady,
 		pullLLMModelWithProgress,
+		startSidecar,
+		waitForSidecar,
+		DEFAULT_REQUIRED_MODEL,
 		isTauri
 	} from '$lib/utils/tauri';
 	import type { LLMPullProgressEvent } from '$lib/utils/tauri';
@@ -50,16 +53,47 @@
 	let autoPullTriggered = $state(false);
 	let modelPullProgress = $state<LLMPullProgressEvent | null>(null);
 	let modelPullError = $state<string | null>(null);
+	let isSending = $state(false);
+	let isRecoveringSidecar = $state(false);
 
 	// Derived state
 	const llmNotReady = $derived(llmStatus !== null && !llmStatus.ready);
-	const isTypingDisabled = $derived(agent.isBusy || !sse.isConnected || isInitializing);
-	const isSendDisabled = $derived(isTypingDisabled || llmNotReady);
+	const isTypingDisabled = $derived(isInitializing || isRecoveringSidecar);
+	const isSendDisabled = $derived(isTypingDisabled || llmNotReady || isSending || !sse.isConnected);
 	const showClarification = $derived(agent.pendingClarification !== null);
 	const showPlanPreview = $derived(
 		pipeline.steps.length > 0 &&
 		['planning', 'awaiting_approval'].includes(agent.phase)
 	);
+
+	function normalizeConnectionError(error: unknown): string {
+		const message = error instanceof Error ? error.message : String(error);
+		if (/load failed|failed to fetch|network|connection|refused/i.test(message)) {
+			return 'Cannot reach local AI backend yet. Retrying startup...';
+		}
+		return message;
+	}
+
+	async function recoverSidecarIfNeeded(): Promise<boolean> {
+		if (!isInTauri || isRecoveringSidecar) return false;
+
+		isRecoveringSidecar = true;
+		try {
+			await startSidecar();
+			const sidecarHealthy = await waitForSidecar(20000);
+			if (!sidecarHealthy) {
+				initError = 'Local AI backend is still starting. Please wait a few seconds and retry.';
+				return false;
+			}
+			return true;
+		} catch (error) {
+			console.error('[ChatPanel] Failed to recover sidecar:', error);
+			initError = normalizeConnectionError(error);
+			return false;
+		} finally {
+			isRecoveringSidecar = false;
+		}
+	}
 
 	// Check LLM service readiness
 	async function checkLLM() {
@@ -72,10 +106,21 @@
 			}
 		} catch (error) {
 			console.error('[ChatPanel] Failed to check LLM service:', error);
+			if (isInTauri) {
+				const recovered = await recoverSidecarIfNeeded();
+				if (recovered) {
+					try {
+						llmStatus = await checkLLMReady();
+						return;
+					} catch (retryError) {
+						console.error('[ChatPanel] LLM readiness retry failed:', retryError);
+					}
+				}
+			}
 			llmStatus = {
 				ready: false,
 				service_running: false,
-				required_model: 'qwen3:14b',
+				required_model: DEFAULT_REQUIRED_MODEL,
 				model_available: false,
 				error: 'Failed to connect to backend'
 			};
@@ -94,6 +139,15 @@
 			unitIndex += 1;
 		}
 		return `${size.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+	}
+
+	function getEstimatedDownloadSize(modelName: string): string {
+		const model = modelName.toLowerCase();
+		if (model.includes(':14b')) return '~9 GB';
+		if (model.includes(':8b')) return '~5 GB';
+		if (model.includes(':7b')) return '~4 GB';
+		if (model.includes(':4b') || model.includes(':3b')) return '~2 GB';
+		return 'a few GB';
 	}
 
 	// Pull the required model
@@ -165,6 +219,10 @@
 		initError = null;
 
 		try {
+			if (isInTauri) {
+				await recoverSidecarIfNeeded();
+			}
+
 			let threadId = agent.threadId;
 
 			// Create new thread if needed
@@ -178,15 +236,27 @@
 			sse.connect(threadId);
 		} catch (error) {
 			console.error('[ChatPanel] Failed to initialize:', error);
-			initError = error instanceof Error ? error.message : 'Failed to connect';
+			initError = normalizeConnectionError(error);
 		} finally {
 			isInitializing = false;
 		}
 	}
 
+	async function handleRecoverConnection() {
+		await recoverSidecarIfNeeded();
+		await initializeChat();
+		await checkLLM();
+	}
+
 	// Send user message
 	async function handleSend(content: string) {
-		if (!content.trim() || !agent.threadId) return;
+		if (!content.trim() || !agent.threadId || isSending) return;
+		if (!sse.isConnected) {
+			agent.setError('Waiting for local AI backend to reconnect. Please try again in a moment.');
+			return;
+		}
+
+		isSending = true;
 
 		// Add user message to store
 		agent.addMessage({
@@ -203,6 +273,8 @@
 		} catch (error) {
 			console.error('[ChatPanel] Failed to send message:', error);
 			agent.setError(error instanceof Error ? error.message : 'Failed to send message');
+		} finally {
+			isSending = false;
 		}
 	}
 
@@ -277,6 +349,29 @@
 			// SSE connection persists across view switches
 		};
 	});
+
+	// Recover automatically if chat is disconnected after startup.
+	$effect(() => {
+		if (!isInTauri) return;
+		if (!agent.threadId || sse.isConnected || isInitializing || isRecoveringSidecar) return;
+
+		const retryTimeout = setTimeout(() => {
+			void initializeChat();
+			void checkLLM();
+		}, 2500);
+
+		return () => clearTimeout(retryTimeout);
+	});
+
+	$effect(() => {
+		if (!isInTauri || !initError || isInitializing || isRecoveringSidecar) return;
+
+		const retryTimeout = setTimeout(() => {
+			void handleRecoverConnection();
+		}, 4000);
+
+		return () => clearTimeout(retryTimeout);
+	});
 </script>
 
 <div class={cn('flex flex-col h-full bg-background', className)}>
@@ -335,7 +430,7 @@
 			<span>{initError}</span>
 			<button
 				class="text-xs underline"
-				onclick={initializeChat}
+				onclick={handleRecoverConnection}
 			>
 				Retry
 			</button>
@@ -361,7 +456,7 @@
 							{:else if modelPullProgress?.status}
 								{modelPullProgress.status}
 							{:else}
-								First-time setup requires downloading the AI model (~9GB).
+								First-time setup requires downloading the AI model ({getEstimatedDownloadSize(llmStatus.required_model)}).
 							{/if}
 						</p>
 						{#if modelPullError}
@@ -392,7 +487,7 @@
 					{/if}
 					<button
 						class="px-2 py-1 text-xs underline"
-						onclick={checkLLM}
+						onclick={handleRecoverConnection}
 						disabled={isCheckingLLM || isPullingModel}
 					>
 						{isCheckingLLM ? 'Checking...' : 'Refresh'}
@@ -407,7 +502,13 @@
 		value={inputValue}
 		disabled={isTypingDisabled}
 		disableSend={isSendDisabled}
-		placeholder={isInitializing ? 'Connecting...' : 'Type a message...'}
+		placeholder={
+			isInitializing || isRecoveringSidecar
+				? 'Connecting...'
+				: sse.isConnected
+					? 'Type a message...'
+					: 'Reconnecting to local AI service...'
+		}
 		onSend={handleSend}
 		onValueChange={(v) => (inputValue = v)}
 	/>

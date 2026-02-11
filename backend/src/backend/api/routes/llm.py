@@ -222,15 +222,18 @@ async def _check_model_exists(model_name: str) -> bool:
             if response.status_code != 200:
                 return False
             data = response.json()
-            models = [m.get("name", "") for m in data.get("models", [])]
-            # Check for exact match or match without tag
-            for m in models:
-                if m == model_name or m.startswith(f"{model_name}:"):
-                    return True
-                # Handle case where model_name has tag but stored without
-                if model_name.split(":")[0] == m.split(":")[0]:
-                    return True
-            return False
+            models = [m.get("name", "").strip() for m in data.get("models", [])]
+            requested = model_name.strip()
+
+            # Exact tag match should be required when the request includes a tag.
+            if requested in models:
+                return True
+
+            if ":" in requested:
+                return False
+
+            requested_base = requested.split(":")[0]
+            return any(model.split(":")[0] == requested_base for model in models)
     except Exception:
         return False
 

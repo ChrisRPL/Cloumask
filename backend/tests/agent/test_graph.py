@@ -11,6 +11,7 @@ from langgraph.graph import StateGraph
 from backend.agent.graph import (
     create_agent_graph,
     route_after_approval,
+    route_after_intent_router,
     route_after_checkpoint,
     route_after_execution,
     route_from_start,
@@ -59,6 +60,8 @@ class TestCreateAgentGraph:
         graph = create_agent_graph()
         # Access the builder's nodes
         expected_nodes = {
+            "intent_router",
+            "chat_reply",
             "understand",
             "generate_plan",
             "await_approval",
@@ -115,7 +118,7 @@ class TestRouteFromStart:
 
     def test_routes_fresh_requests_to_understand(self) -> None:
         state = _create_minimal_state(plan=[], awaiting_user=False, plan_approved=False)
-        assert route_from_start(state) == "understand"
+        assert route_from_start(state) == "intent_router"
 
     def test_routes_unapproved_plan_to_await_approval(self) -> None:
         state = _create_minimal_state(
@@ -144,6 +147,18 @@ class TestRouteAfterExecution:
             current_step=1,
         )
         assert route_after_execution(state) == "complete"
+
+
+class TestRouteAfterIntentRouter:
+    """Tests for route_after_intent_router function."""
+
+    def test_routes_chat_to_chat_reply(self) -> None:
+        state = _create_minimal_state(metadata={"intent_route": "chat"})
+        assert route_after_intent_router(state) == "chat_reply"
+
+    def test_routes_task_to_understand(self) -> None:
+        state = _create_minimal_state(metadata={"intent_route": "task"})
+        assert route_after_intent_router(state) == "understand"
 
     def test_returns_execute_step_when_more_steps(self) -> None:
         """Should return 'execute_step' when steps remain."""

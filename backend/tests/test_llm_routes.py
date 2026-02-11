@@ -1,5 +1,6 @@
 """Tests for /llm endpoints."""
 
+import asyncio
 from unittest.mock import AsyncMock
 
 from fastapi.testclient import TestClient
@@ -62,3 +63,57 @@ def test_ensure_ready_with_pull_uses_configured_model(monkeypatch) -> None:
     assert data["required_model"] == "mistral:7b-instruct"
     assert post_mock.await_count == 1
     assert post_mock.await_args.kwargs["json"]["name"] == "mistral:7b-instruct"
+
+
+def test_check_model_exists_requires_exact_tag(monkeypatch) -> None:
+    """Tagged model checks must not pass on family-name-only matches."""
+
+    class _Response:
+        status_code = 200
+
+        def json(self) -> dict[str, list[dict[str, str]]]:
+            return {"models": [{"name": "qwen3:14b"}]}
+
+    class _AsyncClient:
+        def __init__(self, **kwargs) -> None:
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        async def get(self, _url: str) -> _Response:
+            return _Response()
+
+    monkeypatch.setattr(llm_routes.httpx, "AsyncClient", _AsyncClient)
+    exists = asyncio.run(llm_routes._check_model_exists("qwen3:8b"))
+    assert exists is False
+
+
+def test_check_model_exists_allows_family_match_without_tag(monkeypatch) -> None:
+    """Untagged model checks may match an installed tagged variant."""
+
+    class _Response:
+        status_code = 200
+
+        def json(self) -> dict[str, list[dict[str, str]]]:
+            return {"models": [{"name": "qwen3:14b"}]}
+
+    class _AsyncClient:
+        def __init__(self, **kwargs) -> None:
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        async def get(self, _url: str) -> _Response:
+            return _Response()
+
+    monkeypatch.setattr(llm_routes.httpx, "AsyncClient", _AsyncClient)
+    exists = asyncio.run(llm_routes._check_model_exists("qwen3"))
+    assert exists is True

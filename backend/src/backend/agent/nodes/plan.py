@@ -14,15 +14,18 @@ from uuid import uuid4
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from backend.agent.llm import get_llm
+from backend.agent.llm import SimpleLLMConfig, get_llm
 from backend.agent.prompts import load_prompt
 from backend.agent.state import MessageRole, PipelineState, StepStatus
 from backend.agent.utils import extract_json_array
+from backend.api.config import settings
 
 logger = logging.getLogger(__name__)
 
 # Maximum retries for LLM calls
-MAX_RETRIES = 3
+MAX_RETRIES = 1
+FAST_LLM_TIMEOUT_SECONDS = 45
+FAST_LLM_CONTEXT_TOKENS = 4096
 
 # Valid tool names that can appear in plans
 VALID_TOOLS = frozenset([
@@ -36,6 +39,121 @@ VALID_TOOLS = frozenset([
     "label_qa",
     "split_dataset",
 ])
+
+
+def _normalize_classes(value: Any) -> list[str]:
+    if isinstance(value, list):
+        classes = [str(item).strip() for item in value if str(item).strip()]
+        return classes
+    if isinstance(value, str):
+        classes = [part.strip() for part in value.split(",") if part.strip()]
+        return classes
+    return []
+
+
+def build_rule_based_plan(understanding: dict[str, Any]) -> list[dict[str, Any]] | None:
+    """
+    Build a deterministic plan from parsed understanding.
+
+    This fast-path avoids a second LLM call for common task-oriented workflows.
+    Returns None if request is too ambiguous and should fall back to LLM planning.
+    """
+    input_path = understanding.get("input_path")
+    operations = [
+        str(op).strip().lower()
+        for op in understanding.get("operations", [])
+        if str(op).strip()
+    ]
+    parameters = dict(understanding.get("parameters", {}))
+    output_path = understanding.get("output_path")
+
+    if not input_path or not operations:
+        return None
+
+    # Keep scan-only flows in the LLM path for broader backwards compatibility.
+    if len(operations) == 1 and operations[0] == "scan":
+        return None
+
+    # Ensure operation order is stable and valid.
+    allowed = {"scan", "detect", "segment", "anonymize", "export", "label"}
+    operations = [op for op in operations if op in allowed]
+    if not operations:
+        return None
+
+    plan: list[dict[str, Any]] = [
+        {
+            "tool_name": "scan_directory",
+            "parameters": {"path": input_path, "recursive": True},
+            "description": "Scan input directory to verify contents and file formats",
+        }
+    ]
+
+    # Labeling implies detect + export flow.
+    if "label" in operations:
+        if "detect" not in operations:
+            operations.append("detect")
+        if "export" not in operations:
+            operations.append("export")
+
+    working_path = input_path
+
+    if "detect" in operations:
+        classes = _normalize_classes(parameters.get("classes"))
+        if not classes:
+            classes = ["person", "car"]
+        confidence = float(parameters.get("confidence", 0.5))
+        plan.append({
+            "tool_name": "detect",
+            "parameters": {
+                "input_path": working_path,
+                "classes": classes,
+                "confidence": confidence,
+            },
+            "description": "Detect target objects in the input dataset",
+        })
+
+    if "segment" in operations:
+        prompt = str(parameters.get("prompt") or "objects of interest")
+        plan.append({
+            "tool_name": "segment",
+            "parameters": {
+                "input_path": working_path,
+                "prompt": prompt,
+            },
+            "description": "Segment requested objects in images",
+        })
+
+    if "anonymize" in operations:
+        anonymized_output = str(output_path or f"{input_path}_anonymized")
+        target = str(parameters.get("target") or "all")
+        plan.append({
+            "tool_name": "anonymize",
+            "parameters": {
+                "input_path": working_path,
+                "output_path": anonymized_output,
+                "target": target,
+            },
+            "description": "Anonymize sensitive regions (faces and/or plates)",
+        })
+        working_path = anonymized_output
+
+    if "export" in operations:
+        output_format = str(parameters.get("output_format") or parameters.get("format") or "yolo")
+        export_output = str(output_path or f"{working_path}_{output_format}")
+        plan.append({
+            "tool_name": "export",
+            "parameters": {
+                "source_path": working_path,
+                "output_path": export_output,
+                "output_format": output_format,
+            },
+            "description": f"Export annotations in {output_format.upper()} format",
+        })
+
+    if len(plan) <= 1:
+        return None
+
+    return plan
 
 
 def validate_plan(plan: list[dict[str, Any]]) -> str | None:
@@ -204,6 +322,43 @@ async def generate_plan(state: PipelineState) -> dict[str, Any]:
 
     logger.info(f"Generating plan for intent: {understanding.get('intent')}")
 
+    # Fast-path deterministic planning for clear multi-operation workflows.
+    rule_based_steps = build_rule_based_plan(understanding)
+    if rule_based_steps is not None:
+        plan: list[dict[str, Any]] = []
+        for i, step in enumerate(rule_based_steps):
+            plan.append({
+                "id": f"step-{uuid4().hex[:8]}",
+                "tool_name": step.get("tool_name", "unknown"),
+                "parameters": step.get("parameters", {}),
+                "description": step.get("description", f"Step {i + 1}"),
+                "status": StepStatus.PENDING.value,
+                "result": None,
+                "error": None,
+                "started_at": None,
+                "completed_at": None,
+            })
+
+        validation_error = validate_plan(plan)
+        if validation_error is None:
+            plan_display = format_plan_for_display(plan)
+            plan_message: dict[str, Any] = {
+                "role": MessageRole.ASSISTANT.value,
+                "content": (
+                    f"Here's my proposed plan:\n\n{plan_display}\n"
+                    "Do you want to proceed, or would you like to make changes?"
+                ),
+                "timestamp": datetime.now().isoformat(),
+                "tool_calls": [],
+                "tool_call_id": None,
+            }
+            return {
+                "messages": [*messages, plan_message],
+                "plan": plan,
+                "current_step": 0,
+                "plan_approved": False,
+            }
+
     # Load the planning prompt
     try:
         planning_prompt = load_prompt("planning")
@@ -229,7 +384,16 @@ Generate a JSON array of steps to accomplish this."""
     ]
 
     # Get LLM and call with retries
-    llm = get_llm(temperature=0.1)  # Low temperature for structured output
+    llm = get_llm(
+        config=SimpleLLMConfig(
+            host=settings.ollama_host,
+            model=settings.ollama_model,
+            temperature=0.1,
+            timeout=FAST_LLM_TIMEOUT_SECONDS,
+            num_ctx=FAST_LLM_CONTEXT_TOKENS,
+        ),
+        temperature=0.1,  # Low temperature for structured output
+    )
 
     last_error: str | None = None
     for attempt in range(MAX_RETRIES):
@@ -346,6 +510,7 @@ Generate a JSON array of steps to accomplish this."""
 
 __all__ = [
     "generate_plan",
+    "build_rule_based_plan",
     "validate_plan",
     "format_plan_for_display",
     "VALID_TOOLS",

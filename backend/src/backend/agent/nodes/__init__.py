@@ -61,9 +61,16 @@ from backend.agent.nodes.execute import (
 # Spec 03 - Planning nodes
 from backend.agent.nodes.plan import (
     VALID_TOOLS,
+    build_rule_based_plan,
     format_plan_for_display,
     generate_plan,
     validate_plan,
+)
+from backend.agent.nodes.router import (
+    chat_reply,
+    classify_intent,
+    get_latest_user_message,
+    route_intent,
 )
 from backend.agent.nodes.understand import understand
 from backend.agent.state import PipelineState
@@ -95,9 +102,14 @@ __all__ = [
     # Planning nodes (spec 03)
     "understand",
     "generate_plan",
+    "build_rule_based_plan",
     "validate_plan",
     "format_plan_for_display",
     "VALID_TOOLS",
+    "classify_intent",
+    "get_latest_user_message",
+    "route_intent",
+    "chat_reply",
     # Execution nodes (spec 04)
     "execute_step",
     "execute_step_node",
