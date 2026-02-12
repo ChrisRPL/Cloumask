@@ -10,28 +10,74 @@
 	import Icon from '$lib/components/ui/icons.svelte';
 	import * as Select from '$lib/components/ui/select';
 	import { getUIState } from '$lib/stores/ui.svelte';
+	import type { Project } from '$lib/types/ui';
 
 	let { class: className }: ProjectSelectorProps = $props();
 
 	const ui = getUIState();
 
-	// For now, use a mock project list since backend isn't connected
-	const mockProjects = [
+	// Local defaults for first-run.
+	const defaultProjects: Project[] = [
 		{ id: '1', name: 'My Project', path: '/data/my-project' },
 		{ id: '2', name: 'Dataset v2', path: '/data/dataset-v2' },
 	];
 
 	let selectedValue = $state<string | undefined>(undefined);
 
+	const availableProjects = $derived.by(() => {
+		const byId = new Map<string, Project>();
+		for (const project of ui.recentProjects) {
+			byId.set(project.id, project);
+		}
+		for (const project of defaultProjects) {
+			if (!byId.has(project.id)) byId.set(project.id, project);
+		}
+		return [...byId.values()];
+	});
+
+	$effect(() => {
+		selectedValue = ui.currentProject?.id;
+	});
+
+	function slugifyProjectName(name: string): string {
+		return name
+			.toLowerCase()
+			.trim()
+			.replace(/[^a-z0-9]+/g, '-')
+			.replace(/^-+|-+$/g, '');
+	}
+
+	function promptForNewProject(): Project | null {
+		const name = window.prompt('Project name');
+		if (!name || !name.trim()) return null;
+
+		const safeName = slugifyProjectName(name) || 'new-project';
+		const path =
+			window.prompt('Project path', `/data/${safeName}`)?.trim() ?? '';
+		if (!path) return null;
+
+		return {
+			id: crypto.randomUUID(),
+			name: name.trim(),
+			path,
+			lastOpened: new Date()
+		};
+	}
+
 	function handleValueChange(value: string | undefined) {
 		if (value === 'new') {
-			// TODO: Open new project dialog
-			console.log('Create new project');
+			const project = promptForNewProject();
+			if (project) {
+				ui.setProject(project);
+				selectedValue = project.id;
+			} else {
+				selectedValue = ui.currentProject?.id;
+			}
 			return;
 		}
 
 		selectedValue = value;
-		const project = mockProjects.find((p) => p.id === value);
+		const project = availableProjects.find((p) => p.id === value);
 		if (project) {
 			ui.setProject({ ...project, lastOpened: new Date() });
 		}
@@ -53,7 +99,7 @@
 		<Select.Content>
 			<Select.Group>
 				<Select.GroupHeading>Recent Projects</Select.GroupHeading>
-				{#each mockProjects as project (project.id)}
+				{#each availableProjects as project (project.id)}
 					<Select.Item value={project.id}>
 						<Icon name="folder-open" class="size-4 text-muted-foreground" />
 						{project.name}

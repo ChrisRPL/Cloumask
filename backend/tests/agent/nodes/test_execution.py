@@ -516,6 +516,48 @@ class TestExecuteStepNode:
         assert result["execution_results"]["step-1"] == custom_result
 
     @pytest.mark.asyncio
+    async def test_execute_coerces_string_to_list_parameter(
+        self,
+        base_state: PipelineState,
+    ) -> None:
+        """Comma-separated string values should be coerced for list parameters."""
+        from backend.agent.tools import BaseTool, ToolCategory, ToolParameter, ToolResult
+
+        class DetectLikeTool(BaseTool):
+            name = "scan_directory"
+            description = "Tool with list parameter"
+            category = ToolCategory.DETECTION
+            parameters = [
+                ToolParameter(
+                    name="path",
+                    type=str,
+                    description="Input path",
+                    required=True,
+                ),
+                ToolParameter(
+                    name="classes",
+                    type=list,
+                    description="Class list",
+                    required=False,
+                    default=None,
+                ),
+            ]
+
+            async def execute(self, **kwargs: Any) -> ToolResult:
+                return ToolResult(success=True, data={"classes": kwargs.get("classes")})
+
+        base_state["plan"][0]["parameters"] = {
+            "path": "/data",
+            "classes": "person, car, bus",
+        }
+        get_tool_registry().register(DetectLikeTool())
+
+        result = await execute_step_node(base_state)
+
+        assert result["plan"][0]["status"] == StepStatus.COMPLETED.value
+        assert result["execution_results"]["step-1"]["classes"] == ["person", "car", "bus"]
+
+    @pytest.mark.asyncio
     async def test_retry_on_transient_error(self, base_state: PipelineState) -> None:
         """Should retry on transient errors."""
         from backend.agent.tools import BaseTool, ToolCategory, ToolResult

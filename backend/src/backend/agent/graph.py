@@ -152,16 +152,17 @@ def route_after_execution(
     Returns:
         Node name to route to.
     """
-    # Check if checkpoint is needed first
-    if should_checkpoint(state):
-        return "create_checkpoint"
-
-    # Check if all steps are complete
     plan_steps = state.get("plan", [])
     current_step = state.get("current_step", 0)
 
+    # Completion must short-circuit checkpoint logic to avoid looping after
+    # the final step when intermediate threshold checkpoints were skipped.
     if current_step >= len(plan_steps):
         return "complete"
+
+    # Check if checkpoint is needed
+    if should_checkpoint(state):
+        return "create_checkpoint"
 
     return "execute_step"
 

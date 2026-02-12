@@ -18,6 +18,7 @@ from backend.agent.state import MessageRole, PipelineState, StepStatus
 from backend.agent.tools import (
     BaseTool,
     ToolCategory,
+    ToolParameter,
     ToolResult,
     get_tool_registry,
     success_result,
@@ -30,6 +31,18 @@ logger = logging.getLogger(__name__)
 
 # Maximum retries for transient errors
 MAX_RETRIES = 3
+
+
+def _coerce_parameter_value(param: ToolParameter, value: Any) -> Any:
+    """Coerce common UI payload shapes to the tool's expected parameter type."""
+    if param.type is list and not isinstance(value, list):
+        if isinstance(value, str):
+            if not value.strip():
+                return []
+            return [part.strip() for part in value.split(",") if part.strip()]
+        if isinstance(value, tuple | set):
+            return list(value)
+    return value
 
 
 # -----------------------------------------------------------------------------
@@ -313,6 +326,32 @@ async def execute_step_node(state: PipelineState) -> dict[str, Any]:
     plan = list(plan)  # Make plan mutable
     plan[current_idx] = step
 
+    # Respect pre-marked skipped steps from edited plans.
+    if step.get("status") == StepStatus.SKIPPED.value:
+        now = datetime.now().isoformat()
+        step["started_at"] = now
+        step["completed_at"] = now
+        execution_results[step.get("id", f"step-{current_idx}")] = {
+            "status": StepStatus.SKIPPED.value
+        }
+
+        messages.append({
+            "role": MessageRole.ASSISTANT.value,
+            "content": f"Skipped step {current_idx + 1}: {step.get('description', 'Unnamed step')}",
+            "timestamp": now,
+            "tool_calls": [],
+            "tool_call_id": None,
+        })
+
+        return {
+            "plan": plan,
+            "current_step": current_idx + 1,
+            "execution_results": execution_results,
+            "messages": messages,
+            "retry_count": 0,
+            "awaiting_user": False,
+        }
+
     tool_name = step.get("tool_name", "")
     parameters = step.get("parameters", {})
     step_id = step.get("id", f"step-{current_idx}")
@@ -346,6 +385,35 @@ async def execute_step_node(state: PipelineState) -> dict[str, Any]:
             "retry_count": 0,
             "awaiting_user": False,
         }
+
+    # Drop unsupported UI-only parameters and coerce common value shapes.
+    parameter_defs = {param.name: param for param in getattr(tool, "parameters", [])}
+    if parameter_defs:
+        filtered_parameters: dict[str, Any] = {}
+        dropped_parameters: list[str] = []
+        for name, value in parameters.items():
+            param_def = parameter_defs.get(name)
+            if not param_def:
+                dropped_parameters.append(name)
+                continue
+            coerced = _coerce_parameter_value(param_def, value)
+            if coerced is not value:
+                logger.debug(
+                    "Coerced parameter %s for tool %s from %s to %s",
+                    name,
+                    tool_name,
+                    type(value).__name__,
+                    type(coerced).__name__,
+                )
+            filtered_parameters[name] = coerced
+
+        if dropped_parameters:
+            logger.debug(
+                "Dropping unsupported parameters for tool %s: %s",
+                tool_name,
+                ", ".join(sorted(dropped_parameters)),
+            )
+        parameters = filtered_parameters
 
     # Mark step as running
     step["status"] = StepStatus.RUNNING.value

@@ -64,6 +64,7 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=[
             "http://localhost:5173",  # Vite dev server
+            "http://127.0.0.1:5173",  # Vite dev server (loopback variant)
             "http://localhost:1420",  # Tauri dev server
             "tauri://localhost",  # Tauri production
             "https://tauri.localhost",  # Tauri production (alternative)

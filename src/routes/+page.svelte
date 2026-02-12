@@ -23,6 +23,7 @@
 	} from '$lib/types';
 	import { getUIState, VIEWS } from '$lib/stores/ui.svelte';
 	import { getSetupState } from '$lib/stores/setup.svelte';
+	import { getPipelineState } from '$lib/stores/pipeline.svelte';
 	import { ViewPlaceholder } from '$lib/components/Layout';
 	import { ChatPanel } from '$lib/components/Chat';
 	import { PlanEditor } from '$lib/components/Plan';
@@ -34,6 +35,7 @@
 	// Get state from context
 	const ui = getUIState();
 	const setup = getSetupState();
+	const pipeline = getPipelineState();
 
 	// Track setup completion reactively (forces Svelte to re-evaluate)
 	const isSetupComplete = $derived(setup.isComplete);
@@ -328,7 +330,11 @@
 	<ExecutionView class="h-full" />
 {:else if ui.currentView === 'review'}
 	<!-- Review Queue View -->
-	<ReviewQueue onDone={() => ui.setView('execute')} class="h-full" />
+	<ReviewQueue
+		executionId={pipeline.pipelineId ?? 'current'}
+		onDone={() => ui.setView('execute')}
+		class="h-full"
+	/>
 {:else if ui.currentView === 'pointcloud'}
 	<!-- Point Cloud Viewer -->
 	<PointCloudViewer class="h-full" />

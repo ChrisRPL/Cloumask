@@ -588,8 +588,9 @@ def _apply_user_decision(
     # Clear awaiting flag
     state["awaiting_user"] = False
 
-    # Apply plan edits if provided
-    if plan_edits and decision == UserDecision.EDIT:
+    # Apply plan edits whenever the frontend sends them.
+    # This allows "approve + edited plan" flows from the plan editor.
+    if plan_edits:
         state["plan"] = plan_edits
 
     # If approving plan for first time
@@ -758,15 +759,23 @@ def state_to_events(
         # Calculate stats
         total_steps = len(plan)
         completed_steps = sum(
-            1
-            for r in execution_results.values()
-            if r.get("status") == StepStatus.COMPLETED.value
+            1 for step in plan if step.get("status") == StepStatus.COMPLETED.value
         )
         failed_steps = sum(
-            1
-            for r in execution_results.values()
-            if r.get("status") == StepStatus.FAILED.value
+            1 for step in plan if step.get("status") == StepStatus.FAILED.value
         )
+        # Fallback for legacy states where plan statuses are missing.
+        if completed_steps == 0 and failed_steps == 0 and execution_results:
+            completed_steps = sum(
+                1
+                for r in execution_results.values()
+                if isinstance(r, dict) and r.get("status") == StepStatus.COMPLETED.value
+            )
+            failed_steps = sum(
+                1
+                for r in execution_results.values()
+                if isinstance(r, dict) and r.get("status") == StepStatus.FAILED.value
+            )
 
         events.append(
             complete_event(

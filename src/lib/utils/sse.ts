@@ -242,7 +242,17 @@ export class SSEManager {
 
 	private handleEvent(eventType: SSEEventType, e: MessageEvent): void {
 		try {
-			const event: SSEEvent = JSON.parse(e.data);
+			const rawData = typeof e.data === 'string' ? e.data.trim() : '';
+			if (!rawData) {
+				// Native EventSource "error" events do not include payload data.
+				if (eventType === 'error') {
+					return;
+				}
+				console.warn(`[SSE] Received empty payload for event: ${eventType}`);
+				return;
+			}
+
+			const event: SSEEvent = JSON.parse(rawData);
 
 			// Handle connection events
 			if (eventType === 'connected') {

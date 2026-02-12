@@ -7,7 +7,9 @@
 <script lang="ts">
 	import { cn } from '$lib/utils.js';
 	import { getExecutionState } from '$lib/stores/execution.svelte';
-	import PreviewThumbnail, { type PreviewItem } from './PreviewThumbnail.svelte';
+	import { convertFileSrc } from '@tauri-apps/api/core';
+	import { isTauri } from '$lib/utils/tauri';
+	import PreviewThumbnail from './PreviewThumbnail.svelte';
 	import { ImageIcon, Loader2 } from '@lucide/svelte';
 
 	let { class: className }: PreviewGridProps = $props();
@@ -15,14 +17,24 @@
 	// Get execution state to show context-aware messages
 	const execution = getExecutionState();
 
-	// Preview items will be populated from SSE events when backend sends them
-	// For now, previews are empty and UI shows appropriate state
-	let previews = $state<PreviewItem[]>([]);
+	const isDesktopTauri = isTauri();
+	const safeConvertFileSrc: ((path: string) => string) | null =
+		typeof convertFileSrc === 'function' ? convertFileSrc : null;
+
+	const previews = $derived.by(() =>
+		execution.previews.map((preview) => ({
+			...preview,
+			thumbnailUrl:
+				isDesktopTauri && safeConvertFileSrc
+					? safeConvertFileSrc(preview.thumbnailUrl)
+					: preview.thumbnailUrl
+		}))
+	);
 
 	// Derived states for better UX
 	const isRunning = $derived(execution.isRunning);
 	const isIdle = $derived(execution.status === 'idle');
-	const hasProcessed = $derived(execution.stats.processed > 0);
+	const hasProcessed = $derived(execution.stats.processed > 0 || previews.length > 0);
 </script>
 
 <div class={cn('flex flex-col h-full', className)}>

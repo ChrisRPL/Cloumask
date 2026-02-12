@@ -327,6 +327,45 @@ class TestSegmentTool:
             assert len(result.data["masks"]) == 1
             assert "data_base64" in result.data["masks"][0]
 
+    @pytest.mark.asyncio
+    async def test_segment_directory_text_prompt(
+        self,
+        temp_image_dir,
+        mock_segmentation_result,
+    ):
+        """Test segmentation supports batch directory input."""
+        with patch("backend.cv.segmentation.get_segmenter") as mock_get:
+            mock_segmenter = MagicMock()
+            mock_segmenter.info.name = "sam3"
+            mock_segmenter.predict.return_value = mock_segmentation_result
+            mock_get.return_value = mock_segmenter
+
+            tool = SegmentTool()
+            result = await tool.run(
+                input_path=str(temp_image_dir),
+                prompt="person",
+            )
+
+            assert result.success
+            assert result.data["files_processed"] == 5
+            assert result.data["prompt_type"] == "text"
+            assert result.data["count"] == 5
+            assert result.data["masks_generated"] == 5
+            assert len(result.data["results"]) == 5
+            assert mock_segmenter.predict.call_count == 5
+
+    @pytest.mark.asyncio
+    async def test_segment_directory_no_images(self, empty_dataset):
+        """Test segmentation errors when a directory has no images."""
+        tool = SegmentTool()
+        result = await tool.run(
+            input_path=str(empty_dataset),
+            prompt="person",
+        )
+
+        assert not result.success
+        assert "no image files found" in result.error.lower()
+
 
 # =============================================================================
 # AnonymizeTool Tests

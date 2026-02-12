@@ -15,6 +15,7 @@ import type {
   CheckpointInfo,
   CheckpointTrigger,
   QualityMetrics,
+  PreviewItem,
 } from "$lib/types/execution";
 
 // Re-export types for convenience
@@ -50,6 +51,8 @@ const INITIAL_PROGRESS: ExecutionProgress = {
   percentage: 0,
 };
 
+const MAX_PREVIEWS = 18;
+
 // ============================================================================
 // Helpers
 // ============================================================================
@@ -76,6 +79,7 @@ export function createExecutionState(): ExecutionState {
   let status = $state<ExecutionStatus>("idle");
   let progress = $state<ExecutionProgress>({ ...INITIAL_PROGRESS });
   let stats = $state<ExecutionStats>({ ...INITIAL_STATS });
+  let previews = $state<PreviewItem[]>([]);
   let errors = $state<ExecutionError[]>([]);
   let currentStepId = $state<string | null>(null);
   let checkpoint = $state<CheckpointInfo | null>(null);
@@ -99,6 +103,9 @@ export function createExecutionState(): ExecutionState {
     },
     get stats() {
       return stats;
+    },
+    get previews() {
+      return previews;
     },
     get errors() {
       return errors;
@@ -140,6 +147,7 @@ export function createExecutionState(): ExecutionState {
       };
       progress = { ...INITIAL_PROGRESS };
       errors = [];
+      previews = [];
       checkpoint = null;
     },
 
@@ -165,6 +173,7 @@ export function createExecutionState(): ExecutionState {
       status = "idle";
       progress = { ...INITIAL_PROGRESS };
       stats = { ...INITIAL_STATS };
+      previews = [];
       errors = [];
       currentStepId = null;
       checkpoint = null;
@@ -209,6 +218,29 @@ export function createExecutionState(): ExecutionState {
 
     incrementFlagged(count = 1) {
       stats = { ...stats, flagged: stats.flagged + count };
+    },
+
+    setPreviews(newPreviews: PreviewItem[]) {
+      previews = newPreviews.slice(0, MAX_PREVIEWS);
+    },
+
+    appendPreviews(newPreviews: PreviewItem[]) {
+      if (newPreviews.length === 0) return;
+      const merged = [...newPreviews, ...previews];
+      const deduped: PreviewItem[] = [];
+      const seen = new Set<string>();
+      for (const preview of merged) {
+        const key = `${preview.imagePath}|${preview.status}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        deduped.push(preview);
+        if (deduped.length >= MAX_PREVIEWS) break;
+      }
+      previews = deduped;
+    },
+
+    clearPreviews() {
+      previews = [];
     },
 
     // Error actions

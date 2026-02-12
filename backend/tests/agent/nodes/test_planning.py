@@ -472,6 +472,22 @@ class TestUnderstandNode:
         assert set(params["classes"]) == {"car", "person", "traffic light", "road sign"}
         assert params["target"] == "all"
 
+    @pytest.mark.asyncio
+    async def test_fast_path_respects_faces_only_negation(self) -> None:
+        """Fast-path should map 'only faces / not plates' to faces target."""
+        state = _state_with_message(
+            "detect cars and people in /tmp/images, then anonymize only faces "
+            "and do not anonymize plates, then export yolo"
+        )
+
+        with patch("backend.agent.nodes.understand.get_llm") as mock_get_llm:
+            result = await understand(state)
+            mock_get_llm.assert_not_called()
+
+        params = result["metadata"]["understanding"]["parameters"]
+        assert set(params["classes"]) == {"car", "person"}
+        assert params["target"] == "faces"
+
 
 # -----------------------------------------------------------------------------
 # generate_plan() tests (mocked LLM)

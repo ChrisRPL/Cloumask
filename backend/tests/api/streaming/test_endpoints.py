@@ -412,6 +412,35 @@ class TestStateToEvents:
         assert len(complete_events) == 1
         assert complete_events[0].data["success"] is True
 
+    def test_state_to_events_pipeline_complete_uses_plan_statuses(self) -> None:
+        """Completion stats should derive from plan step statuses when available."""
+        state = {
+            "messages": [],
+            "plan": [
+                {"id": "step-0", "tool_name": "scan", "status": "completed"},
+                {"id": "step-1", "tool_name": "detect", "status": "failed"},
+                {"id": "step-2", "tool_name": "export", "status": "completed"},
+            ],
+            "plan_approved": True,
+            "current_step": 3,
+            "checkpoints": [],
+            "awaiting_user": False,
+            "execution_results": {
+                # Legacy payloads may omit step status here.
+                "step-0": {"files_processed": 10},
+                "step-1": {"error": "boom"},
+                "step-2": {"output_path": "/tmp/out"},
+            },
+            "metadata": {"pipeline_id": "pipe-xyz"},
+        }
+
+        events = state_to_events(state, "test-thread")
+        complete_events = [e for e in events if e.type == SSEEventType.PIPELINE_COMPLETE]
+        assert len(complete_events) == 1
+        assert complete_events[0].data["completed_steps"] == 2
+        assert complete_events[0].data["failed_steps"] == 1
+        assert complete_events[0].data["success"] is False
+
     def test_state_to_events_ignores_internal_markers(self) -> None:
         """Messages starting with AWAIT_ should be ignored."""
         state = {

@@ -10,6 +10,7 @@ Implements spec: 03-cv-models/02-sam3-segmentation (testing section)
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -485,21 +486,49 @@ class TestGetSegmenter:
         with pytest.raises(ValueError, match="Unknown model"):
             get_segmenter(force_model="unknown_model")
 
-    @patch("backend.cv.device.get_available_vram_mb", return_value=10000)
-    def test_text_prompt_with_vram(self, mock_vram: MagicMock) -> None:
+    def test_text_prompt_with_vram(self) -> None:
         """Text prompt with enough VRAM should return SAM3Wrapper."""
         from backend.cv.segmentation import SAM3Wrapper, get_segmenter
 
-        segmenter = get_segmenter(prompt_type="text")
+        with (
+            patch("backend.cv.device.get_available_vram_mb", return_value=10000),
+            patch(
+                "backend.cv.device.get_device_info",
+                return_value=SimpleNamespace(cuda_available=True, mps_available=False),
+            ),
+        ):
+            segmenter = get_segmenter(prompt_type="text")
+
         assert isinstance(segmenter, SAM3Wrapper)
 
-    @patch("backend.cv.device.get_available_vram_mb", return_value=4000)
-    def test_text_prompt_low_vram_raises(self, mock_vram: MagicMock) -> None:
+    def test_text_prompt_low_vram_raises(self) -> None:
         """Text prompt with insufficient VRAM should raise RuntimeError."""
         from backend.cv.segmentation import get_segmenter
 
-        with pytest.raises(RuntimeError, match="VRAM"):
+        with (
+            patch("backend.cv.device.get_available_vram_mb", return_value=4000),
+            patch(
+                "backend.cv.device.get_device_info",
+                return_value=SimpleNamespace(cuda_available=True, mps_available=False),
+            ),
+            pytest.raises(RuntimeError, match="VRAM"),
+        ):
             get_segmenter(prompt_type="text")
+
+    def test_text_prompt_uses_sam3_on_mps(self) -> None:
+        """Text prompt should select SAM3 on Apple MPS even without CUDA VRAM telemetry."""
+        from backend.cv.segmentation import SAM3Wrapper, get_segmenter
+
+        with (
+            patch("backend.cv.device.get_available_vram_mb", return_value=0),
+            patch(
+                "backend.cv.device.get_device_info",
+                return_value=SimpleNamespace(cuda_available=False, mps_available=True),
+            ),
+        ):
+            segmenter = get_segmenter(prompt_type="text")
+
+        assert isinstance(segmenter, SAM3Wrapper)
 
     @patch("backend.cv.device.get_available_vram_mb", return_value=8000)
     def test_point_prompt_default(self, mock_vram: MagicMock) -> None:

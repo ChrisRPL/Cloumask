@@ -45,14 +45,15 @@ def _extract_operations(content: str) -> list[str]:
         ("segment", ["segment", "segmentation", "mask"]),
         ("anonymize", ["anonymize", "blur", "redact", "privacy"]),
         ("export", ["export", "convert", "save as"]),
-        ("label", ["label", "annotate", "annotation"]),
+        ("label", ["label", "annotate", "annotation", "classify", "classification"]),
     ]
 
     for operation, aliases in operation_patterns:
         for alias in aliases:
-            idx = normalized.find(alias)
-            if idx != -1:
-                operation_hits.append((idx, operation))
+            # Match complete terms only so "mask" does not match "Cloumask".
+            match = re.search(rf"(?<!\w){re.escape(alias)}(?!\w)", normalized)
+            if match:
+                operation_hits.append((match.start(), operation))
                 break
 
     operation_hits.sort(key=lambda hit: hit[0])
@@ -103,12 +104,35 @@ def _extract_parameters(content: str) -> dict[str, Any]:
         fmt = format_match.group(1)
         parameters["format"] = "voc" if fmt == "pascal" else fmt
 
-    if "face" in normalized and "plate" in normalized:
-        parameters["target"] = "all"
-    elif "face" in normalized:
-        parameters["target"] = "faces"
-    elif "plate" in normalized:
-        parameters["target"] = "plates"
+    face_mentioned = bool(re.search(r"\bfaces?\b", normalized))
+    plate_mentioned = bool(re.search(r"\b(?:license\s+)?plates?\b", normalized))
+
+    faces_only = bool(re.search(r"\b(?:only|just)\s+faces?\b", normalized)) or bool(
+        re.search(
+            r"\b(?:no|not|without|exclude|excluding)\s+(?:anonymize\s+)?(?:license\s+)?plates?\b",
+            normalized,
+        )
+    )
+    plates_only = bool(
+        re.search(r"\b(?:only|just)\s+(?:license\s+)?plates?\b", normalized)
+    ) or bool(
+        re.search(
+            r"\b(?:no|not|without|exclude|excluding)\s+(?:anonymize\s+)?faces?\b",
+            normalized,
+        )
+    )
+
+    if face_mentioned or plate_mentioned:
+        if faces_only and not plates_only:
+            parameters["target"] = "faces"
+        elif plates_only and not faces_only:
+            parameters["target"] = "plates"
+        elif face_mentioned and plate_mentioned:
+            parameters["target"] = "all"
+        elif face_mentioned:
+            parameters["target"] = "faces"
+        elif plate_mentioned:
+            parameters["target"] = "plates"
 
     return parameters
 
@@ -188,7 +212,7 @@ async def understand(state: PipelineState) -> dict[str, Any]:
     if fast_understanding is not None:
         metadata = {**state.get("metadata", {}), "understanding": fast_understanding}
         operations = fast_understanding.get("operations", [])
-        input_path = fast_understanding.get("input_path", "your data")
+        input_path = fast_understanding.get("input_path") or "your data"
         operation_text = ", ".join(operations) if operations else "process"
 
         new_message = {
@@ -279,7 +303,7 @@ async def understand(state: PipelineState) -> dict[str, Any]:
             if not operations and understanding.get("intent"):
                 operations = [understanding["intent"]]
 
-            input_path = understanding.get("input_path", "your data")
+            input_path = understanding.get("input_path") or "your data"
             operation_text = ", ".join(operations) if operations else "process"
 
             confirmation = (

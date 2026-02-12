@@ -22,6 +22,18 @@
 	const triggerLabel = $derived(
 		CHECKPOINT_TRIGGERS[checkpoint.triggerReason] ?? 'Checkpoint triggered'
 	);
+	const safeProgressPercent = $derived(
+		Number.isFinite(checkpoint.progressPercent) ? Math.round(checkpoint.progressPercent) : 0
+	);
+	const safeConfidencePercent = $derived.by(() => {
+		const value = checkpoint.qualityMetrics.averageConfidence;
+		if (!Number.isFinite(value)) return 0;
+		return Math.round(value * 100);
+	});
+	const safeTotalProcessed = $derived.by(() => {
+		const value = checkpoint.qualityMetrics.totalProcessed;
+		return Number.isFinite(value) ? Math.round(value) : 0;
+	});
 </script>
 
 <div
@@ -47,16 +59,16 @@
 				<!-- Quality metrics -->
 				<div class="flex gap-4 text-xs font-mono text-muted-foreground/80">
 					<span>
-						Progress: <span class="text-foreground tabular-nums">{checkpoint.progressPercent}%</span>
+						Progress: <span class="text-foreground tabular-nums">{safeProgressPercent}%</span>
 					</span>
 					<span>
 						Confidence: <span class="text-foreground tabular-nums">
-							{Math.round(checkpoint.qualityMetrics.averageConfidence * 100)}%
+							{safeConfidencePercent}%
 						</span>
 					</span>
 					<span>
 						Processed: <span class="text-foreground tabular-nums">
-							{checkpoint.qualityMetrics.totalProcessed}
+							{safeTotalProcessed}
 						</span>
 					</span>
 					{#if checkpoint.qualityMetrics.errorCount > 0}

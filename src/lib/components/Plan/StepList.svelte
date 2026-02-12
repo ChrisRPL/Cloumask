@@ -102,6 +102,7 @@
 						container: String(index),
 						dragData: step,
 						disabled: !isEditing,
+						interactive: ['button', 'input', '[role="checkbox"]', '[data-no-drag]'],
 						callbacks: {
 							onDragStart: () => handleDragStart(step),
 							onDragEnd: handleDragEnd,

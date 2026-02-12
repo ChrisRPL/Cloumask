@@ -7,12 +7,13 @@
 </script>
 
 <script lang="ts">
-	import { onMount, onDestroy, untrack } from 'svelte';
+import { onDestroy, untrack } from 'svelte';
 	import { convertFileSrc } from '@tauri-apps/api/core';
 	import { cn } from '$lib/utils.js';
+	import { isTauri } from '$lib/utils/tauri';
 	import { getReviewState } from '$lib/stores/review.svelte.js';
 	import { getKeyboardState } from '$lib/stores/keyboard.svelte.js';
-	import type { Annotation, ReviewItem } from '$lib/types/review';
+	import type { Annotation, ReviewItem, ReviewStatus } from '$lib/types/review';
 
 	// Components
 	import ReviewHeader from './ReviewHeader.svelte';
@@ -26,6 +27,85 @@
 	import ActionBar from './actions/ActionBar.svelte';
 
 	let { executionId = 'current', onDone, class: className }: ReviewQueueProps = $props();
+
+	const isDesktopTauri = isTauri();
+	const safeConvertFileSrc: ((path: string) => string) | null =
+		typeof convertFileSrc === 'function' ? convertFileSrc : null;
+
+	type BackendAnnotation = {
+		id: string;
+		type: 'bbox' | 'polygon' | 'mask';
+		label: string;
+		confidence: number;
+		bbox?: { x: number; y: number; width: number; height: number };
+		polygon?: Array<{ x: number; y: number }>;
+		mask_url?: string | null;
+		color?: string;
+		visible?: boolean;
+	};
+
+	type BackendReviewItem = {
+		id: string;
+		file_path: string;
+		file_name: string;
+		dimensions: { width: number; height: number };
+		thumbnail_url: string;
+		annotations?: BackendAnnotation[];
+		original_annotations?: BackendAnnotation[];
+		status?: string;
+		reviewed_at?: string | null;
+		flagged?: boolean;
+		flag_reason?: string | null;
+	};
+
+	function normalizeStatus(status: string | undefined): ReviewStatus {
+		if (status === 'approved' || status === 'rejected' || status === 'modified') return status;
+		return 'pending';
+	}
+
+	function normalizeAnnotation(annotation: BackendAnnotation): Annotation {
+		return {
+			id: annotation.id,
+			type: annotation.type,
+			label: annotation.label,
+			confidence: annotation.confidence,
+			bbox: annotation.bbox,
+			polygon: annotation.polygon,
+			maskUrl: annotation.mask_url ?? undefined,
+			color: annotation.color ?? '#166534',
+			visible: annotation.visible ?? true
+		};
+	}
+
+	function normalizeItem(item: BackendReviewItem): ReviewItem {
+		return {
+			id: item.id,
+			filePath: item.file_path,
+			fileName: item.file_name,
+			dimensions: item.dimensions,
+			thumbnailUrl: item.thumbnail_url,
+			annotations: (item.annotations ?? []).map(normalizeAnnotation),
+			originalAnnotations: (item.original_annotations ?? []).map(normalizeAnnotation),
+			status: normalizeStatus(item.status),
+			reviewedAt: item.reviewed_at ?? undefined,
+			flagged: item.flagged ?? false,
+			flagReason: item.flag_reason ?? undefined
+		};
+	}
+
+	function toBackendAnnotation(annotation: Annotation): BackendAnnotation {
+		return {
+			id: annotation.id,
+			type: annotation.type,
+			label: annotation.label,
+			confidence: annotation.confidence,
+			bbox: annotation.bbox,
+			polygon: annotation.polygon,
+			mask_url: annotation.maskUrl ?? null,
+			color: annotation.color,
+			visible: annotation.visible
+		};
+	}
 
 	// Review state from context
 	const reviewState = getReviewState();
@@ -58,8 +138,29 @@
 	const canNext = $derived(currentIndex < reviewState.filteredItems.length - 1);
 	const imageUrl = $derived.by(() => {
 		if (!currentItem) return '';
-		// Use Tauri's convertFileSrc to serve local files
-		return convertFileSrc(currentItem.filePath);
+		// In desktop mode we can render local file paths directly.
+		if (isDesktopTauri && safeConvertFileSrc) {
+			return safeConvertFileSrc(currentItem.filePath);
+		}
+		// Browser mode fallback: render the generated thumbnail data URL.
+		return currentItem.thumbnailUrl;
+	});
+
+	// Keep selection valid when filters hide the current item.
+	$effect(() => {
+		const filtered = reviewState.filteredItems;
+		const currentId = reviewState.currentItemId;
+
+		if (filtered.length === 0) {
+			if (currentId !== null) {
+				reviewState.setCurrentItem(null);
+			}
+			return;
+		}
+
+		if (!currentId || !filtered.some((item) => item.id === currentId)) {
+			reviewState.setCurrentItem(filtered[0].id);
+		}
 	});
 
 	// Available labels for dropdown
@@ -75,7 +176,9 @@
 			await fetch(`http://localhost:8765/api/review/items/${itemId}`, {
 				method: 'PUT',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ annotations })
+				body: JSON.stringify({
+					annotations: annotations.map(toBackendAnnotation)
+				})
 			});
 		} catch (error) {
 			console.error('Error saving annotations:', error);
@@ -575,6 +678,7 @@
 	// ============================================================================
 	// Data Loading
 	// ============================================================================
+	let lastLoadedExecutionId = $state<string | null>(null);
 
 	async function loadReviewItems() {
 		reviewState.setLoading(true);
@@ -586,7 +690,8 @@
 				throw new Error(`Failed to load review items: ${response.statusText}`);
 			}
 			const data = await response.json();
-			reviewState.loadItems(data.items);
+			const items = Array.isArray(data.items) ? (data.items as BackendReviewItem[]) : [];
+			reviewState.loadItems(items.map(normalizeItem));
 		} catch (error) {
 			console.error('Error loading review items:', error);
 			// TODO: Show error toast
@@ -595,9 +700,12 @@
 		}
 	}
 
-	// Load items on mount
-	onMount(() => {
-		loadReviewItems();
+	// Reload whenever execution context changes.
+	$effect(() => {
+		const execId = executionId?.trim();
+		if (!execId || execId === lastLoadedExecutionId) return;
+		lastLoadedExecutionId = execId;
+		void loadReviewItems();
 	});
 </script>
 
@@ -635,7 +743,7 @@
 	/>
 
 	<!-- Main Content -->
-	<SplitPane class="flex-1 min-h-0">
+	<SplitPane class="flex-1 min-h-0" leftWidth={340} minLeftWidth={260} maxLeftWidth={520}>
 		{#snippet left()}
 			<ItemList
 				items={reviewState.filteredItems}
@@ -708,7 +816,7 @@
 							isEditMode = true;
 							drawingTool = 'rectangle';
 						}}
-						class="h-48 flex-shrink-0"
+						class="h-40 flex-shrink-0"
 					/>
 				{/if}
 			</div>

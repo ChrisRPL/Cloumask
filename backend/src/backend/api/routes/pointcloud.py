@@ -70,8 +70,11 @@ class NormalsRequest(BaseModel):
 
     input_path: str = Field(..., description="Path to input point cloud file")
     output_path: str = Field(..., description="Path for output point cloud file")
-    search_radius: float = Field(
-        0.1, gt=0, description="Search radius for neighbor lookup in meters"
+    search_radius: float | None = Field(
+        None, gt=0, description="Search radius for neighbor lookup in meters"
+    )
+    radius: float | None = Field(
+        None, gt=0, description="Legacy alias for search_radius"
     )
     max_nn: int = Field(30, ge=1, description="Maximum number of neighbors to consider")
 
@@ -107,6 +110,8 @@ async def get_stats(
         logger.info("Retrieved stats for %s: %d points", path, stats.point_count)
         return stats
 
+    except HTTPException:
+        raise
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except ValueError as e:
@@ -168,6 +173,8 @@ async def downsample(request: DownsampleRequest) -> PointCloudProcessingResult:
         )
         return result
 
+    except HTTPException:
+        raise
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except ValueError as e:
@@ -227,6 +234,8 @@ async def filter_outliers(request: FilterRequest) -> PointCloudProcessingResult:
         )
         return result
 
+    except HTTPException:
+        raise
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except ValueError as e:
@@ -250,12 +259,18 @@ async def estimate_normals(request: NormalsRequest) -> PointCloudProcessingResul
                 status_code=404, detail=f"Input file not found: {request.input_path}"
             )
 
+        search_radius = (
+            request.search_radius
+            if request.search_radius is not None
+            else request.radius if request.radius is not None else 0.1
+        )
+
         processor = PointCloudProcessor()
         result = processor.process_file(
             request.input_path,
             request.output_path,
             "normals",
-            search_radius=request.search_radius,
+            search_radius=search_radius,
             max_nn=request.max_nn,
         )
 
@@ -266,6 +281,8 @@ async def estimate_normals(request: NormalsRequest) -> PointCloudProcessingResul
         )
         return result
 
+    except HTTPException:
+        raise
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except ValueError as e:
@@ -336,6 +353,8 @@ async def convert_format(request: ConvertRequest) -> PointCloudProcessingResult:
         )
         return result
 
+    except HTTPException:
+        raise
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except ValueError as e:

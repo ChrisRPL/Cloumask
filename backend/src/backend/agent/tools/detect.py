@@ -12,8 +12,9 @@ Integration points: backend/cv/detection.py, backend/cv/openvocab.py, backend/cv
 from __future__ import annotations
 
 import logging
+import shutil
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from backend.agent.tools.base import (
     BaseTool,
@@ -30,6 +31,14 @@ if TYPE_CHECKING:
     from backend.cv.types import SegmentationResult
 
 logger = logging.getLogger(__name__)
+
+
+def _is_mps_runtime_error(error: Exception) -> bool:
+    """Return True when inference fails due to known Apple MPS runtime issues."""
+    message = str(error).lower()
+    return (
+        "placeholder storage" in message and "mps" in message
+    ) or "mps backend out of memory" in message
 
 
 def _needs_openvocab(classes: list[str] | None, coco_classes: set[str]) -> bool:
@@ -160,6 +169,16 @@ Examples:
             required=False,
             default=True,
         ),
+        ToolParameter(
+            name="output_path",
+            type=str,
+            description=(
+                "Optional output directory for generated YOLO annotations "
+                "(defaults to <input>_detections_yolo)"
+            ),
+            required=False,
+            default=None,
+        ),
     ]
 
     async def execute(
@@ -170,6 +189,7 @@ Examples:
         prefer_accuracy: bool = False,
         quality: bool = False,
         save_annotations: bool = True,
+        output_path: str | None = None,
     ) -> ToolResult:
         """
         Execute object detection using CV models.
@@ -218,17 +238,29 @@ Examples:
             if use_quality:
                 # SAM3 quality mode: detection-via-segmentation
                 return await self._execute_sam3(
-                    image_paths, classes, confidence, save_annotations
+                    image_paths, classes, confidence, save_annotations, input_path, output_path
                 )
             elif use_openvocab:
                 # Open-vocabulary mode: YOLO-World or GroundingDINO
                 return await self._execute_openvocab(
-                    image_paths, classes, confidence, prefer_accuracy, save_annotations
+                    image_paths,
+                    classes,
+                    confidence,
+                    prefer_accuracy,
+                    save_annotations,
+                    input_path,
+                    output_path,
                 )
             else:
                 # Standard COCO mode: YOLO11 or RT-DETR
                 return await self._execute_coco(
-                    image_paths, classes, confidence, prefer_accuracy, save_annotations
+                    image_paths,
+                    classes,
+                    confidence,
+                    prefer_accuracy,
+                    save_annotations,
+                    input_path,
+                    output_path,
                 )
 
         except ImportError as e:
@@ -257,6 +289,8 @@ Examples:
         confidence: float,
         prefer_accuracy: bool,
         save_annotations: bool,
+        input_path: str,
+        output_path: str | None,
     ) -> ToolResult:
         """Execute detection using YOLO11 or RT-DETR for COCO classes."""
         from backend.cv.detection import COCO_CLASSES, get_detector
@@ -278,14 +312,33 @@ Examples:
 
         try:
             # Run detection with progress reporting
-            results = detector.predict_batch(
-                image_paths,
-                progress_callback=lambda curr, total: self.report_progress(
-                    curr, total, f"Detecting in image {curr}/{total}"
-                ),
-                confidence=confidence,
-                classes=classes,
-            )
+            try:
+                results = detector.predict_batch(
+                    image_paths,
+                    progress_callback=lambda curr, total: self.report_progress(
+                        curr, total, f"Detecting in image {curr}/{total}"
+                    ),
+                    confidence=confidence,
+                    classes=classes,
+                )
+            except RuntimeError as e:
+                if not _is_mps_runtime_error(e) or detector.device == "cpu":
+                    raise
+                logger.warning(
+                    "Detection failed on %s with MPS runtime error; retrying on CPU: %s",
+                    detector.device,
+                    e,
+                )
+                detector.unload()
+                detector.load(device="cpu")
+                results = detector.predict_batch(
+                    image_paths,
+                    progress_callback=lambda curr, total: self.report_progress(
+                        curr, total, f"Detecting in image {curr}/{total} (cpu fallback)"
+                    ),
+                    confidence=confidence,
+                    classes=classes,
+                )
 
             # Aggregate results
             total_detections = 0
@@ -300,19 +353,42 @@ Examples:
 
             avg_confidence = total_confidence / total_detections if total_detections > 0 else 0.0
 
+            annotations_path: str | None = None
             if save_annotations:
-                logger.debug("Annotation saving not yet implemented")
+                annotations_root = self._resolve_annotations_output_path(input_path, output_path)
+                records = [
+                    (
+                        result.image_path,
+                        [
+                            {
+                                "class_name": det.class_name,
+                                "bbox": {
+                                    "x": det.bbox.x,
+                                    "y": det.bbox.y,
+                                    "width": det.bbox.width,
+                                    "height": det.bbox.height,
+                                },
+                            }
+                            for det in result.detections
+                        ],
+                    )
+                    for result in results
+                ]
+                annotations_path = self._save_yolo_annotations(records, annotations_root)
 
             return success_result(
                 {
                     "files_processed": len(image_paths),
                     "count": total_detections,
                     "classes": class_counts,
+                    "sample_images": image_paths[:6],
                     "confidence_threshold": confidence,
                     "confidence": round(avg_confidence, 3),
                     "model": detector.info.name,
                     "mode": "coco",
-                    "annotations_saved": False,
+                    "annotations_saved": save_annotations,
+                    "annotations_path": annotations_path,
+                    "annotation_format": "yolo" if annotations_path else None,
                 }
             )
         finally:
@@ -325,6 +401,8 @@ Examples:
         confidence: float,
         prefer_accuracy: bool,
         save_annotations: bool,
+        input_path: str,
+        output_path: str | None,
     ) -> ToolResult:
         """Execute detection using YOLO-World or GroundingDINO for open-vocabulary."""
         from backend.cv.openvocab import get_openvocab_detector
@@ -338,14 +416,33 @@ Examples:
 
         try:
             # Run detection with progress reporting
-            results = detector.predict_batch(
-                image_paths,
-                progress_callback=lambda curr, total: self.report_progress(
-                    curr, total, f"Detecting (open-vocab) {curr}/{total}"
-                ),
-                prompt=prompt,
-                confidence=confidence,
-            )
+            try:
+                results = detector.predict_batch(
+                    image_paths,
+                    progress_callback=lambda curr, total: self.report_progress(
+                        curr, total, f"Detecting (open-vocab) {curr}/{total}"
+                    ),
+                    prompt=prompt,
+                    confidence=confidence,
+                )
+            except RuntimeError as e:
+                if not _is_mps_runtime_error(e) or detector.device == "cpu":
+                    raise
+                logger.warning(
+                    "Open-vocab detection failed on %s with MPS runtime error; retrying on CPU: %s",
+                    detector.device,
+                    e,
+                )
+                detector.unload()
+                detector.load(device="cpu")
+                results = detector.predict_batch(
+                    image_paths,
+                    progress_callback=lambda curr, total: self.report_progress(
+                        curr, total, f"Detecting (open-vocab) {curr}/{total} (cpu fallback)"
+                    ),
+                    prompt=prompt,
+                    confidence=confidence,
+                )
 
             # Aggregate results
             total_detections = 0
@@ -360,20 +457,43 @@ Examples:
 
             avg_confidence = total_confidence / total_detections if total_detections > 0 else 0.0
 
+            annotations_path: str | None = None
             if save_annotations:
-                logger.debug("Annotation saving not yet implemented")
+                annotations_root = self._resolve_annotations_output_path(input_path, output_path)
+                records = [
+                    (
+                        result.image_path,
+                        [
+                            {
+                                "class_name": det.class_name,
+                                "bbox": {
+                                    "x": det.bbox.x,
+                                    "y": det.bbox.y,
+                                    "width": det.bbox.width,
+                                    "height": det.bbox.height,
+                                },
+                            }
+                            for det in result.detections
+                        ],
+                    )
+                    for result in results
+                ]
+                annotations_path = self._save_yolo_annotations(records, annotations_root)
 
             return success_result(
                 {
                     "files_processed": len(image_paths),
                     "count": total_detections,
                     "classes": class_counts,
+                    "sample_images": image_paths[:6],
                     "confidence_threshold": confidence,
                     "confidence": round(avg_confidence, 3),
                     "model": detector.info.name,
                     "mode": "openvocab",
                     "prompt": prompt,
-                    "annotations_saved": False,
+                    "annotations_saved": save_annotations,
+                    "annotations_path": annotations_path,
+                    "annotation_format": "yolo" if annotations_path else None,
                 }
             )
         finally:
@@ -385,6 +505,8 @@ Examples:
         classes: list[str] | None,
         confidence: float,
         save_annotations: bool,
+        input_path: str,
+        output_path: str | None,
     ) -> ToolResult:
         """Execute detection using SAM3 (detection-via-segmentation)."""
         from backend.cv.segmentation import get_segmenter
@@ -401,6 +523,7 @@ Examples:
             class_counts: dict[str, int] = {}
             total_confidence = 0.0
             total = len(image_paths)
+            annotation_records: list[tuple[str, list[dict[str, Any]]]] = []
 
             for i, path in enumerate(image_paths):
                 self.report_progress(i + 1, total, f"Segmenting (SAM3) {i + 1}/{total}")
@@ -411,6 +534,7 @@ Examples:
                 detections, counts = _masks_to_detections(
                     result, classes if classes else ["object"]
                 )
+                annotation_records.append((path, detections))
 
                 total_detections += len(detections)
                 for class_name, count in counts.items():
@@ -420,24 +544,121 @@ Examples:
 
             avg_confidence = total_confidence / total_detections if total_detections > 0 else 0.0
 
+            annotations_path: str | None = None
             if save_annotations:
-                logger.debug("Annotation saving not yet implemented")
+                annotations_root = self._resolve_annotations_output_path(input_path, output_path)
+                annotations_path = self._save_yolo_annotations(annotation_records, annotations_root)
 
             return success_result(
                 {
                     "files_processed": len(image_paths),
                     "count": total_detections,
                     "classes": class_counts,
+                    "sample_images": image_paths[:6],
                     "confidence_threshold": confidence,
                     "confidence": round(avg_confidence, 3),
                     "model": segmenter.info.name,
                     "mode": "sam3",
                     "prompt": prompt,
-                    "annotations_saved": False,
+                    "annotations_saved": save_annotations,
+                    "annotations_path": annotations_path,
+                    "annotation_format": "yolo" if annotations_path else None,
                 }
             )
         finally:
             segmenter.unload()
+
+    def _resolve_annotations_output_path(
+        self,
+        input_path: str,
+        output_path: str | None,
+    ) -> Path:
+        """Resolve where generated YOLO annotations should be written."""
+        if output_path:
+            candidate = Path(output_path)
+            return candidate if not candidate.suffix else candidate.with_suffix("")
+
+        source = Path(input_path)
+        if source.is_file():
+            return source.parent / f"{source.stem}_detections_yolo"
+        return source.parent / f"{source.name}_detections_yolo"
+
+    def _save_yolo_annotations(
+        self,
+        records: list[tuple[str, list[dict[str, Any]]]],
+        output_root: Path,
+    ) -> str:
+        """
+        Save detections as a minimal YOLO dataset.
+
+        Creates:
+        - data.yaml
+        - train/images/*
+        - train/labels/*.txt
+        """
+        import yaml
+
+        if output_root.exists():
+            shutil.rmtree(output_root)
+
+        images_dir = output_root / "train" / "images"
+        labels_dir = output_root / "train" / "labels"
+        images_dir.mkdir(parents=True, exist_ok=True)
+        labels_dir.mkdir(parents=True, exist_ok=True)
+
+        class_names: list[str] = []
+        for _, detections in records:
+            for detection in detections:
+                class_name = str(detection.get("class_name", "object")).strip() or "object"
+                if class_name not in class_names:
+                    class_names.append(class_name)
+
+        if not class_names:
+            class_names = ["object"]
+        class_to_id = {name: idx for idx, name in enumerate(class_names)}
+
+        for index, (image_path, detections) in enumerate(records):
+            source_image = Path(image_path)
+            image_name = f"{index:05d}_{source_image.name}"
+            target_image = images_dir / image_name
+
+            try:
+                target_image.symlink_to(source_image.resolve())
+            except Exception:
+                shutil.copy2(source_image, target_image)
+
+            label_path = labels_dir / f"{Path(image_name).stem}.txt"
+            lines: list[str] = []
+            for detection in detections:
+                class_name = str(detection.get("class_name", "object")).strip() or "object"
+                bbox = detection.get("bbox") or {}
+                x = float(bbox.get("x", 0.0))
+                y = float(bbox.get("y", 0.0))
+                w = float(bbox.get("width", 0.0))
+                h = float(bbox.get("height", 0.0))
+
+                x = max(0.0, min(1.0, x))
+                y = max(0.0, min(1.0, y))
+                w = max(0.0, min(1.0, w))
+                h = max(0.0, min(1.0, h))
+
+                lines.append(f"{class_to_id[class_name]} {x:.6f} {y:.6f} {w:.6f} {h:.6f}")
+
+            label_path.write_text("\n".join(lines), encoding="utf-8")
+
+        data_yaml = {
+            "path": str(output_root),
+            "train": "train/images",
+            "val": "train/images",
+            "test": "train/images",
+            "names": class_names,
+        }
+        (output_root / "data.yaml").write_text(
+            yaml.safe_dump(data_yaml, sort_keys=False),
+            encoding="utf-8",
+        )
+
+        return str(output_root)
 
     def _collect_image_files(self, path: Path) -> list[str]:
         """

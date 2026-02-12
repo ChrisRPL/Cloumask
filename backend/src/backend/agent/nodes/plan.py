@@ -96,18 +96,22 @@ def build_rule_based_plan(understanding: dict[str, Any]) -> list[dict[str, Any]]
             operations.append("export")
 
     working_path = input_path
+    detection_annotations_path: str | None = None
 
     if "detect" in operations:
         classes = _normalize_classes(parameters.get("classes"))
         if not classes:
             classes = ["person", "car"]
         confidence = float(parameters.get("confidence", 0.5))
+        detection_annotations_path = f"{working_path}_detections_yolo"
         plan.append({
             "tool_name": "detect",
             "parameters": {
                 "input_path": working_path,
                 "classes": classes,
                 "confidence": confidence,
+                "save_annotations": True,
+                "output_path": detection_annotations_path,
             },
             "description": "Detect target objects in the input dataset",
         })
@@ -140,13 +144,17 @@ def build_rule_based_plan(understanding: dict[str, Any]) -> list[dict[str, Any]]
     if "export" in operations:
         output_format = str(parameters.get("output_format") or parameters.get("format") or "yolo")
         export_output = str(output_path or f"{working_path}_{output_format}")
+        export_source = detection_annotations_path or working_path
+        export_parameters: dict[str, Any] = {
+            "source_path": export_source,
+            "output_path": export_output,
+            "output_format": output_format,
+        }
+        if detection_annotations_path:
+            export_parameters["source_format"] = "yolo"
         plan.append({
             "tool_name": "export",
-            "parameters": {
-                "source_path": working_path,
-                "output_path": export_output,
-                "output_format": output_format,
-            },
+            "parameters": export_parameters,
             "description": f"Export annotations in {output_format.upper()} format",
         })
 

@@ -127,11 +127,11 @@ MODEL_REGISTRY: dict[str, ModelRegistryEntry] = {
     ),
     "sam3": ModelRegistryEntry(
         name="sam3",
-        source=ModelSource.ULTRALYTICS,
+        source=ModelSource.HUGGINGFACE,
+        repo_id="facebook/sam3",
         filename="sam3.pt",
         size_mb=3500,
-        requires_auth=True,  # Gated model - requires HF approval
-        extra={"hf_model_id": "facebook/sam3-hiera-large"},
+        requires_auth=False,
     ),
     "sam2": ModelRegistryEntry(
         name="sam2",
