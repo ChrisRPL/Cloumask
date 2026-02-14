@@ -26,6 +26,54 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _as_positive_int(value: Any) -> int | None:
+    """Best-effort conversion of model metadata values to positive ints."""
+    try:
+        coerced = int(value)
+    except (TypeError, ValueError):
+        return None
+    return coerced if coerced > 0 else None
+
+
+def _extract_model_stride(model: Any) -> int | None:
+    """Extract stride from ultralytics model internals when available."""
+    stride_candidate = getattr(model, "stride", None)
+    if stride_candidate is None:
+        inner = getattr(model, "model", None)
+        stride_candidate = getattr(inner, "stride", None) if inner is not None else None
+
+    if stride_candidate is None:
+        return None
+
+    if hasattr(stride_candidate, "max"):
+        try:
+            max_value = stride_candidate.max()
+            if hasattr(max_value, "item"):
+                max_value = max_value.item()
+            return _as_positive_int(max_value)
+        except Exception:
+            pass
+
+    if isinstance(stride_candidate, (list, tuple)):
+        values = [_as_positive_int(v) for v in stride_candidate]
+        values = [v for v in values if v is not None]
+        return max(values) if values else None
+
+    return _as_positive_int(stride_candidate)
+
+
+def _resolve_aligned_imgsz(model: Any, base: int = 640) -> int:
+    """
+    Resolve an image size aligned to model stride.
+
+    Prevents repetitive Ultralytics warnings such as:
+    "imgsz=[640] must be multiple of max stride 14..."
+    """
+    stride = _extract_model_stride(model) or 32
+    base_size = _as_positive_int(base) or 640
+    return ((base_size + stride - 1) // stride) * stride
+
+
 def _parse_prompt(prompt: str) -> list[str]:
     """
     Parse comma-separated prompt into list of class names.
@@ -113,6 +161,7 @@ class YOLOWorldWrapper(BaseModelWrapper[DetectionResult]):
         super().__init__()
         self._yoloworld: YOLOWorld | None = None
         self._current_classes: list[str] = []
+        self._imgsz: int = 640
 
     def _load_model(self, device: str) -> None:
         """
@@ -141,6 +190,8 @@ class YOLOWorldWrapper(BaseModelWrapper[DetectionResult]):
                 logger.warning("CUDA requested but not available, using CPU")
                 device = "cpu"
 
+        self._imgsz = _resolve_aligned_imgsz(self._yoloworld)
+
         # Warm up model for consistent inference times
         self._warmup(device)
 
@@ -160,9 +211,14 @@ class YOLOWorldWrapper(BaseModelWrapper[DetectionResult]):
         self._yoloworld.set_classes(["object"])  # type: ignore[union-attr]
         self._current_classes = ["object"]
 
-        # Create dummy image tensor (640x640 RGB)
-        dummy = np.zeros((640, 640, 3), dtype=np.uint8)
-        self._yoloworld.predict(dummy, verbose=False, device=device)  # type: ignore[union-attr]
+        # Create dummy image tensor (aligned to model stride)
+        dummy = np.zeros((self._imgsz, self._imgsz, 3), dtype=np.uint8)
+        self._yoloworld.predict(  # type: ignore[union-attr]
+            dummy,
+            verbose=False,
+            device=device,
+            imgsz=self._imgsz,
+        )
 
         logger.debug("YOLO-World warmed up on %s", device)
 
@@ -227,6 +283,7 @@ class YOLOWorldWrapper(BaseModelWrapper[DetectionResult]):
             conf=confidence,
             iou=iou_threshold,
             device=self._device,
+            imgsz=self._imgsz,
             verbose=False,
         )
         elapsed_ms = (time.perf_counter() - start) * 1000
@@ -292,6 +349,7 @@ class YOLOWorldWrapper(BaseModelWrapper[DetectionResult]):
                 conf=confidence,
                 iou=iou_threshold,
                 device=self._device,
+                imgsz=self._imgsz,
                 verbose=False,
             )
             batch_time = (time.perf_counter() - start) * 1000

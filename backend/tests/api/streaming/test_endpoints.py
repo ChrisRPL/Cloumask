@@ -40,12 +40,12 @@ class TestCreateThread:
 
     def test_create_thread_returns_200(self, client: TestClient) -> None:
         """Create thread endpoint should return 200."""
-        response = client.post("/api/chat/thread/new")
+        response = client.post("/api/chat/threads")
         assert response.status_code == 200
 
     def test_create_thread_returns_thread_id(self, client: TestClient) -> None:
         """Create thread should return a thread_id."""
-        response = client.post("/api/chat/thread/new")
+        response = client.post("/api/chat/threads")
         data = response.json()
 
         assert "thread_id" in data
@@ -53,7 +53,7 @@ class TestCreateThread:
 
     def test_create_thread_marks_created(self, client: TestClient) -> None:
         """Create thread should mark created=True."""
-        response = client.post("/api/chat/thread/new")
+        response = client.post("/api/chat/threads")
         data = response.json()
 
         assert data["created"] is True
@@ -64,17 +64,17 @@ class TestGetThreadInfo:
 
     def test_get_thread_not_found(self, client: TestClient) -> None:
         """Get thread info should return 404 for unknown thread."""
-        response = client.get("/api/chat/thread/unknown-id")
+        response = client.get("/api/chat/threads/unknown-id")
         assert response.status_code == 404
 
     def test_get_thread_info(self, client: TestClient) -> None:
         """Get thread info should return thread state."""
         # First create a thread
-        create_response = client.post("/api/chat/thread/new")
+        create_response = client.post("/api/chat/threads")
         thread_id = create_response.json()["thread_id"]
 
         # Then get info
-        response = client.get(f"/api/chat/thread/{thread_id}")
+        response = client.get(f"/api/chat/threads/{thread_id}")
         data = response.json()
 
         assert response.status_code == 200
@@ -88,11 +88,11 @@ class TestCloseThread:
     def test_close_thread(self, client: TestClient) -> None:
         """Close thread should cleanup resources."""
         # Create thread
-        create_response = client.post("/api/chat/thread/new")
+        create_response = client.post("/api/chat/threads")
         thread_id = create_response.json()["thread_id"]
 
         # Close it
-        response = client.delete(f"/api/chat/thread/{thread_id}")
+        response = client.delete(f"/api/chat/threads/{thread_id}")
         data = response.json()
 
         assert response.status_code == 200
@@ -101,18 +101,18 @@ class TestCloseThread:
 
     def test_close_thread_removes_from_queues(self, client: TestClient) -> None:
         """Closing thread should remove it from event queues."""
-        create_response = client.post("/api/chat/thread/new")
+        create_response = client.post("/api/chat/threads")
         thread_id = create_response.json()["thread_id"]
 
         assert thread_id in _event_queues
 
-        client.delete(f"/api/chat/thread/{thread_id}")
+        client.delete(f"/api/chat/threads/{thread_id}")
 
         assert thread_id not in _event_queues
 
     def test_close_nonexistent_thread(self, client: TestClient) -> None:
         """Closing nonexistent thread should succeed silently."""
-        response = client.delete("/api/chat/thread/nonexistent-id")
+        response = client.delete("/api/chat/threads/nonexistent-id")
         assert response.status_code == 200
 
 
@@ -122,7 +122,7 @@ class TestSendMessage:
     def test_send_message_returns_queued(self, client: TestClient) -> None:
         """Send message should return queued status."""
         # Create thread first
-        create_response = client.post("/api/chat/thread/new")
+        create_response = client.post("/api/chat/threads")
         thread_id = create_response.json()["thread_id"]
 
         # Send message
@@ -138,7 +138,7 @@ class TestSendMessage:
 
     def test_send_message_returns_message_id(self, client: TestClient) -> None:
         """Send message should return a message_id."""
-        create_response = client.post("/api/chat/thread/new")
+        create_response = client.post("/api/chat/threads")
         thread_id = create_response.json()["thread_id"]
 
         response = client.post(
@@ -152,7 +152,7 @@ class TestSendMessage:
 
     def test_send_message_with_decision(self, client: TestClient) -> None:
         """Send message should accept optional decision."""
-        create_response = client.post("/api/chat/thread/new")
+        create_response = client.post("/api/chat/threads")
         thread_id = create_response.json()["thread_id"]
 
         response = client.post(
@@ -172,7 +172,7 @@ class TestSendMessage:
 
     def test_send_message_empty_content_rejected(self, client: TestClient) -> None:
         """Send message should reject empty content."""
-        create_response = client.post("/api/chat/thread/new")
+        create_response = client.post("/api/chat/threads")
         thread_id = create_response.json()["thread_id"]
 
         response = client.post(
@@ -183,7 +183,7 @@ class TestSendMessage:
 
     def test_send_message_whitespace_content_rejected(self, client: TestClient) -> None:
         """Send message should reject whitespace-only content."""
-        create_response = client.post("/api/chat/thread/new")
+        create_response = client.post("/api/chat/threads")
         thread_id = create_response.json()["thread_id"]
 
         response = client.post(
@@ -199,7 +199,7 @@ class TestSSEStream:
     def test_sse_endpoint_exists(self, client: TestClient) -> None:
         """SSE endpoint should be defined and accessible."""
         # Create thread first
-        create_response = client.post("/api/chat/thread/new")
+        create_response = client.post("/api/chat/threads")
         thread_id = create_response.json()["thread_id"]
 
         # Just verify the endpoint is accessible
@@ -212,7 +212,7 @@ class TestSSEStream:
         assert "/api/chat/stream/{thread_id}" in route_paths
 
         # Cleanup
-        client.delete(f"/api/chat/thread/{thread_id}")
+        client.delete(f"/api/chat/threads/{thread_id}")
 
 
 class TestSanitizeErrorMessage:
@@ -560,7 +560,8 @@ class TestStateToEventsDeduplication:
         # First call should emit plan approved message
         events1 = state_to_events(state, "test-thread", thread)
         msg_events1 = [
-            e for e in events1
+            e
+            for e in events1
             if e.type == SSEEventType.MESSAGE and "approved" in e.data.get("content", "").lower()
         ]
         assert len(msg_events1) == 1
@@ -568,7 +569,8 @@ class TestStateToEventsDeduplication:
         # Second call should not emit plan approved again
         events2 = state_to_events(state, "test-thread", thread)
         msg_events2 = [
-            e for e in events2
+            e
+            for e in events2
             if e.type == SSEEventType.MESSAGE and "approved" in e.data.get("content", "").lower()
         ]
         assert len(msg_events2) == 0
@@ -594,6 +596,7 @@ class TestThreadState:
         initial_activity = thread.last_activity
 
         import time
+
         time.sleep(0.01)
         thread.touch()
 
@@ -608,6 +611,7 @@ class TestThreadState:
 
         # Manually set old timestamp
         import time
+
         thread.last_activity = time.time() - 7200  # 2 hours ago
 
         assert thread.is_expired()
