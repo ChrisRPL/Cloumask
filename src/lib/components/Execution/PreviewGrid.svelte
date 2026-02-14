@@ -9,6 +9,7 @@
 	import { getExecutionState } from '$lib/stores/execution.svelte';
 	import { convertFileSrc } from '@tauri-apps/api/core';
 	import { isTauri } from '$lib/utils/tauri';
+	import { toLocalImageUrl } from '$lib/utils/local-image';
 	import PreviewThumbnail from './PreviewThumbnail.svelte';
 	import { ImageIcon, Loader2 } from '@lucide/svelte';
 
@@ -27,7 +28,7 @@
 			thumbnailUrl:
 				isDesktopTauri && safeConvertFileSrc
 					? safeConvertFileSrc(preview.thumbnailUrl)
-					: preview.thumbnailUrl
+					: toLocalImageUrl(preview.thumbnailUrl)
 		}))
 	);
 

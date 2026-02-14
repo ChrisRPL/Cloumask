@@ -8,10 +8,19 @@
 	import { cn } from '$lib/utils.js';
 	import { getAgentState } from '$lib/stores/agent.svelte';
 	import { ScrollArea } from '$lib/components/ui/scroll-area';
+	import { marked } from 'marked';
+	import DOMPurify from 'dompurify';
 
 	let { class: className }: CommentaryStreamProps = $props();
 
 	const agent = getAgentState();
+
+	marked.use({ breaks: true, gfm: true });
+
+	function renderMarkdown(text: string): string {
+		const raw = marked.parse(text, { async: false }) as string;
+		return DOMPurify.sanitize(raw);
+	}
 
 	// Filter to only show assistant messages
 	const commentaryMessages = $derived(
@@ -45,9 +54,9 @@
 				</div>
 			{:else}
 				{#each commentaryMessages as msg (msg.id)}
-					<div class="text-sm text-muted-foreground font-mono animate-fade-in">
-						<span class="text-forest-light">&gt;</span>
-						<span class="ml-1">{msg.content}</span>
+					<div class="text-sm text-muted-foreground animate-fade-in commentary-msg">
+						<span class="text-forest-light font-mono">&gt;</span>
+						<span class="ml-1">{@html renderMarkdown(msg.content)}</span>
 					</div>
 				{/each}
 			{/if}

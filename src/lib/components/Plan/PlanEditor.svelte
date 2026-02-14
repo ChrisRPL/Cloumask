@@ -12,6 +12,7 @@
 	import { untrack } from 'svelte';
 	import { getPipelineState } from '$lib/stores/pipeline.svelte';
 	import { getAgentState } from '$lib/stores/agent.svelte';
+	import { getExecutionState } from '$lib/stores/execution.svelte';
 	import { getUIState } from '$lib/stores/ui.svelte';
 	import { getKeyboardState } from '$lib/stores/keyboard.svelte';
 	import { sendMessage } from '$lib/utils/tauri';
@@ -32,6 +33,7 @@
 	// Get stores from context
 	const pipeline = getPipelineState();
 	const agent = getAgentState();
+	const execution = getExecutionState();
 	const ui = getUIState();
 	const keyboard = getKeyboardState();
 
@@ -114,6 +116,10 @@
 		if (!agent.threadId || !canStart) return;
 
 		try {
+			// Reset execution UI state before backend events arrive.
+			execution.start();
+			execution.setCurrentStep(null);
+
 			// Send approval with any edits
 			const planEdits = pipeline.sortedSteps.map((step) => toBackendPlanStep(step));
 			await sendMessage(agent.threadId, {

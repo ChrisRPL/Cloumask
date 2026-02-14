@@ -169,7 +169,8 @@ export function createAgentState(): AgentState {
 
     // Conversation management
     startNewConversation() {
-      threadId = generateId();
+      // Backend owns thread IDs; clear local ID so caller can create one.
+      threadId = null;
       messages = [];
       phase = "idle";
       isStreaming = false;

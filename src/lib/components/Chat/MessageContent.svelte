@@ -1,6 +1,8 @@
 <script lang="ts" module>
 	import { cn } from '$lib/utils.js';
 	import type { MessageRole } from '$lib/types/agent';
+	import { marked } from 'marked';
+	import DOMPurify from 'dompurify';
 
 	export interface MessageContentProps {
 		messageId?: string;
@@ -23,6 +25,16 @@
 	let renderedContent = $state('');
 	let isAnimating = $state(false);
 	let animatedMessageId = $state<string | null>(null);
+
+	// Configure marked for inline rendering (no wrapping <p> tags)
+	marked.use({ breaks: true, gfm: true });
+
+	// Parse markdown reactively from renderedContent
+	const htmlContent = $derived.by(() => {
+		if (!renderedContent || role === 'tool') return renderedContent;
+		const raw = marked.parse(renderedContent, { async: false }) as string;
+		return DOMPurify.sanitize(raw);
+	});
 
 	function shouldAnimateMessage(text: string): boolean {
 		// Skip very large payloads to keep UI responsive.
@@ -87,7 +99,11 @@
 		className
 	)}
 >
-	{renderedContent}
+	{#if role === 'tool'}
+		{renderedContent}
+	{:else}
+		{@html htmlContent}
+	{/if}
 	{#if isStreaming || isAnimating}
 		<span class="animate-blink text-forest-light ml-0.5">|</span>
 	{/if}
@@ -107,5 +123,41 @@
 
 	.animate-blink {
 		animation: blink 1s step-end infinite;
+	}
+
+	/* Markdown content styling */
+	div :global(p) {
+		margin: 0.25em 0;
+	}
+	div :global(p:first-child) {
+		margin-top: 0;
+	}
+	div :global(p:last-child) {
+		margin-bottom: 0;
+	}
+	div :global(code) {
+		font-size: 0.85em;
+		background: var(--muted);
+		padding: 0.15em 0.35em;
+		border-radius: 0.25em;
+		font-family: 'JetBrains Mono', 'Fira Code', monospace;
+	}
+	div :global(pre) {
+		background: var(--muted);
+		padding: 0.75em;
+		border-radius: 0.5em;
+		overflow-x: auto;
+		margin: 0.5em 0;
+	}
+	div :global(pre code) {
+		background: none;
+		padding: 0;
+	}
+	div :global(ul), div :global(ol) {
+		padding-left: 1.5em;
+		margin: 0.25em 0;
+	}
+	div :global(strong) {
+		font-weight: 600;
 	}
 </style>

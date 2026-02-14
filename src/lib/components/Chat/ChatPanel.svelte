@@ -11,10 +11,12 @@
 	import { getAgentState } from '$lib/stores/agent.svelte';
 	import { getSSEState } from '$lib/stores/sse.svelte';
 	import { getPipelineState } from '$lib/stores/pipeline.svelte';
+	import { getExecutionState } from '$lib/stores/execution.svelte';
 	import { getUIState } from '$lib/stores/ui.svelte';
 	import {
 		createThread,
 		sendMessage,
+		closeThread,
 		checkLLMReady,
 		ensureLLMReady,
 		pullLLMModelWithProgress,
@@ -40,6 +42,7 @@
 	const agent = getAgentState();
 	const sse = getSSEState();
 	const pipeline = getPipelineState();
+	const execution = getExecutionState();
 	const ui = getUIState();
 	const isInTauri = isTauri();
 
@@ -281,6 +284,13 @@
 	// Handle clarification response
 	async function handleClarificationSubmit(response: { decision: UserDecision; selected?: string[] }) {
 		if (!agent.threadId || !agent.pendingClarification) return;
+		const clarification = agent.pendingClarification;
+
+		if (clarification.inputType === 'plan_approval' && response.decision === 'approve') {
+			// Ensure execution UI leaves any stale complete/idle state immediately.
+			execution.start();
+			execution.setCurrentStep(null);
+		}
 
 		// Clear clarification
 		agent.setClarification(null);
@@ -311,11 +321,19 @@
 	}
 
 	// Clear conversation
-	function handleClear() {
+	async function handleClear() {
+		const previousThreadId = agent.threadId;
 		agent.startNewConversation();
 		pipeline.clearPipeline();
+		if (previousThreadId) {
+			try {
+				await closeThread(previousThreadId);
+			} catch (error) {
+				console.warn('[ChatPanel] Failed to close previous thread:', error);
+			}
+		}
 		// Reconnect with new thread
-		initializeChat();
+		await initializeChat();
 	}
 
 	// Navigate to plan editor

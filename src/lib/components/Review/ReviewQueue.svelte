@@ -7,12 +7,14 @@
 </script>
 
 <script lang="ts">
-import { onDestroy, untrack } from 'svelte';
+	import { onDestroy, untrack } from 'svelte';
 	import { convertFileSrc } from '@tauri-apps/api/core';
 	import { cn } from '$lib/utils.js';
+	import { toLocalImageUrl } from '$lib/utils/local-image';
 	import { isTauri } from '$lib/utils/tauri';
 	import { getReviewState } from '$lib/stores/review.svelte.js';
 	import { getKeyboardState } from '$lib/stores/keyboard.svelte.js';
+	import { getExecutionState } from '$lib/stores/execution.svelte.js';
 	import type { Annotation, ReviewItem, ReviewStatus } from '$lib/types/review';
 
 	// Components
@@ -110,6 +112,7 @@ import { onDestroy, untrack } from 'svelte';
 	// Review state from context
 	const reviewState = getReviewState();
 	const keyboard = getKeyboardState();
+	const execution = getExecutionState();
 
 	// Local UI state
 	let isEditMode = $state(false);
@@ -142,8 +145,8 @@ import { onDestroy, untrack } from 'svelte';
 		if (isDesktopTauri && safeConvertFileSrc) {
 			return safeConvertFileSrc(currentItem.filePath);
 		}
-		// Browser mode fallback: render the generated thumbnail data URL.
-		return currentItem.thumbnailUrl;
+		// Browser mode: route local files through backend image endpoint.
+		return toLocalImageUrl(currentItem.filePath || currentItem.thumbnailUrl);
 	});
 
 	// Keep selection valid when filters hide the current item.
@@ -707,6 +710,39 @@ import { onDestroy, untrack } from 'svelte';
 		lastLoadedExecutionId = execId;
 		void loadReviewItems();
 	});
+
+	// Polling: Auto-refresh items during active execution
+	let pollInterval: ReturnType<typeof setInterval> | null = null;
+	
+	$effect(() => {
+		// Clean up any existing interval
+		if (pollInterval) {
+			clearInterval(pollInterval);
+			pollInterval = null;
+		}
+		
+		// Start polling if execution is running
+		if (execution.isRunning) {
+			pollInterval = setInterval(() => {
+				void loadReviewItems();
+			}, 5000); // Poll every 5 seconds
+		}
+		
+		// Cleanup function
+		return () => {
+			if (pollInterval) {
+				clearInterval(pollInterval);
+				pollInterval = null;
+			}
+		};
+	});
+	
+	// Also reload when execution completes
+	$effect(() => {
+		if (execution.status === 'completed' || execution.status === 'failed') {
+			void loadReviewItems();
+		}
+	});
 </script>
 
 <div
@@ -767,6 +803,7 @@ import { onDestroy, untrack } from 'svelte';
 							{selectedAnnotationId}
 							{isEditMode}
 							drawingTool={drawingTool === 'select' ? 'rectangle' : drawingTool}
+							{zoom}
 							onAnnotationCreate={handleAnnotationCreate}
 							onAnnotationUpdate={handleAnnotationUpdate}
 							onAnnotationDelete={handleAnnotationDelete}
