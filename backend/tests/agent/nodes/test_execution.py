@@ -558,6 +558,101 @@ class TestExecuteStepNode:
         assert result["execution_results"]["step-1"]["classes"] == ["person", "car", "bus"]
 
     @pytest.mark.asyncio
+    async def test_export_uses_previous_annotations_when_source_is_unlabeled(
+        self,
+        tmp_path,
+    ) -> None:
+        """Export step should auto-resolve to latest annotations artifact."""
+        from backend.agent.tools import BaseTool, ToolCategory, ToolParameter, ToolResult
+
+        class ExportLikeTool(BaseTool):
+            name = "export"
+            description = "Capture export kwargs"
+            category = ToolCategory.EXPORT
+            parameters = [
+                ToolParameter(
+                    name="source_path",
+                    type=str,
+                    description="Source path",
+                    required=True,
+                ),
+                ToolParameter(
+                    name="output_path",
+                    type=str,
+                    description="Output path",
+                    required=True,
+                ),
+                ToolParameter(
+                    name="output_format",
+                    type=str,
+                    description="Output format",
+                    required=True,
+                ),
+                ToolParameter(
+                    name="source_format",
+                    type=str,
+                    description="Optional source format",
+                    required=False,
+                    default=None,
+                ),
+            ]
+
+            async def execute(self, **kwargs: Any) -> ToolResult:
+                return ToolResult(success=True, data=kwargs)
+
+        raw_images = tmp_path / "raw_images"
+        raw_images.mkdir()
+        (raw_images / "sample.jpg").write_bytes(b"fake")
+
+        annotations_root = tmp_path / "detections_yolo"
+        annotations_root.mkdir()
+        (annotations_root / "data.yaml").write_text(
+            "path: .\ntrain: train/images\nval: train/images\nnames:\n  - person\n",
+            encoding="utf-8",
+        )
+
+        state: PipelineState = {
+            "messages": [],
+            "plan": [
+                {
+                    "id": "step-2",
+                    "tool_name": "export",
+                    "parameters": {
+                        "source_path": str(raw_images),
+                        "output_path": str(tmp_path / "exports"),
+                        "output_format": "yolo",
+                    },
+                    "description": "Export labels",
+                    "status": StepStatus.PENDING.value,
+                    "result": None,
+                    "error": None,
+                    "started_at": None,
+                    "completed_at": None,
+                }
+            ],
+            "plan_approved": True,
+            "current_step": 0,
+            "execution_results": {
+                "step-1": {
+                    "annotations_path": str(annotations_root),
+                    "annotation_format": "yolo",
+                }
+            },
+            "checkpoints": [],
+            "awaiting_user": False,
+            "metadata": {},
+            "last_error": None,
+            "retry_count": 0,
+        }
+
+        get_tool_registry().register(ExportLikeTool())
+        result = await execute_step_node(state)
+
+        export_args = result["execution_results"]["step-2"]
+        assert export_args["source_path"] == str(annotations_root)
+        assert export_args["source_format"] == "yolo"
+
+    @pytest.mark.asyncio
     async def test_retry_on_transient_error(self, base_state: PipelineState) -> None:
         """Should retry on transient errors."""
         from backend.agent.tools import BaseTool, ToolCategory, ToolResult

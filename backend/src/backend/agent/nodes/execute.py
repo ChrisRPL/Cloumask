@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from backend.agent.state import MessageRole, PipelineState, StepStatus
@@ -23,6 +24,7 @@ from backend.agent.tools import (
     get_tool_registry,
     success_result,
 )
+from backend.data.formats import detect_format
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -43,6 +45,78 @@ def _coerce_parameter_value(param: ToolParameter, value: Any) -> Any:
         if isinstance(value, tuple | set):
             return list(value)
     return value
+
+
+def _get_latest_dataset_artifact(execution_results: dict[str, Any]) -> tuple[str | None, str | None]:
+    """Get the latest dataset-like path emitted by previous tool steps."""
+    for result in reversed(list(execution_results.values())):
+        if not isinstance(result, dict):
+            continue
+
+        annotations_path = result.get("annotations_path")
+        if isinstance(annotations_path, str) and annotations_path.strip():
+            annotation_format = result.get("annotation_format")
+            return annotations_path, str(annotation_format) if annotation_format else None
+
+        output_path = result.get("output_path")
+        if isinstance(output_path, str) and output_path.strip():
+            output_format = result.get("output_format") or result.get("format")
+            return output_path, str(output_format) if output_format else None
+
+    return None, None
+
+
+def _resolve_export_parameters(
+    parameters: dict[str, Any],
+    execution_results: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    Resolve missing/invalid export source details from prior step outputs.
+
+    This keeps execution resilient when planner output references raw image directories
+    while a preceding detection step has already produced a labeled dataset.
+    """
+    resolved = dict(parameters)
+    source_path_value = resolved.get("source_path")
+    source_format_value = resolved.get("source_format")
+    source_dir: Path | None = None
+
+    if isinstance(source_path_value, str) and source_path_value.strip():
+        source_dir = Path(source_path_value).expanduser()
+
+    detected_source_format: str | None = None
+    source_is_existing_dir = bool(source_dir and source_dir.exists() and source_dir.is_dir())
+    if source_is_existing_dir and not source_format_value:
+        detected_source_format = detect_format(source_dir)
+        if detected_source_format:
+            resolved["source_format"] = detected_source_format
+
+    if source_is_existing_dir and (source_format_value or detected_source_format):
+        return resolved
+
+    artifact_path, artifact_format = _get_latest_dataset_artifact(execution_results)
+    if not artifact_path:
+        return resolved
+
+    artifact_dir = Path(artifact_path).expanduser()
+    if not artifact_dir.exists() or not artifact_dir.is_dir():
+        return resolved
+
+    resolved["source_path"] = str(artifact_dir)
+    if not source_format_value:
+        if artifact_format:
+            resolved["source_format"] = artifact_format
+        else:
+            detected_artifact_format = detect_format(artifact_dir)
+            if detected_artifact_format:
+                resolved["source_format"] = detected_artifact_format
+
+    logger.info(
+        "Resolved export source to previous artifact: %s (format=%s)",
+        resolved.get("source_path"),
+        resolved.get("source_format"),
+    )
+    return resolved
 
 
 # -----------------------------------------------------------------------------
@@ -414,6 +488,9 @@ async def execute_step_node(state: PipelineState) -> dict[str, Any]:
                 ", ".join(sorted(dropped_parameters)),
             )
         parameters = filtered_parameters
+
+    if tool_name == "export":
+        parameters = _resolve_export_parameters(parameters, execution_results)
 
     # Mark step as running
     step["status"] = StepStatus.RUNNING.value

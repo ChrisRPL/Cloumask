@@ -94,6 +94,20 @@ Split an annotated dataset into train/val/test subsets and export each split
   - `copy_images` (bool, optional): Copy images into split outputs (default: true)
   - `overwrite` (bool, optional): Allow non-empty split output directories (default: true)
 
+### run_script
+Execute a custom processing script on the data
+- **Parameters:**
+  - `input_path` (str, required): Path to input data
+  - `output_path` (str, optional): Path for output data
+  - `script` (str, optional): Path to script file
+  - `command` (str, optional): Shell command to execute
+
+### review
+Queue processed results for manual human review in the Review Queue
+- **Parameters:**
+  - `source_path` (str, required): Path to annotations/detections to review
+  - `image_dir` (str, required): Path to the original images
+
 ### pointcloud_stats
 Get metadata and statistics for a point cloud file
 - **Parameters:**
