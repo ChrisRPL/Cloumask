@@ -226,7 +226,12 @@ class TestValidatePlan:
                 params = {"path": "/data/dataset", "generate_report": True}
             elif tool == "split_dataset":
                 params = {"path": "/data/source", "output_path": "/data/split"}
+            elif tool == "run_script":
+                params = {"input_path": "/data"}
+            elif tool == "review":
+                params = {"source_path": "/data/detections", "image_dir": "/data/images"}
             else:
+                # Point cloud tools and others — skip specific validation
                 continue
 
             plan = [{"tool_name": tool, "parameters": params}]
@@ -488,6 +493,60 @@ class TestUnderstandNode:
         assert set(params["classes"]) == {"car", "person"}
         assert params["target"] == "faces"
 
+    @pytest.mark.asyncio
+    async def test_fast_path_strips_trailing_path_punctuation(self) -> None:
+        """Fast-path path extraction should ignore sentence punctuation."""
+        state = _state_with_message("detect cars and people in /tmp/images.")
+
+        with patch("backend.agent.nodes.understand.get_llm") as mock_get_llm:
+            result = await understand(state)
+            mock_get_llm.assert_not_called()
+
+        understanding = result["metadata"]["understanding"]
+        assert understanding["input_path"] == "/tmp/images"
+
+    @pytest.mark.asyncio
+    async def test_fast_path_supports_unquoted_paths_with_spaces(self) -> None:
+        """Fast-path should capture common unquoted absolute paths with spaces."""
+        state = _state_with_message(
+            "detect people in /Users/krzysztof/Documents/data images and export yolo"
+        )
+
+        with patch("backend.agent.nodes.understand.get_llm") as mock_get_llm:
+            result = await understand(state)
+            mock_get_llm.assert_not_called()
+
+        understanding = result["metadata"]["understanding"]
+        assert understanding["input_path"] == "/Users/krzysztof/Documents/data images"
+
+    @pytest.mark.asyncio
+    async def test_fast_path_stops_path_before_operation_keywords(self) -> None:
+        """Path extraction should stop before operation words after spaced paths."""
+        state = _state_with_message(
+            "detect people in /Users/krzysztof/Documents/data images anonymize only faces and export yolo"
+        )
+
+        with patch("backend.agent.nodes.understand.get_llm") as mock_get_llm:
+            result = await understand(state)
+            mock_get_llm.assert_not_called()
+
+        understanding = result["metadata"]["understanding"]
+        assert understanding["input_path"] == "/Users/krzysztof/Documents/data images"
+
+    @pytest.mark.asyncio
+    async def test_fast_path_stops_after_sentence_punctuation(self) -> None:
+        """Path extraction should not append words after punctuation-delimited paths."""
+        state = _state_with_message(
+            "Use /Users/krzysztof/Documents/data. Create a plan to detect cars."
+        )
+
+        with patch("backend.agent.nodes.understand.get_llm") as mock_get_llm:
+            result = await understand(state)
+            mock_get_llm.assert_not_called()
+
+        understanding = result["metadata"]["understanding"]
+        assert understanding["input_path"] == "/Users/krzysztof/Documents/data"
+
 
 # -----------------------------------------------------------------------------
 # generate_plan() tests (mocked LLM)
@@ -745,5 +804,13 @@ class TestEdgeCases:
             "find_duplicates",
             "label_qa",
             "split_dataset",
+            "run_script",
+            "review",
+            "pointcloud_stats",
+            "process_pointcloud",
+            "detect_3d",
+            "project_3d_to_2d",
+            "anonymize_pointcloud",
+            "extract_rosbag",
         }
         assert expected == VALID_TOOLS

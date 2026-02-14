@@ -23,29 +23,187 @@ from backend.api.config import settings
 logger = logging.getLogger(__name__)
 
 # Maximum retries for LLM calls
-MAX_RETRIES = 1
+MAX_RETRIES = 2
 FAST_LLM_TIMEOUT_SECONDS = 45
 FAST_LLM_CONTEXT_TOKENS = 4096
 
 PATH_PATTERN = re.compile(r"(/[\w\-.~/]+|~[/\w\-.]+|[A-Za-z]:\\[^\s]+)")
+TRAILING_PATH_PUNCTUATION = ".,;:!?)]}\"'"
+TRAILING_PATH_STOPWORDS = {
+    "and",
+    "then",
+    "with",
+    "to",
+    "from",
+    "for",
+    "in",
+    "on",
+    "using",
+    "please",
+    "folder",
+    "directory",
+    "dataset",
+    "project",
+    "file",
+    "files",
+    "create",
+    "detect",
+    "detecting",
+    "segment",
+    "segmentation",
+    "anonymize",
+    "anonymise",
+    "blur",
+    "export",
+    "convert",
+    "save",
+    "label",
+    "annotate",
+    "classify",
+    "review",
+    "execute",
+    "run",
+    "use",
+    "model",
+    "only",
+    "results",
+    # Class names commonly mentioned after paths
+    "person",
+    "people",
+    "pedestrian",
+    "pedestrians",
+    "car",
+    "cars",
+    "vehicle",
+    "vehicles",
+    "truck",
+    "trucks",
+    "bus",
+    "bicycle",
+    "bicycles",
+    "bike",
+    "bikes",
+    "motorcycle",
+    "motorcycles",
+    "traffic",
+    "light",
+    "lights",
+    "sign",
+    "signs",
+    "road",
+}
+QUOTED_PATH_PATTERN = re.compile(r"['\"]((?:/|~|[A-Za-z]:\\)[^'\"]+)['\"]")
+
+
+def _sanitize_extracted_path(path_value: str) -> str:
+    """Trim prose punctuation that may trail paths in natural language prompts."""
+    cleaned = path_value.strip()
+    while cleaned and cleaned[-1] in TRAILING_PATH_PUNCTUATION:
+        cleaned = cleaned[:-1]
+    return cleaned
 
 
 def _extract_path(content: str) -> str | None:
+    quoted_match = QUOTED_PATH_PATTERN.search(content)
+    if quoted_match:
+        cleaned = _sanitize_extracted_path(quoted_match.group(1))
+        return cleaned or None
+
     match = PATH_PATTERN.search(content)
-    return match.group(0) if match else None
+    if not match:
+        return None
+    raw_candidate = match.group(0)
+    candidate = _sanitize_extracted_path(raw_candidate)
+    suffix = content[match.end() :]
+    candidate_had_trailing_punctuation = raw_candidate != candidate
+    if suffix.startswith(" ") and not candidate_had_trailing_punctuation:
+        extra_tokens: list[str] = []
+        for token_match in re.finditer(r"\s+([A-Za-z0-9._-]+)", suffix):
+            token = token_match.group(1)
+            if token.lower() in TRAILING_PATH_STOPWORDS:
+                break
+            extra_tokens.append(token)
+            if len(extra_tokens) >= 3:
+                break
+        if extra_tokens:
+            candidate = f"{candidate} {' '.join(extra_tokens)}"
+
+    return candidate or None
+
+
+def _extract_output_path(content: str) -> str | None:
+    """Extract an output/destination path from natural language."""
+    # Match patterns like "save to /path", "output to /path", "export to /path", "into /path"
+    output_patterns = [
+        re.compile(r"(?:save|output|export|write|store)\s+(?:to|in|into|at)\s+['\"]?(/[\w\-.~/]+|~[/\w\-.]+)"),
+        re.compile(r"(?:->|→|>>)\s*['\"]?(/[\w\-.~/]+|~[/\w\-.]+)"),
+        re.compile(r"(?:results?|output)\s+(?:in|to)\s+['\"]?(/[\w\-.~/]+|~[/\w\-.]+)"),
+    ]
+    for pattern in output_patterns:
+        match = pattern.search(content.lower() if "→" not in content else content)
+        if match:
+            return _sanitize_extracted_path(match.group(1))
+    return None
 
 
 def _extract_operations(content: str) -> list[str]:
     normalized = content.lower()
     # Track first occurrence position to preserve user-requested order.
     operation_hits: list[tuple[int, str]] = []
+    # NOTE: Order matters — more specific multi-word aliases MUST come before
+    # single-word ones to prevent premature matching. Longer alias lists are
+    # checked first within each operation.
     operation_patterns = [
-        ("scan", ["scan", "inspect", "list files"]),
-        ("detect", ["detect", "find objects", "object detection"]),
-        ("segment", ["segment", "segmentation", "mask"]),
-        ("anonymize", ["anonymize", "blur", "redact", "privacy"]),
-        ("export", ["export", "convert", "save as"]),
-        ("label", ["label", "annotate", "annotation", "classify", "classification"]),
+        ("scan", ["scan", "inspect", "list files", "show files", "what's in"]),
+        ("detect", [
+            "detect", "find objects", "object detection", "find cars",
+            "find people", "find pedestrians", "find vehicles", "identify",
+            "locate", "recognize",
+        ]),
+        ("segment", ["segment", "segmentation", "mask", "instance segmentation"]),
+        ("anonymize", ["anonymize", "blur faces", "blur plates", "blur", "redact", "privacy", "gdpr"]),
+        ("export", ["export", "save as", "export as", "save annotations"]),
+        ("convert_format", [
+            "convert to", "convert from", "convert format",
+            "change format", "transform to", "reformat",
+        ]),
+        ("label", [
+            "label", "auto-label", "autolabel", "auto label",
+            "annotate", "annotation", "classify", "classification",
+        ]),
+        ("split", [
+            "split", "split dataset", "train test", "train-test split",
+            "train/val/test", "train val test", "create splits",
+        ]),
+        ("find_duplicates", [
+            "find duplicates", "duplicates", "deduplicate", "dedup",
+            "remove duplicates", "similar images", "near-duplicate",
+            "duplicate detection",
+        ]),
+        ("label_qa", [
+            "label qa", "validate labels", "check labels", "check annotations",
+            "quality report", "annotation quality", "verify annotations",
+            "validate annotations",
+        ]),
+        ("train", [
+            "train a model", "train model", "train yolo", "training yolo",
+            "train yolov", "training yolov", "yolov8 training", "yolov8 model",
+            "fine-tune", "finetune", "fine tune",
+            "train on this", "add step for training", "step for training",
+        ]),
+        ("script", [
+            "run script", "execute script", "custom script", "run command",
+            # Common non-standard operations that need a generated script:
+            "augment", "data augmentation", "augmentation",
+            "evaluate", "evaluation", "benchmark", "test model",
+            "resize images", "resize", "rescale", "crop images",
+            "visualize", "visualization", "generate report",
+            "merge datasets", "merge", "combine datasets",
+            "filter images", "filter dataset",
+            "balance dataset", "class balancing", "oversample", "undersample",
+            "compute statistics", "dataset statistics", "dataset stats",
+        ]),
+        ("review", ["review", "manual review", "human review", "send to review"]),
     ]
 
     for operation, aliases in operation_patterns:
@@ -62,6 +220,15 @@ def _extract_operations(content: str) -> list[str]:
         if operation not in operations:
             operations.append(operation)
 
+    # Catch-all: "add step for X" / "include step for X" / "step for X"
+    # where X is something not already matched.
+    step_request = re.search(
+        r"(?:add|include|insert|with|plus)\s+(?:a\s+)?(?:step|stage)\s+(?:for\s+)?(.+?)(?:\.|,|$)",
+        normalized,
+    )
+    if step_request and "script" not in operations and "train" not in operations:
+        operations.append("script")
+
     # Labeling implies detect + export workflow.
     if "label" in operations:
         if "detect" not in operations:
@@ -69,7 +236,54 @@ def _extract_operations(content: str) -> list[str]:
         if "export" not in operations:
             operations.append("export")
 
+    # Infer composite workflows from context clues.
+    operations = _infer_composite_operations(content, operations)
+
     return operations
+
+
+def _infer_composite_operations(content: str, operations: list[str]) -> list[str]:
+    """Expand operations based on implied multi-step workflows.
+
+    Users often describe *goals* ("prepare dataset for training") rather than
+    individual steps. This function detects those high-level intents and adds
+    the missing intermediate operations so the agent can plan a complete
+    pipeline in one shot.
+    """
+    normalized = content.lower()
+    ops = list(operations)  # work on a copy
+
+    # "prepare for training" / "train a model" / "training pipeline" → need
+    # detect (if no annotations yet), export, and split.
+    training_cues = [
+        "prepare for training", "training pipeline", "train a model",
+        "prepare dataset", "ready for training", "training data",
+        "fine-tune", "finetune", "fine tune",
+    ]
+    wants_training = "train" in ops or any(cue in normalized for cue in training_cues)
+    if wants_training or ("training" in normalized and "split" not in ops):
+        if "detect" not in ops and "segment" not in ops:
+            ops.append("detect")
+        if "export" not in ops:
+            ops.append("export")
+        if "split" not in ops:
+            ops.append("split")
+        # Training is a custom workflow — ensure a script step is generated.
+        if "train" in ops and "script" not in ops:
+            ops.append("script")
+
+    # "clean dataset" / "clean up" → find_duplicates
+    clean_cues = ["clean dataset", "clean up", "cleanup", "remove bad"]
+    if any(cue in normalized for cue in clean_cues):
+        if "find_duplicates" not in ops:
+            ops.append("find_duplicates")
+
+    # "review" without other ops should still detect first if there are no
+    # existing annotations to review.
+    if "review" in ops and len(ops) == 1:
+        ops.insert(0, "detect")
+
+    return ops
 
 
 def _extract_parameters(content: str) -> dict[str, Any]:
@@ -78,10 +292,11 @@ def _extract_parameters(content: str) -> dict[str, Any]:
 
     # Common detection classes for quick heuristic extraction.
     class_terms = {
-        "person": ["person", "people", "pedestrian", "pedestrians"],
+        "person": ["person", "people", "pedestrian", "pedestrians", "pedestrains"],
         "car": ["car", "cars", "vehicle", "vehicles"],
         "truck": ["truck", "trucks"],
         "bus": ["bus", "buses"],
+        "bicycle": ["bicycle", "bicycles", "bike", "bikes"],
         "traffic light": ["traffic light", "traffic lights"],
         "road sign": ["road sign", "road signs", "sign", "signs"],
     }
@@ -103,6 +318,23 @@ def _extract_parameters(content: str) -> dict[str, Any]:
     if format_match:
         fmt = format_match.group(1)
         parameters["format"] = "voc" if fmt == "pascal" else fmt
+
+    # Detect training requests — prefer specific model names over bare "model".
+    training_match = re.search(r"\btrain(?:ing)?\b.*\b(yolov?\d+)\b", normalized)
+    if not training_match:
+        training_match = re.search(r"\btrain(?:ing)?\b.*\b(ultralytics|model)\b", normalized)
+    if training_match:
+        parameters["training"] = True
+        model_name = training_match.group(1)
+        parameters["model_type"] = model_name if model_name != "model" else "yolov8"
+
+    # Extract custom step description from "add step for X" patterns.
+    step_desc = re.search(
+        r"(?:add|include|insert|with|plus)\s+(?:a\s+)?(?:step|stage)\s+(?:for\s+)?(.+?)(?:\.|,|$)",
+        normalized,
+    )
+    if step_desc:
+        parameters["custom_step_description"] = step_desc.group(1).strip()
 
     face_mentioned = bool(re.search(r"\bfaces?\b", normalized))
     plate_mentioned = bool(re.search(r"\b(?:license\s+)?plates?\b", normalized))
@@ -168,6 +400,7 @@ def _build_fast_understanding(content: str) -> dict[str, Any] | None:
         return None
 
     parameters = _extract_parameters(content)
+    output_path = _extract_output_path(content)
 
     return {
         "intent": operations[0],
@@ -175,7 +408,7 @@ def _build_fast_understanding(content: str) -> dict[str, Any] | None:
         "input_type": _infer_input_type(content, input_path),
         "operations": operations,
         "parameters": parameters,
-        "output_path": None,
+        "output_path": output_path,
         "clarification_needed": None,
     }
 
@@ -218,8 +451,7 @@ async def understand(state: PipelineState) -> dict[str, Any]:
         new_message = {
             "role": MessageRole.ASSISTANT.value,
             "content": (
-                f"I understand you want to {operation_text} on {input_path}. "
-                "Let me create a plan."
+                f"I understand you want to {operation_text} on {input_path}. Let me create a plan."
             ),
             "timestamp": datetime.now().isoformat(),
             "tool_calls": [],
@@ -264,9 +496,7 @@ async def understand(state: PipelineState) -> dict[str, Any]:
 
             # Handle string or list content
             if isinstance(response_content, list):
-                response_content = " ".join(
-                    str(item) for item in response_content if item
-                )
+                response_content = " ".join(str(item) for item in response_content if item)
 
             logger.debug(f"LLM response (attempt {attempt + 1}): {response_content}")
 
@@ -307,8 +537,7 @@ async def understand(state: PipelineState) -> dict[str, Any]:
             operation_text = ", ".join(operations) if operations else "process"
 
             confirmation = (
-                f"I understand you want to {operation_text} on {input_path}. "
-                "Let me create a plan."
+                f"I understand you want to {operation_text} on {input_path}. Let me create a plan."
             )
 
             new_message = {
