@@ -176,12 +176,6 @@ Examples:
         if not input_p.exists():
             return error_result(f"Input not found: {input_path}")
 
-        if not input_p.is_file():
-            return error_result("Segmentation requires a single image file, not a directory")
-
-        if input_p.suffix.lower() not in IMAGE_EXTENSIONS:
-            return error_result(f"Unsupported image format: {input_p.suffix}")
-
         if confidence < 0 or confidence > 1:
             return error_result(
                 f"Invalid confidence: {confidence}. Must be between 0 and 1."
@@ -221,6 +215,15 @@ Examples:
         else:
             prompt_type = "point"
 
+        if input_p.is_file():
+            if input_p.suffix.lower() not in IMAGE_EXTENSIONS:
+                return error_result(f"Unsupported image format: {input_p.suffix}")
+            image_paths = [input_p]
+        else:
+            image_paths = self._collect_image_files(input_p)
+            if not image_paths:
+                return error_result(f"No image files found in directory: {input_path}")
+
         try:
             # Get appropriate segmenter
             segmenter = get_segmenter(
@@ -230,38 +233,72 @@ Examples:
             segmenter.load()
 
             try:
-                self.report_progress(1, 1, f"Segmenting with {segmenter.info.name}...")
+                batch_results: list[dict[str, Any]] = []
+                total_masks = 0
+                total_area = 0
+                total_time_ms = 0.0
+                model_name: str | None = None
 
-                result = segmenter.predict(
-                    str(input_p),
-                    prompt=prompt,
-                    point=point_tuple,
-                    box=box_tuple,
-                    confidence=confidence,
-                )
+                total_images = len(image_paths)
+                for idx, image_path in enumerate(image_paths, start=1):
+                    self.report_progress(
+                        idx,
+                        total_images,
+                        f"Segmenting image {idx}/{total_images} with {segmenter.info.name}...",
+                    )
 
-                # Build response
-                mask_count = len(result.masks)
-                total_area = sum(
-                    m.width * m.height for m in result.masks
-                )
+                    result = segmenter.predict(
+                        str(image_path),
+                        prompt=prompt,
+                        point=point_tuple,
+                        box=box_tuple,
+                        confidence=confidence,
+                    )
+
+                    mask_count = len(result.masks)
+                    area_pixels = sum(
+                        m.width * m.height for m in result.masks
+                    )
+
+                    total_masks += mask_count
+                    total_area += area_pixels
+                    total_time_ms += result.processing_time_ms
+                    if model_name is None:
+                        model_name = result.model_name
+
+                    item_data: dict[str, Any] = {
+                        "image_path": str(image_path),
+                        "mask_count": mask_count,
+                        "area_pixels": area_pixels,
+                        "processing_time_ms": round(result.processing_time_ms, 2),
+                    }
+                    if return_masks and result.masks:
+                        item_data["masks"] = [_serialize_mask(m) for m in result.masks]
+                    batch_results.append(item_data)
 
                 response_data: dict[str, Any] = {
-                    "image_path": str(input_p),
-                    "mask_count": mask_count,
+                    "input_path": str(input_p),
+                    "files_processed": total_images,
+                    "image_path": str(image_paths[0]) if total_images == 1 else None,
+                    "mask_count": total_masks,
+                    "masks_generated": total_masks,
+                    "count": total_masks,
                     "total_area_pixels": total_area,
-                    "model": result.model_name,
+                    "model": model_name or segmenter.info.name,
                     "prompt_type": prompt_type,
-                    "processing_time_ms": round(result.processing_time_ms, 2),
+                    "processing_time_ms": round(total_time_ms, 2),
                 }
 
                 if prompt is not None:
                     response_data["prompt"] = prompt
 
-                if return_masks and result.masks:
-                    response_data["masks"] = [
-                        _serialize_mask(m) for m in result.masks
-                    ]
+                if total_images == 1:
+                    first = batch_results[0]
+                    response_data["image_path"] = first["image_path"]
+                    if return_masks and "masks" in first:
+                        response_data["masks"] = first["masks"]
+                else:
+                    response_data["results"] = batch_results
 
                 return success_result(response_data)
 
@@ -295,3 +332,9 @@ Examples:
         except Exception as e:
             logger.exception("Segmentation failed")
             return error_result(f"Segmentation failed: {e}")
+
+    @staticmethod
+    def _collect_image_files(path: Path) -> list[Path]:
+        """Collect image files recursively from a directory."""
+        files = [p for p in path.rglob("*") if p.is_file() and p.suffix.lower() in IMAGE_EXTENSIONS]
+        return sorted(files)

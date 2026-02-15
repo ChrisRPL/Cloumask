@@ -14,6 +14,7 @@ import type {
 	ThinkingEventData,
 	PlanEventData,
 	ToolProgressEventData,
+	ToolResultEventData,
 	CheckpointEventData,
 	AwaitInputEventData,
 	StepEventData,
@@ -207,11 +208,13 @@ function routeEventToStores(
 			}));
 
 			pipeline.setSteps(steps);
+			execution.updateProgress(0, data.total_steps);
 			break;
 		}
 
 		case 'plan_approved': {
 			agent.setPhase('executing');
+			agent.setClarification(null);
 			break;
 		}
 
@@ -231,8 +234,10 @@ function routeEventToStores(
 			const data = event.data as StepEventData;
 			agent.setPhase('executing');
 			execution.setStatus('running');
+			execution.clearCheckpoint();
 			execution.setCurrentStep(data.step_id);
 			pipeline.updateStep(data.step_id, { status: 'running' });
+			execution.updateProgress(data.step_index, pipeline.steps.length || execution.progress.total);
 			break;
 		}
 
@@ -248,7 +253,9 @@ function routeEventToStores(
 		}
 
 		case 'tool_result': {
+			const data = event.data as ToolResultEventData;
 			agent.setStreaming(false);
+			applyToolResultToExecution(data, execution);
 			break;
 		}
 
@@ -256,12 +263,13 @@ function routeEventToStores(
 			const data = event.data as StepEventData;
 			const status = data.status === 'completed' ? 'completed' : 'failed';
 			pipeline.updateStep(data.step_id, { status });
-			execution.incrementProcessed();
+			execution.updateProgress(data.step_index + 1, pipeline.steps.length || execution.progress.total);
 			break;
 		}
 
 		case 'checkpoint': {
 			const data = event.data as CheckpointEventData;
+			const quality = data.quality_metrics as Record<string, unknown>;
 			agent.setPhase('checkpoint');
 			execution.setCheckpoint({
 				id: data.checkpoint_id,
@@ -272,11 +280,21 @@ function routeEventToStores(
 					| 'error_rate'
 					| 'critical_step',
 				progressPercent: data.progress_percent,
-				qualityMetrics: data.quality_metrics as {
-					averageConfidence: number;
-					errorCount: number;
-					totalProcessed: number;
-					processingSpeed: number;
+				qualityMetrics: {
+					averageConfidence:
+						numberFromResult(quality.average_confidence) ??
+						numberFromResult(quality.averageConfidence) ??
+						0,
+					errorCount:
+						numberFromResult(quality.error_count) ?? numberFromResult(quality.errorCount) ?? 0,
+					totalProcessed:
+						numberFromResult(quality.total_processed) ??
+						numberFromResult(quality.totalProcessed) ??
+						0,
+					processingSpeed:
+						numberFromResult(quality.processing_speed) ??
+						numberFromResult(quality.processingSpeed) ??
+						0
 				},
 				message: data.message,
 				createdAt: event.timestamp
@@ -288,7 +306,10 @@ function routeEventToStores(
 			const data = event.data as PipelineCompleteEventData;
 			agent.setPhase('complete');
 			agent.setStreaming(false);
+			agent.setClarification(null);
+			execution.clearCheckpoint();
 			execution.setStatus(data.success ? 'completed' : 'failed');
+			execution.updateProgress(data.completed_steps, data.total_steps);
 			break;
 		}
 
@@ -317,6 +338,124 @@ function routeEventToStores(
 			break;
 		}
 	}
+}
+
+function applyToolResultToExecution(data: ToolResultEventData, execution: ExecutionState): void {
+	if (!data.success) {
+		execution.addError({
+			stepId: `step-${data.step_index}`,
+			message: data.error ?? 'Tool execution failed',
+			recoverable: true
+		});
+		return;
+	}
+
+	const result = data.result ?? {};
+	const filesProcessed = numberFromResult(result.files_processed) ?? numberFromResult(result.total_files);
+	if (typeof filesProcessed === 'number' && filesProcessed > 0) {
+		execution.updateStats({
+			processed: Math.max(execution.stats.processed, filesProcessed)
+		});
+	}
+
+	const detectedCount = numberFromResult(result.count);
+	if (typeof detectedCount === 'number' && detectedCount > 0 && data.tool_name === 'detect') {
+		execution.updateStats({
+			detected: Math.max(execution.stats.detected, detectedCount)
+		});
+	}
+
+	const faces = numberFromResult(result.faces_anonymized) ?? numberFromResult(result.faces_blurred) ?? 0;
+	const plates =
+		numberFromResult(result.plates_anonymized) ?? numberFromResult(result.plates_blurred) ?? 0;
+	const anonymized = faces + plates;
+	if (anonymized > 0) {
+		execution.updateStats({
+			flagged: Math.max(execution.stats.flagged, anonymized)
+		});
+	}
+
+	const previews = extractPreviewItems(data);
+	if (previews.length > 0) {
+		execution.appendPreviews(previews);
+	}
+}
+
+function numberFromResult(value: unknown): number | null {
+	if (typeof value === 'number' && Number.isFinite(value)) return value;
+	if (typeof value === 'string') {
+		const parsed = Number(value);
+		return Number.isFinite(parsed) ? parsed : null;
+	}
+	return null;
+}
+
+const IMAGE_EXTENSIONS = new Set([
+	'.jpg',
+	'.jpeg',
+	'.png',
+	'.bmp',
+	'.tif',
+	'.tiff',
+	'.webp'
+]);
+
+function isImagePath(path: string): boolean {
+	const lower = path.toLowerCase();
+	for (const ext of IMAGE_EXTENSIONS) {
+		if (lower.endsWith(ext)) return true;
+	}
+	return false;
+}
+
+function collectPreviewPaths(result: Record<string, unknown>): string[] {
+	const paths: string[] = [];
+	const maybePush = (value: unknown) => {
+		if (typeof value !== 'string') return;
+		if (!value.trim()) return;
+		if (!isImagePath(value)) return;
+		paths.push(value);
+	};
+
+	maybePush(result.image_path);
+	maybePush(result.output_path);
+
+	const imagePathKeys = ['sample_images', 'sample_files', 'output_files', 'output_images', 'image_paths'];
+	for (const key of imagePathKeys) {
+		const arr = result[key];
+		if (!Array.isArray(arr)) continue;
+		for (const item of arr) maybePush(item);
+	}
+
+	const resultRows = result.results;
+	if (Array.isArray(resultRows)) {
+		for (const row of resultRows) {
+			if (typeof row !== 'object' || !row) continue;
+			const candidate = (row as Record<string, unknown>).image_path;
+			maybePush(candidate);
+		}
+	}
+
+	return Array.from(new Set(paths));
+}
+
+function extractPreviewItems(data: ToolResultEventData): import('$lib/types/execution').PreviewItem[] {
+	const result = data.result ?? {};
+	const imagePaths = collectPreviewPaths(result);
+	if (imagePaths.length === 0) return [];
+
+	const faces = numberFromResult(result.faces_anonymized) ?? numberFromResult(result.faces_blurred) ?? 0;
+	const plates =
+		numberFromResult(result.plates_anonymized) ?? numberFromResult(result.plates_blurred) ?? 0;
+	const status: 'processed' | 'flagged' | 'error' = faces + plates > 0 ? 'flagged' : 'processed';
+
+	return imagePaths.slice(0, 6).map((imagePath, index) => ({
+		id: `${data.tool_name}-${data.step_index}-${index}-${imagePath}`,
+		imagePath,
+		thumbnailUrl: imagePath,
+		annotations: [],
+		status
+	}));
 }
 
 // ============================================================================

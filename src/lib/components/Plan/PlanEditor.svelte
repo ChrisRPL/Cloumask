@@ -12,10 +12,11 @@
 	import { untrack } from 'svelte';
 	import { getPipelineState } from '$lib/stores/pipeline.svelte';
 	import { getAgentState } from '$lib/stores/agent.svelte';
+	import { getExecutionState } from '$lib/stores/execution.svelte';
 	import { getUIState } from '$lib/stores/ui.svelte';
 	import { getKeyboardState } from '$lib/stores/keyboard.svelte';
 	import { sendMessage } from '$lib/utils/tauri';
-	import type { StepType, StepConfig as StepConfigType } from '$lib/types/pipeline';
+	import type { PipelineStep, StepType, StepConfig as StepConfigType } from '$lib/types/pipeline';
 
 	import PlanHeader from './PlanHeader.svelte';
 	import StepList from './StepList.svelte';
@@ -32,6 +33,7 @@
 	// Get stores from context
 	const pipeline = getPipelineState();
 	const agent = getAgentState();
+	const execution = getExecutionState();
 	const ui = getUIState();
 	const keyboard = getKeyboardState();
 
@@ -53,15 +55,77 @@
 		return formatDuration(ms);
 	});
 
+	function readStringParam(params: Record<string, unknown>, keys: string[]): string | null {
+		for (const key of keys) {
+			const value = params[key];
+			if (typeof value === 'string' && value.trim()) {
+				return value.trim();
+			}
+		}
+		return null;
+	}
+
+	function buildCustomScriptParameters(
+		step: PipelineStep,
+		params: Record<string, unknown>
+	): Record<string, unknown> | null {
+		const scriptPath = readStringParam(params, ['script']);
+		if (!scriptPath) return null;
+
+		const { script: _script, ...configParams } = params;
+		const inputPath =
+			readStringParam(configParams, ['input_path', 'path', 'source_path']) ??
+			ui.currentProject?.path ??
+			'/tmp';
+		const outputPath =
+			readStringParam(configParams, ['output_path']) ??
+			`${inputPath.replace(/\/$/, '')}/custom-${step.id.slice(0, 8)}.json`;
+
+		return {
+			script_path: scriptPath,
+			input_path: inputPath,
+			output_path: outputPath,
+			config: configParams
+		};
+	}
+
+	function toBackendPlanStep(step: PipelineStep) {
+		const baseParameters = {
+			...step.config.params,
+			...(step.config.model ? { model: step.config.model } : {}),
+			...(step.config.confidence !== undefined ? { confidence: step.config.confidence } : {})
+		};
+		const customScriptParameters = buildCustomScriptParameters(step, baseParameters);
+
+		return {
+			id: step.id,
+			tool_name: customScriptParameters ? 'custom_script' : step.toolName,
+			description: step.description,
+			critical: step.critical ?? false,
+			status: step.status,
+			parameters: customScriptParameters ?? baseParameters,
+			result: step.result ?? null,
+			error: step.error ?? null,
+			started_at: step.startedAt ?? null,
+			completed_at: step.completedAt ?? null,
+		};
+	}
+
 	// Handle start execution
 	async function handleStart() {
 		if (!agent.threadId || !canStart) return;
 
 		try {
+			// Reset execution UI state before backend events arrive.
+			execution.start();
+			execution.setCurrentStep(null);
+
 			// Send approval with any edits
+			const planEdits = pipeline.sortedSteps.map((step) => toBackendPlanStep(step));
 			await sendMessage(agent.threadId, {
 				content: 'Approved',
 				decision: 'approve',
+				plan_edits: planEdits,
 			});
 
 			// Transition to execution view

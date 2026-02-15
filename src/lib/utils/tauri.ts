@@ -388,7 +388,7 @@ function parseLLMPullStreamBlock(block: string, model: string): LLMPullProgressE
  * Returns thread info with new thread_id.
  */
 export async function createThread(): Promise<ThreadInfo> {
-	const response = await fetch(`${SIDECAR_URL}/api/chat/thread/new`, {
+	const response = await fetch(`${SIDECAR_URL}/api/chat/threads`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' }
 	});
@@ -407,7 +407,7 @@ export async function getThreadInfo(threadId: string): Promise<ThreadInfo> {
 	if (!threadId) {
 		throw new Error('Invalid thread ID');
 	}
-	const response = await fetch(`${SIDECAR_URL}/api/chat/thread/${threadId}`);
+	const response = await fetch(`${SIDECAR_URL}/api/chat/threads/${threadId}`);
 
 	if (!response.ok) {
 		throw new Error(`Failed to get thread: ${response.statusText}`);
@@ -447,7 +447,7 @@ export async function closeThread(threadId: string): Promise<void> {
 	if (!threadId) {
 		throw new Error('Invalid thread ID');
 	}
-	const response = await fetch(`${SIDECAR_URL}/api/chat/thread/${threadId}`, {
+	const response = await fetch(`${SIDECAR_URL}/api/chat/threads/${threadId}`, {
 		method: 'DELETE'
 	});
 

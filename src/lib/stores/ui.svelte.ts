@@ -19,6 +19,8 @@ export const SIDEBAR_COLLAPSED_WIDTH = 64; // w-16
 export const SIDEBAR_EXPANDED_WIDTH = 256; // w-64
 export const STORAGE_KEY_SIDEBAR = "cloumask:sidebar:expanded";
 export const STORAGE_KEY_VIEW = "cloumask:view:current";
+export const STORAGE_KEY_CURRENT_PROJECT = "cloumask:project:current";
+export const STORAGE_KEY_RECENT_PROJECTS = "cloumask:project:recent";
 
 /** View configurations for navigation */
 export const VIEWS: ViewConfig[] = [
@@ -81,7 +83,8 @@ export function createUIState(): UIState {
   const getInitialSidebarExpanded = (): boolean => {
     if (typeof window === "undefined") return true;
     const stored = localStorage.getItem(STORAGE_KEY_SIDEBAR);
-    return stored !== "false";
+    if (stored !== null) return stored !== "false";
+    return !window.matchMedia("(max-width: 768px)").matches;
   };
 
   // Load persisted view
@@ -91,11 +94,59 @@ export function createUIState(): UIState {
     return stored && VIEWS.some((v) => v.id === stored) ? stored : "chat";
   };
 
+  const parseProject = (value: unknown): Project | null => {
+    if (!value || typeof value !== "object") return null;
+    const candidate = value as Partial<Project> & { lastOpened?: string | Date };
+    if (
+      typeof candidate.id !== "string" ||
+      typeof candidate.name !== "string" ||
+      typeof candidate.path !== "string"
+    ) {
+      return null;
+    }
+    return {
+      id: candidate.id,
+      name: candidate.name,
+      path: candidate.path,
+      lastOpened:
+        candidate.lastOpened
+          ? new Date(candidate.lastOpened)
+          : undefined,
+    };
+  };
+
+  const getInitialCurrentProject = (): Project | null => {
+    if (typeof window === "undefined") return null;
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY_CURRENT_PROJECT);
+      if (!raw) return null;
+      return parseProject(JSON.parse(raw));
+    } catch {
+      return null;
+    }
+  };
+
+  const getInitialRecentProjects = (): Project[] => {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY_RECENT_PROJECTS);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed
+        .map((project) => parseProject(project))
+        .filter((project): project is Project => project !== null)
+        .slice(0, 10);
+    } catch {
+      return [];
+    }
+  };
+
   // Reactive state using Svelte 5 runes
   let sidebarExpanded = $state(getInitialSidebarExpanded());
   let currentView = $state<ViewId>(getInitialView());
-  let currentProject = $state<Project | null>(null);
-  let recentProjects = $state<Project[]>([]);
+  let currentProject = $state<Project | null>(getInitialCurrentProject());
+  let recentProjects = $state<Project[]>(getInitialRecentProjects());
 
   // Derived sidebar width
   const sidebarWidth = $derived(
@@ -114,6 +165,21 @@ export function createUIState(): UIState {
     if (typeof window !== "undefined") {
       localStorage.setItem(STORAGE_KEY_VIEW, currentView);
     }
+  });
+
+  // Persist current project and recents
+  $effect(() => {
+    if (typeof window === "undefined") return;
+    if (currentProject) {
+      localStorage.setItem(STORAGE_KEY_CURRENT_PROJECT, JSON.stringify(currentProject));
+    } else {
+      localStorage.removeItem(STORAGE_KEY_CURRENT_PROJECT);
+    }
+  });
+
+  $effect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(STORAGE_KEY_RECENT_PROJECTS, JSON.stringify(recentProjects));
   });
 
   return {
@@ -146,6 +212,12 @@ export function createUIState(): UIState {
     },
     setProject(project: Project | null) {
       currentProject = project;
+      if (project) {
+        recentProjects = [
+          project,
+          ...recentProjects.filter((p) => p.id !== project.id),
+        ].slice(0, 10);
+      }
     },
     addRecentProject(project: Project) {
       recentProjects = [

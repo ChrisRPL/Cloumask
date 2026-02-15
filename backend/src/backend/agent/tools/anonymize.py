@@ -197,6 +197,7 @@ Examples:
                 total_plates = 0
                 total_time_ms = 0.0
                 files_processed = 0
+                sample_outputs: list[str] = []
 
                 if is_batch:
                     # Batch processing
@@ -213,6 +214,8 @@ Examples:
                         total_plates += result.plates_anonymized
                         total_time_ms += result.processing_time_ms
                         files_processed += 1
+                        if len(sample_outputs) < 6:
+                            sample_outputs.append(result.output_path)
 
                     final_output = str(output_dir)
                 else:
@@ -225,12 +228,14 @@ Examples:
                     total_time_ms = result.processing_time_ms
                     files_processed = 1
                     final_output = result.output_path
+                    sample_outputs = [result.output_path]
 
                 return success_result(
                     {
                         "files_processed": files_processed,
                         "faces_anonymized": total_faces,
                         "plates_anonymized": total_plates,
+                        "sample_images": sample_outputs,
                         "output_path": final_output,
                         "mode": actual_mode,
                         "target": target,

@@ -23,22 +23,32 @@ from backend.api.config import settings
 logger = logging.getLogger(__name__)
 
 # Maximum retries for LLM calls
-MAX_RETRIES = 1
+MAX_RETRIES = 2
 FAST_LLM_TIMEOUT_SECONDS = 45
 FAST_LLM_CONTEXT_TOKENS = 4096
 
 # Valid tool names that can appear in plans
-VALID_TOOLS = frozenset([
-    "scan_directory",
-    "anonymize",
-    "detect",
-    "segment",
-    "export",
-    "convert_format",
-    "find_duplicates",
-    "label_qa",
-    "split_dataset",
-])
+VALID_TOOLS = frozenset(
+    [
+        "scan_directory",
+        "anonymize",
+        "detect",
+        "segment",
+        "export",
+        "convert_format",
+        "find_duplicates",
+        "label_qa",
+        "split_dataset",
+        "run_script",
+        "review",
+        "pointcloud_stats",
+        "process_pointcloud",
+        "detect_3d",
+        "project_3d_to_2d",
+        "anonymize_pointcloud",
+        "extract_rosbag",
+    ]
+)
 
 
 def _normalize_classes(value: Any) -> list[str]:
@@ -51,6 +61,80 @@ def _normalize_classes(value: Any) -> list[str]:
     return []
 
 
+def _generate_training_script(
+    model_type: str,
+    data_dir: str,
+    parameters: dict[str, Any],
+) -> str:
+    """Generate a Python training script for the requested model type."""
+    epochs = int(parameters.get("epochs", 50))
+    batch_size = int(parameters.get("batch_size", 16))
+    img_size = int(parameters.get("img_size", 640))
+
+    # Normalize model identifier.
+    model_id = model_type.lower().strip()
+    if model_id in ("yolov8", "yolo", "ultralytics", "model"):
+        model_id = "yolov8"
+
+    classes = parameters.get("classes", [])
+    if isinstance(classes, str):
+        classes = [c.strip() for c in classes.split(",") if c.strip()]
+    nc = len(classes) if classes else "len(class_names)"
+    names_literal = repr(classes) if classes else "class_names"
+
+    if model_id.startswith("yolov"):
+        variant = model_id  # e.g. "yolov8", "yolov5"
+        weight_file = f"{variant}n.pt"
+        return (
+            "#!/usr/bin/env python3\n"
+            f'"""Auto-generated {variant.upper()} training script."""\n'
+            "import os, yaml\n"
+            "from pathlib import Path\n"
+            "from ultralytics import YOLO\n"
+            "\n"
+            f'DATA_DIR = Path(r"{data_dir}")\n'
+            "\n"
+            "# --- Build data.yaml ------------------------------------------------\n"
+            f"class_names = {names_literal}\n"
+            "data_yaml = {\n"
+            '    "path": str(DATA_DIR),\n'
+            '    "train": "train/images",\n'
+            '    "val": "val/images",\n'
+            '    "test": "test/images",\n'
+            f'    "nc": {nc},\n'
+            '    "names": class_names,\n'
+            "}\n"
+            'yaml_path = DATA_DIR / "data.yaml"\n'
+            'with open(yaml_path, "w") as f:\n'
+            "    yaml.safe_dump(data_yaml, f)\n"
+            'print(f"Wrote {yaml_path}")\n'
+            "\n"
+            "# --- Train -----------------------------------------------------------\n"
+            f'model = YOLO("{weight_file}")\n'
+            "results = model.train(\n"
+            "    data=str(yaml_path),\n"
+            f"    epochs={epochs},\n"
+            f"    batch={batch_size},\n"
+            f"    imgsz={img_size},\n"
+            '    project=str(DATA_DIR / "runs"),\n'
+            f'    name="{variant}-training",\n'
+            ")\n"
+            'print("Training complete. Best weights:", results.save_dir)\n'
+        )
+
+    # Fallback: generic PyTorch-style training script.
+    return (
+        "#!/usr/bin/env python3\n"
+        f'"""Auto-generated training script for {model_type}."""\n'
+        "# TODO: implement training loop for the requested model.\n"
+        f'DATA_DIR = r"{data_dir}"\n'
+        f"EPOCHS = {epochs}\n"
+        f"BATCH_SIZE = {batch_size}\n"
+        f"IMG_SIZE = {img_size}\n"
+        f"print('Starting {model_type} training on', DATA_DIR)\n"
+    )
+
+
 def build_rule_based_plan(understanding: dict[str, Any]) -> list[dict[str, Any]] | None:
     """
     Build a deterministic plan from parsed understanding.
@@ -60,9 +144,7 @@ def build_rule_based_plan(understanding: dict[str, Any]) -> list[dict[str, Any]]
     """
     input_path = understanding.get("input_path")
     operations = [
-        str(op).strip().lower()
-        for op in understanding.get("operations", [])
-        if str(op).strip()
+        str(op).strip().lower() for op in understanding.get("operations", []) if str(op).strip()
     ]
     parameters = dict(understanding.get("parameters", {}))
     output_path = understanding.get("output_path")
@@ -75,7 +157,21 @@ def build_rule_based_plan(understanding: dict[str, Any]) -> list[dict[str, Any]]
         return None
 
     # Ensure operation order is stable and valid.
-    allowed = {"scan", "detect", "segment", "anonymize", "export", "label"}
+    allowed = {
+        "scan",
+        "detect",
+        "segment",
+        "anonymize",
+        "export",
+        "convert_format",
+        "label",
+        "split",
+        "find_duplicates",
+        "label_qa",
+        "script",
+        "train",
+        "review",
+    }
     operations = [op for op in operations if op in allowed]
     if not operations:
         return None
@@ -96,59 +192,192 @@ def build_rule_based_plan(understanding: dict[str, Any]) -> list[dict[str, Any]]
             operations.append("export")
 
     working_path = input_path
+    detection_annotations_path: str | None = None
 
     if "detect" in operations:
         classes = _normalize_classes(parameters.get("classes"))
         if not classes:
             classes = ["person", "car"]
         confidence = float(parameters.get("confidence", 0.5))
-        plan.append({
-            "tool_name": "detect",
-            "parameters": {
-                "input_path": working_path,
-                "classes": classes,
-                "confidence": confidence,
-            },
-            "description": "Detect target objects in the input dataset",
-        })
+        detection_annotations_path = f"{working_path}_detections_yolo"
+        plan.append(
+            {
+                "tool_name": "detect",
+                "parameters": {
+                    "input_path": working_path,
+                    "classes": classes,
+                    "confidence": confidence,
+                    "save_annotations": True,
+                    "output_path": detection_annotations_path,
+                },
+                "description": "Detect target objects in the input dataset",
+            }
+        )
 
     if "segment" in operations:
         prompt = str(parameters.get("prompt") or "objects of interest")
-        plan.append({
-            "tool_name": "segment",
-            "parameters": {
-                "input_path": working_path,
-                "prompt": prompt,
-            },
-            "description": "Segment requested objects in images",
-        })
+        plan.append(
+            {
+                "tool_name": "segment",
+                "parameters": {
+                    "input_path": working_path,
+                    "prompt": prompt,
+                },
+                "description": "Segment requested objects in images",
+            }
+        )
 
     if "anonymize" in operations:
         anonymized_output = str(output_path or f"{input_path}_anonymized")
         target = str(parameters.get("target") or "all")
-        plan.append({
-            "tool_name": "anonymize",
-            "parameters": {
-                "input_path": working_path,
-                "output_path": anonymized_output,
-                "target": target,
-            },
-            "description": "Anonymize sensitive regions (faces and/or plates)",
-        })
+        plan.append(
+            {
+                "tool_name": "anonymize",
+                "parameters": {
+                    "input_path": working_path,
+                    "output_path": anonymized_output,
+                    "target": target,
+                },
+                "description": "Anonymize sensitive regions (faces and/or plates)",
+            }
+        )
         working_path = anonymized_output
 
     if "export" in operations:
         output_format = str(parameters.get("output_format") or parameters.get("format") or "yolo")
         export_output = str(output_path or f"{working_path}_{output_format}")
-        plan.append({
-            "tool_name": "export",
-            "parameters": {
-                "source_path": working_path,
-                "output_path": export_output,
-                "output_format": output_format,
-            },
-            "description": f"Export annotations in {output_format.upper()} format",
-        })
+        export_source = detection_annotations_path or working_path
+        export_parameters: dict[str, Any] = {
+            "source_path": export_source,
+            "output_path": export_output,
+            "output_format": output_format,
+        }
+        if detection_annotations_path:
+            export_parameters["source_format"] = "yolo"
+        plan.append(
+            {
+                "tool_name": "export",
+                "parameters": export_parameters,
+                "description": f"Export annotations in {output_format.upper()} format",
+            }
+        )
+
+    if "split" in operations:
+        split_output = str(output_path or f"{working_path}_split")
+        plan.append(
+            {
+                "tool_name": "split_dataset",
+                "parameters": {
+                    "path": working_path,
+                    "output_path": split_output,
+                    "train_ratio": 0.7,
+                    "val_ratio": 0.15,
+                    "test_ratio": 0.15,
+                },
+                "description": "Split dataset into train/validation/test sets",
+            }
+        )
+        working_path = split_output
+
+    if "script" in operations or "train" in operations:
+        script_params: dict[str, Any] = {
+            "input_path": working_path,
+        }
+        if output_path:
+            script_params["output_path"] = output_path
+
+        # Generate actual script content based on what the user asked for.
+        model_type = str(parameters.get("model_type", "yolov8"))
+        is_training = parameters.get("training") or "train" in operations
+
+        if is_training:
+            # Build a training script for the detected model architecture.
+            data_dir = working_path
+            script_content = _generate_training_script(model_type, data_dir, parameters)
+            script_params["script"] = script_content
+            script_params["description"] = (
+                f"Train {model_type} model on the prepared dataset"
+            )
+            description = f"Train {model_type} model on the prepared dataset"
+        else:
+            # Generic custom script — use the user's description or forward
+            # any explicit script/command parameters.
+            custom_desc = parameters.get("custom_step_description", "")
+            if parameters.get("script"):
+                script_params["script"] = parameters["script"]
+            if parameters.get("command"):
+                script_params["command"] = parameters["command"]
+            if custom_desc:
+                description = custom_desc.capitalize()
+                script_params["description"] = custom_desc
+            else:
+                description = "Execute custom processing script on the data"
+
+        plan.append(
+            {
+                "tool_name": "run_script",
+                "parameters": script_params,
+                "description": description,
+            }
+        )
+
+
+    if "review" in operations:
+        review_source = detection_annotations_path or working_path
+        plan.append(
+            {
+                "tool_name": "review",
+                "parameters": {
+                    "source_path": review_source,
+                    "image_dir": input_path,
+                },
+                "description": "Queue results for manual review in the Review Queue",
+            }
+        )
+
+    if "convert_format" in operations:
+        output_format = str(
+            parameters.get("output_format") or parameters.get("format") or "yolo"
+        )
+        convert_output = str(output_path or f"{working_path}_{output_format}")
+        plan.append(
+            {
+                "tool_name": "convert_format",
+                "parameters": {
+                    "source_path": working_path,
+                    "output_path": convert_output,
+                    "target_format": output_format,
+                },
+                "description": f"Convert annotations to {output_format.upper()} format",
+            }
+        )
+
+    if "find_duplicates" in operations:
+        plan.append(
+            {
+                "tool_name": "find_duplicates",
+                "parameters": {
+                    "path": working_path,
+                    "method": str(parameters.get("method", "phash")),
+                    "threshold": float(parameters.get("threshold", 0.9)),
+                    "auto_remove": bool(parameters.get("auto_remove", False)),
+                },
+                "description": "Find and report duplicate or near-duplicate images",
+            }
+        )
+
+    if "label_qa" in operations:
+        qa_source = detection_annotations_path or working_path
+        plan.append(
+            {
+                "tool_name": "label_qa",
+                "parameters": {
+                    "path": qa_source,
+                    "generate_report": True,
+                },
+                "description": "Run quality-assurance checks on annotations",
+            }
+        )
 
     if len(plan) <= 1:
         return None
@@ -229,8 +458,7 @@ def validate_plan(plan: list[dict[str, Any]]) -> str | None:
                 return f"Step {step_num} (convert_format) missing required 'output_path' parameter"
             if "target_format" not in parameters:
                 return (
-                    f"Step {step_num} (convert_format) "
-                    "missing required 'target_format' parameter"
+                    f"Step {step_num} (convert_format) missing required 'target_format' parameter"
                 )
 
         elif tool_name == "find_duplicates" and "path" not in parameters:
@@ -244,6 +472,16 @@ def validate_plan(plan: list[dict[str, Any]]) -> str | None:
                 return f"Step {step_num} (split_dataset) missing required 'path' parameter"
             if "output_path" not in parameters:
                 return f"Step {step_num} (split_dataset) missing required 'output_path' parameter"
+
+        elif tool_name == "run_script":
+            if "input_path" not in parameters:
+                return f"Step {step_num} (run_script) missing required 'input_path' parameter"
+
+        elif tool_name == "review":
+            if "source_path" not in parameters:
+                return f"Step {step_num} (review) missing required 'source_path' parameter"
+            if "image_dir" not in parameters:
+                return f"Step {step_num} (review) missing required 'image_dir' parameter"
 
     return None
 
@@ -327,17 +565,19 @@ async def generate_plan(state: PipelineState) -> dict[str, Any]:
     if rule_based_steps is not None:
         plan: list[dict[str, Any]] = []
         for i, step in enumerate(rule_based_steps):
-            plan.append({
-                "id": f"step-{uuid4().hex[:8]}",
-                "tool_name": step.get("tool_name", "unknown"),
-                "parameters": step.get("parameters", {}),
-                "description": step.get("description", f"Step {i + 1}"),
-                "status": StepStatus.PENDING.value,
-                "result": None,
-                "error": None,
-                "started_at": None,
-                "completed_at": None,
-            })
+            plan.append(
+                {
+                    "id": f"step-{uuid4().hex[:8]}",
+                    "tool_name": step.get("tool_name", "unknown"),
+                    "parameters": step.get("parameters", {}),
+                    "description": step.get("description", f"Step {i + 1}"),
+                    "status": StepStatus.PENDING.value,
+                    "result": None,
+                    "error": None,
+                    "started_at": None,
+                    "completed_at": None,
+                }
+            )
 
         validation_error = validate_plan(plan)
         if validation_error is None:
@@ -369,12 +609,12 @@ async def generate_plan(state: PipelineState) -> dict[str, Any]:
     # Build the context for planning
     planning_context = f"""Create a plan for the following request:
 
-Intent: {understanding.get('intent', 'unknown')}
-Input path: {understanding.get('input_path', 'not specified')}
-Input type: {understanding.get('input_type', 'unknown')}
-Operations: {understanding.get('operations', [])}
-Parameters: {understanding.get('parameters', {})}
-Output path: {understanding.get('output_path', 'not specified')}
+Intent: {understanding.get("intent", "unknown")}
+Input path: {understanding.get("input_path", "not specified")}
+Input type: {understanding.get("input_type", "unknown")}
+Operations: {understanding.get("operations", [])}
+Parameters: {understanding.get("parameters", {})}
+Output path: {understanding.get("output_path", "not specified")}
 
 Generate a JSON array of steps to accomplish this."""
 
@@ -403,9 +643,7 @@ Generate a JSON array of steps to accomplish this."""
 
             # Handle string or list content
             if isinstance(response_content, list):
-                response_content = " ".join(
-                    str(item) for item in response_content if item
-                )
+                response_content = " ".join(str(item) for item in response_content if item)
 
             logger.debug(f"LLM response (attempt {attempt + 1}): {response_content}")
 
@@ -420,17 +658,19 @@ Generate a JSON array of steps to accomplish this."""
             # Convert to PipelineStep format
             plan: list[dict[str, Any]] = []
             for i, step in enumerate(steps_raw):
-                plan.append({
-                    "id": f"step-{uuid4().hex[:8]}",
-                    "tool_name": step.get("tool_name", "unknown"),
-                    "parameters": step.get("parameters", {}),
-                    "description": step.get("description", f"Step {i + 1}"),
-                    "status": StepStatus.PENDING.value,
-                    "result": None,
-                    "error": None,
-                    "started_at": None,
-                    "completed_at": None,
-                })
+                plan.append(
+                    {
+                        "id": f"step-{uuid4().hex[:8]}",
+                        "tool_name": step.get("tool_name", "unknown"),
+                        "parameters": step.get("parameters", {}),
+                        "description": step.get("description", f"Step {i + 1}"),
+                        "status": StepStatus.PENDING.value,
+                        "result": None,
+                        "error": None,
+                        "started_at": None,
+                        "completed_at": None,
+                    }
+                )
 
             # Validate the plan
             validation_error = validate_plan(plan)

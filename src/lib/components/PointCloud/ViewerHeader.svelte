@@ -67,7 +67,7 @@
 				</Badge>
 			</div>
 		{:else}
-			<span class="text-xs text-muted-foreground font-mono">Demo data loaded</span>
+			<span class="text-xs text-muted-foreground font-mono">No file loaded</span>
 		{/if}
 	</div>
 

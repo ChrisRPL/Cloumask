@@ -40,6 +40,25 @@ export interface ExecutionStats {
   estimatedCompletion: string | null;
 }
 
+export interface PreviewAnnotation {
+  label: string;
+  confidence: number;
+  bbox: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+}
+
+export interface PreviewItem {
+  id: string;
+  imagePath: string;
+  thumbnailUrl: string;
+  annotations: PreviewAnnotation[];
+  status: "processed" | "flagged" | "error";
+}
+
 // ============================================================================
 // Execution Errors
 // ============================================================================
@@ -86,6 +105,7 @@ export interface ExecutionState {
   readonly status: ExecutionStatus;
   readonly progress: ExecutionProgress;
   readonly stats: ExecutionStats;
+  readonly previews: PreviewItem[];
   readonly errors: ExecutionError[];
   readonly currentStepId: string | null;
   readonly checkpoint: CheckpointInfo | null;
@@ -114,6 +134,9 @@ export interface ExecutionState {
   incrementProcessed(): void;
   incrementDetected(count?: number): void;
   incrementFlagged(count?: number): void;
+  setPreviews(previews: PreviewItem[]): void;
+  appendPreviews(previews: PreviewItem[]): void;
+  clearPreviews(): void;
 
   // Error actions
   addError(error: Omit<ExecutionError, "timestamp">): void;

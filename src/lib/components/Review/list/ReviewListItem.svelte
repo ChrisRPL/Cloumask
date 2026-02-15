@@ -55,7 +55,7 @@
 	onclick={onClick}
 >
 	<!-- Thumbnail -->
-	<div class="relative w-16 h-12 flex-shrink-0 rounded overflow-hidden bg-muted/30">
+	<div class="relative w-24 h-16 flex-shrink-0 rounded overflow-hidden bg-muted/30">
 		<img
 			src={item.thumbnailUrl}
 			alt={item.fileName}

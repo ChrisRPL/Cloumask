@@ -110,6 +110,7 @@
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
 		class="shrink-0 pointer-events-auto relative z-10"
+		data-no-drag
 		onmousedown={(e) => e.stopPropagation()}
 	>
 		<Checkbox
@@ -147,6 +148,7 @@
 	<!-- Config button - onmousedown stops drag initiation -->
 	<button
 		type="button"
+		data-no-drag
 		class={cn(
 			'p-1 rounded transition-opacity text-muted-foreground hover:text-foreground',
 			'opacity-0 group-hover:opacity-100 focus:opacity-100',
@@ -167,6 +169,7 @@
 	{#if isEditing}
 		<button
 			type="button"
+			data-no-drag
 			class={cn(
 				'p-1 rounded transition-opacity text-muted-foreground hover:text-destructive',
 				'opacity-0 group-hover:opacity-100 focus:opacity-100',

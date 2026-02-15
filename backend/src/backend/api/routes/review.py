@@ -6,6 +6,7 @@ from datetime import UTC
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import FileResponse
 from pydantic import ValidationError
 
 from backend.api.models.review import (
@@ -14,6 +15,7 @@ from backend.api.models.review import (
     AnnotationUpdate,
     BatchRequest,
     BatchResponse,
+    BoundingBox,
     ImageDimensions,
     ReviewItem,
     ReviewItemsResponse,
@@ -24,6 +26,8 @@ from backend.api.models.review import (
 from backend.cv.utils.thumbnail import generate_thumbnail, get_image_dimensions
 
 router = APIRouter(prefix="/api/review", tags=["review"])
+
+_VALID_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"}
 
 # In-memory storage (replace with SQLite/PostgreSQL in production)
 # Format: {item_id: ReviewItem}
@@ -68,9 +72,7 @@ def _load_from_disk(execution_id: str):
 @router.get("/items", response_model=ReviewItemsResponse)
 async def get_review_items(  # noqa: B008
     execution_id: str = Query(..., description="Execution ID to load items from"),
-    status: ReviewStatus | None = Query(
-        None, description="Filter by review status"
-    ),
+    status: ReviewStatus | None = Query(None, description="Filter by review status"),
     skip: int = Query(0, ge=0, description="Number of items to skip"),
     limit: int = Query(50, ge=1, le=200, description="Maximum items to return"),
 ):
@@ -120,6 +122,34 @@ async def get_review_item(item_id: str):
     return _get_item_or_404(item_id)
 
 
+@router.get("/image")
+async def get_local_image(
+    path: str = Query(..., description="Absolute or workspace-relative image path"),
+):
+    """
+    Serve a local image file for browser-based previews.
+
+    This endpoint is used by the web UI (non-Tauri mode) where direct file:// access
+    is not available.
+    """
+    resolved = Path(path).expanduser()
+    if not resolved.is_absolute():
+        resolved = (Path.cwd() / resolved).resolve()
+    else:
+        resolved = resolved.resolve()
+
+    if resolved.suffix.lower() not in _VALID_IMAGE_EXTENSIONS:
+        raise HTTPException(
+            status_code=415,
+            detail=f"Unsupported image extension: {resolved.suffix}",
+        )
+
+    if not resolved.exists() or not resolved.is_file():
+        raise HTTPException(status_code=404, detail=f"Image not found: {resolved}")
+
+    return FileResponse(resolved)
+
+
 @router.put("/items/{item_id}", response_model=ReviewItem)
 async def update_review_item(item_id: str, updates: ReviewItemUpdate):
     """
@@ -155,9 +185,7 @@ async def update_review_item(item_id: str, updates: ReviewItemUpdate):
 
 
 @router.put("/items/{item_id}/annotations/{annotation_id}", response_model=Annotation)
-async def update_annotation(
-    item_id: str, annotation_id: str, updates: AnnotationUpdate
-):
+async def update_annotation(item_id: str, annotation_id: str, updates: AnnotationUpdate):
     """
     Update a single annotation within a review item.
 
@@ -175,9 +203,7 @@ async def update_annotation(
     item = _get_item_or_404(item_id)
 
     # Find annotation
-    annotation = next(
-        (ann for ann in item.annotations if ann.id == annotation_id), None
-    )
+    annotation = next((ann for ann in item.annotations if ann.id == annotation_id), None)
     if not annotation:
         raise HTTPException(
             status_code=404,
@@ -324,7 +350,7 @@ async def batch_reject(request: BatchRequest):
 
 
 # Utility endpoint for testing - populate review queue with sample data
-@router.post("/items/seed")
+@router.post("/seed")
 async def seed_review_items(execution_id: str, image_dir: str):
     """
     Seed the review queue with items from a directory (for testing).
@@ -339,9 +365,7 @@ async def seed_review_items(execution_id: str, image_dir: str):
 
     image_path = Path(image_dir)
     if not image_path.exists():
-        raise HTTPException(
-            status_code=404, detail=f"Image directory not found: {image_dir}"
-        )
+        raise HTTPException(status_code=404, detail=f"Image directory not found: {image_dir}")
 
     created_count = 0
     valid_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}
@@ -358,6 +382,7 @@ async def seed_review_items(execution_id: str, image_dir: str):
             width, height = get_image_dimensions(img_file)
 
             # Create review item
+
             item = ReviewItem(
                 id=str(uuid.uuid4()),
                 file_path=str(img_file.absolute()),
@@ -367,7 +392,9 @@ async def seed_review_items(execution_id: str, image_dir: str):
                 annotations=[],
                 original_annotations=[],
                 status=ReviewStatus.PENDING,
+                reviewed_at=None,
                 flagged=False,
+                flag_reason=None,
             )
 
             _review_items[item.id] = item
@@ -382,3 +409,214 @@ async def seed_review_items(execution_id: str, image_dir: str):
     _save_to_disk(execution_id)
 
     return {"created_count": created_count, "execution_id": execution_id}
+
+
+@router.post("/import-annotations")
+async def import_annotations(
+    execution_id: str,
+    annotations_dir: str,
+    image_dir: str,
+):
+    """
+    Import YOLO-format annotations into existing review items.
+
+    Args:
+        execution_id: Execution ID associated with review items
+        annotations_dir: Directory containing YOLO .txt annotation files
+        image_dir: Directory containing source images
+
+    Returns:
+        Count of items updated with annotations
+    """
+    import uuid
+
+    annot_path = Path(annotations_dir)
+    img_path = Path(image_dir)
+
+    if not annot_path.exists():
+        raise HTTPException(
+            status_code=404, detail=f"Annotations directory not found: {annotations_dir}"
+        )
+    if not img_path.exists():
+        raise HTTPException(status_code=404, detail=f"Image directory not found: {image_dir}")
+
+    # Load existing items
+    if not _review_items:
+        _load_from_disk(execution_id)
+
+    updated_count = 0
+
+    # Create mapping of filename to review item
+    file_to_item = {item.file_name: item for item in _review_items.values()}
+
+    # Parse and import annotations
+    for annot_file in annot_path.glob("*.txt"):
+        # Find corresponding image
+        image_name = annot_file.stem
+        image_file = None
+
+        # Try common image extensions
+        for ext in [".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"]:
+            candidate = img_path / f"{image_name}{ext}"
+            if candidate.exists():
+                image_file = candidate
+                break
+
+        if not image_file or image_file.name not in file_to_item:
+            continue
+
+        item = file_to_item[image_file.name]
+
+        try:
+            # Parse YOLO annotations
+            annotations = []
+
+            # COCO classes mapping
+            coco_classes = [
+                "person",
+                "bicycle",
+                "car",
+                "motorcycle",
+                "airplane",
+                "bus",
+                "train",
+                "truck",
+                "boat",
+                "traffic light",
+                "fire hydrant",
+                "stop sign",
+                "parking meter",
+                "bench",
+                "bird",
+                "cat",
+                "dog",
+                "horse",
+                "sheep",
+                "cow",
+                "elephant",
+                "bear",
+                "zebra",
+                "giraffe",
+                "backpack",
+                "umbrella",
+                "handbag",
+                "tie",
+                "suitcase",
+                "frisbee",
+                "skis",
+                "snowboard",
+                "sports ball",
+                "kite",
+                "baseball bat",
+                "baseball glove",
+                "skateboard",
+                "surfboard",
+                "tennis racket",
+                "bottle",
+                "wine glass",
+                "cup",
+                "fork",
+                "knife",
+                "spoon",
+                "bowl",
+                "banana",
+                "apple",
+                "sandwich",
+                "orange",
+                "broccoli",
+                "carrot",
+                "hot dog",
+                "pizza",
+                "donut",
+                "cake",
+                "chair",
+                "couch",
+                "potted plant",
+                "bed",
+                "dining table",
+                "toilet",
+                "tv",
+                "laptop",
+                "mouse",
+                "remote",
+                "keyboard",
+                "cell phone",
+                "microwave",
+                "oven",
+                "toaster",
+                "sink",
+                "refrigerator",
+                "book",
+                "clock",
+                "vase",
+                "scissors",
+                "teddy bear",
+                "hair drier",
+                "toothbrush",
+            ]
+
+            with annot_file.open() as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+
+                    parts = line.split()
+                    if len(parts) < 5:
+                        continue
+
+                    class_id = int(parts[0])
+                    x_center = float(parts[1])
+                    y_center = float(parts[2])
+                    width = float(parts[3])
+                    height = float(parts[4])
+                    confidence = float(parts[5]) if len(parts) > 5 else 1.0
+
+                    # Convert from center to top-left
+                    x = x_center - (width / 2)
+                    y = y_center - (height / 2)
+
+                    # Get class name
+                    class_name = (
+                        coco_classes[class_id]
+                        if class_id < len(coco_classes)
+                        else f"class_{class_id}"
+                    )
+
+                    annotation = Annotation(
+                        id=str(uuid.uuid4()),
+                        type="bbox",
+                        label=class_name,
+                        confidence=confidence,
+                        bbox=BoundingBox(
+                            x=max(0, min(1, x)),
+                            y=max(0, min(1, y)),
+                            width=max(0, min(1, width)),
+                            height=max(0, min(1, height)),
+                        ),
+                        polygon=None,
+                        mask_url=None,
+                        color="#166534",
+                        visible=True,
+                    )
+                    annotations.append(annotation)
+
+            # Update item with annotations
+            if annotations:
+                item.annotations = annotations
+                item.original_annotations = annotations.copy()
+                updated_count += 1
+
+        except Exception as e:
+            print(f"Error importing annotations for {annot_file}: {e}")
+            continue
+
+    # Save updated items
+    if updated_count > 0:
+        _save_to_disk(execution_id)
+
+    return {
+        "updated_count": updated_count,
+        "execution_id": execution_id,
+        "total_items": len(_review_items),
+    }

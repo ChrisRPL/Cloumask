@@ -648,7 +648,7 @@ def get_segmenter(
         result = seg.predict("image.jpg", point=(100, 200))
         seg.unload()
     """
-    from backend.cv.device import get_available_vram_mb
+    from backend.cv.device import get_available_vram_mb, get_device_info
 
     # Force specific model if requested
     if force_model:
@@ -668,13 +668,22 @@ def get_segmenter(
 
     # Text prompts require SAM3
     if prompt_type == "text":
+        device_info = get_device_info()
         available = get_available_vram_mb()
-        if available >= SAM3Wrapper.info.vram_required_mb:
+
+        if device_info.cuda_available and available >= SAM3Wrapper.info.vram_required_mb:
             logger.info(
                 "Selecting SAM3 for text prompts (VRAM available: %dMB)",
                 available,
             )
             return SAM3Wrapper()
+
+        if device_info.mps_available:
+            logger.info(
+                "Selecting SAM3 for text prompts on MPS backend (CUDA VRAM telemetry unavailable)"
+            )
+            return SAM3Wrapper()
+
         raise RuntimeError(
             f"SAM3 requires {SAM3Wrapper.info.vram_required_mb}MB VRAM for text prompts, "
             f"only {available}MB available. Use point/box prompts instead."

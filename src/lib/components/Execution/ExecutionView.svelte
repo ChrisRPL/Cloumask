@@ -14,6 +14,7 @@
 	import { getAgentState } from '$lib/stores/agent.svelte';
 	import { getUIState } from '$lib/stores/ui.svelte';
 	import { getKeyboardState } from '$lib/stores/keyboard.svelte';
+	import { sendMessage } from '$lib/utils/tauri';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Button } from '$lib/components/ui/button';
 	import ExecutionHeader from './ExecutionHeader.svelte';
@@ -112,6 +113,10 @@
 	}
 
 	function handleResume() {
+		if (execution.status === 'checkpoint') {
+			handleContinue();
+			return;
+		}
 		execution.resume();
 	}
 
@@ -125,15 +130,42 @@
 		onCancel?.();
 	}
 
-	function handleContinue() {
-		execution.clearCheckpoint();
+	async function handleContinue() {
+		if (!execution.checkpoint || !agent.threadId) {
+			execution.clearCheckpoint();
+			return;
+		}
+		try {
+			await sendMessage(agent.threadId, {
+				content: 'continue',
+				decision: 'approve'
+			});
+			execution.clearCheckpoint();
+		} catch (error) {
+			console.error('[ExecutionView] Failed to continue checkpoint:', error);
+			execution.addError({
+				stepId: execution.currentStepId ?? 'checkpoint',
+				message: 'Failed to continue checkpoint',
+				recoverable: true
+			});
+		}
 	}
 
 	function handleReview() {
 		ui.setView('review');
 	}
 
-	function handleAbort() {
+	async function handleAbort() {
+		if (execution.checkpoint && agent.threadId) {
+			try {
+				await sendMessage(agent.threadId, {
+					content: 'cancel',
+					decision: 'cancel'
+				});
+			} catch (error) {
+				console.error('[ExecutionView] Failed to abort checkpoint:', error);
+			}
+		}
 		execution.cancel();
 	}
 

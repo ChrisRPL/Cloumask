@@ -282,6 +282,29 @@ class TestNormalsEndpoint:
         assert response.status_code == 200
         assert response.json()["operation"] == "normals"
 
+    def test_estimate_normals_accepts_radius_alias(
+        self,
+        client: TestClient,
+        sample_pcd: Path,
+        tmp_path: Path,
+    ) -> None:
+        """Should accept legacy `radius` field as alias for `search_radius`."""
+        output_path = tmp_path / "output_alias.pcd"
+
+        response = client.post(
+            "/pointcloud/normals",
+            json={
+                "input_path": str(sample_pcd),
+                "output_path": str(output_path),
+                "radius": 2.0,
+                "max_nn": 16,
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.json()["operation"] == "normals"
+        assert response.json()["parameters"]["search_radius"] == 2.0
+
 
 class TestConvertEndpoint:
     """Tests for POST /pointcloud/convert endpoint."""

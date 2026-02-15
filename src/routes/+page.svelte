@@ -12,6 +12,8 @@
 		listLLMModels,
 		isTauri,
 	} from '$lib/utils/tauri';
+	import { getSettingsState } from '$lib/stores/settings.svelte';
+	import type { Theme } from '$lib/types/settings';
 	import { open } from '@tauri-apps/plugin-shell';
 	import type {
 		AppInfo,
@@ -23,6 +25,7 @@
 	} from '$lib/types';
 	import { getUIState, VIEWS } from '$lib/stores/ui.svelte';
 	import { getSetupState } from '$lib/stores/setup.svelte';
+	import { getPipelineState } from '$lib/stores/pipeline.svelte';
 	import { ViewPlaceholder } from '$lib/components/Layout';
 	import { ChatPanel } from '$lib/components/Chat';
 	import { PlanEditor } from '$lib/components/Plan';
@@ -34,6 +37,15 @@
 	// Get state from context
 	const ui = getUIState();
 	const setup = getSetupState();
+	const pipeline = getPipelineState();
+	const settingsState = getSettingsState();
+
+	// Theme options for the toggle
+	const themeOptions: { value: Theme; label: string; icon: string }[] = [
+		{ value: 'light', label: 'Light', icon: '☀️' },
+		{ value: 'dark', label: 'Dark', icon: '🌙' },
+		{ value: 'system', label: 'System', icon: '💻' },
+	];
 
 	// Track setup completion reactively (forces Svelte to re-evaluate)
 	const isSetupComplete = $derived(setup.isComplete);
@@ -178,6 +190,29 @@
 			<h1 class="text-2xl font-bold text-foreground mb-2">Settings</h1>
 			<p class="text-muted-foreground">System status and configuration</p>
 		</div>
+
+		<!-- Appearance Card -->
+		<Card.Root class="w-full max-w-md">
+			<Card.Header>
+				<Card.Title>Appearance</Card.Title>
+				<Card.Description>Choose your preferred color theme</Card.Description>
+			</Card.Header>
+			<Card.Content>
+				<div class="flex gap-2">
+					{#each themeOptions as option}
+						<Button
+							variant={settingsState.settings.theme === option.value ? 'default' : 'outline'}
+							size="sm"
+							class="flex-1 gap-1.5"
+							onclick={() => settingsState.updateSetting('theme', option.value)}
+						>
+							<span>{option.icon}</span>
+							{option.label}
+						</Button>
+					{/each}
+				</div>
+			</Card.Content>
+		</Card.Root>
 
 		<!-- System Status Card -->
 		<Card.Root class="w-full max-w-md">
@@ -328,7 +363,11 @@
 	<ExecutionView class="h-full" />
 {:else if ui.currentView === 'review'}
 	<!-- Review Queue View -->
-	<ReviewQueue onDone={() => ui.setView('execute')} class="h-full" />
+	<ReviewQueue
+		executionId={pipeline.pipelineId ?? 'current'}
+		onDone={() => ui.setView('execute')}
+		class="h-full"
+	/>
 {:else if ui.currentView === 'pointcloud'}
 	<!-- Point Cloud Viewer -->
 	<PointCloudViewer class="h-full" />

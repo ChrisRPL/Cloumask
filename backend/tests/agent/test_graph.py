@@ -183,6 +183,12 @@ class TestRouteAfterIntentRouter:
         state = _create_minimal_state(plan=[], current_step=0)
         assert route_after_execution(state) == "complete"
 
+    def test_returns_complete_at_100_percent_even_without_prior_threshold_checkpoints(self) -> None:
+        """Should complete instead of checkpointing when all steps are done."""
+        plan = [{"id": f"step-{i}", "tool_name": "test"} for i in range(5)]
+        state = _create_minimal_state(plan=plan, current_step=5, checkpoints=[])
+        assert route_after_execution(state) == "complete"
+
 
 class TestRouteAfterCheckpoint:
     """Tests for route_after_checkpoint routing function."""

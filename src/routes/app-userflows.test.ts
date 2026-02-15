@@ -63,7 +63,7 @@ function createFetchMock(options?: {
 			);
 		}
 
-		if (url.endsWith('/api/chat/thread/new') && method === 'POST') {
+		if (url.endsWith('/api/chat/threads') && method === 'POST') {
 			if (failThreadCreate) {
 				throw new TypeError('Load failed');
 			}

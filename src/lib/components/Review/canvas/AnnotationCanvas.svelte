@@ -5,6 +5,7 @@
 		selectedAnnotationId?: string | null;
 		isEditMode?: boolean;
 		drawingTool?: 'rectangle' | 'polygon';
+		zoom?: number;
 		onAnnotationCreate?: (annotation: import('$lib/types/review').Annotation) => void;
 		onAnnotationUpdate?: (annotation: import('$lib/types/review').Annotation) => void;
 		onAnnotationDelete?: (annotationId: string) => void;
@@ -26,6 +27,7 @@
 		selectedAnnotationId = null,
 		isEditMode = false,
 		drawingTool = 'rectangle',
+		zoom = 1,
 		onAnnotationCreate,
 		onAnnotationUpdate,
 		onAnnotationDelete,
@@ -298,13 +300,18 @@
 		</div>
 	{/if}
 
-	<img
-		bind:this={imageRef}
-		src={imageUrl}
-		alt="Annotation target"
-		class={cn('max-w-full max-h-full object-contain', !isImageLoaded && 'opacity-0')}
-		onload={handleImageLoad}
-	/>
+	<div
+		class="flex items-center justify-center w-full h-full overflow-auto"
+		style="transform: scale({zoom}); transform-origin: center;"
+	>
+		<img
+			bind:this={imageRef}
+			src={imageUrl}
+			alt="Annotation target"
+			class={cn('max-w-full max-h-full object-contain', !isImageLoaded && 'opacity-0')}
+			onload={handleImageLoad}
+		/>
+	</div>
 
 	{#if isEditMode}
 		<div

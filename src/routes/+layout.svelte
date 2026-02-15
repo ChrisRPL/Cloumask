@@ -3,7 +3,7 @@
 	import type { Snippet } from 'svelte';
 	import { untrack } from 'svelte';
 	import { setUIState, VIEWS, type ViewId } from '$lib/stores/ui.svelte';
-	import { setSettingsState } from '$lib/stores/settings.svelte';
+	import { setSettingsState, getSettingsState } from '$lib/stores/settings.svelte';
 	import { setAgentState } from '$lib/stores/agent.svelte';
 	import { setPipelineState } from '$lib/stores/pipeline.svelte';
 	import { setExecutionState } from '$lib/stores/execution.svelte';
@@ -11,6 +11,7 @@
 	import { setSetupState } from '$lib/stores/setup.svelte';
 	import { setSSEState } from '$lib/stores/sse.svelte';
 	import { setKeyboardState, type KeyboardScope } from '$lib/stores/keyboard.svelte';
+	import { sendMessage } from '$lib/utils/tauri';
 	import { Header, Sidebar, MainContent } from '$lib/components/Layout';
 	import * as Tooltip from '$lib/components/ui/tooltip';
 	import { CommandPalette, KeyboardShortcutsOverlay } from '$lib/components/Keyboard';
@@ -23,12 +24,37 @@
 
 	// Initialize all stores at root level (context is set by the function call)
 	const ui = setUIState();
-	setSettingsState();
+	const settings = setSettingsState();
 	setSetupState();
 	const agent = setAgentState();
 	const pipeline = setPipelineState();
 	const execution = setExecutionState();
 	const review = setReviewState();
+
+	// Apply theme class to html element based on settings
+	$effect(() => {
+		if (typeof window === 'undefined') return;
+		const html = document.documentElement;
+		const theme = settings.settings.theme;
+
+		function applyTheme(isDark: boolean) {
+			if (isDark) {
+				html.classList.add('dark');
+			} else {
+				html.classList.remove('dark');
+			}
+		}
+
+		if (theme === 'system') {
+			const mq = window.matchMedia('(prefers-color-scheme: dark)');
+			applyTheme(mq.matches);
+			const handler = (e: MediaQueryListEvent) => applyTheme(e.matches);
+			mq.addEventListener('change', handler);
+			return () => mq.removeEventListener('change', handler);
+		} else {
+			applyTheme(theme === 'dark');
+		}
+	});
 
 	// Initialize keyboard state
 	const keyboard = setKeyboardState();
@@ -197,9 +223,17 @@
 			// Enter - Continue at checkpoint
 			const execContinueId = keyboard.register({
 				combo: 'enter',
-				action: () => {
-					if (execution.checkpoint) {
-						execution.resume();
+				action: async () => {
+					if (execution.checkpoint && agent.threadId) {
+						try {
+							await sendMessage(agent.threadId, {
+								content: 'continue',
+								decision: 'approve',
+							});
+							execution.clearCheckpoint();
+						} catch (error) {
+							console.error('[Keyboard] Failed to continue checkpoint:', error);
+						}
 					}
 				},
 				scope: 'execution',

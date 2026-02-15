@@ -12,7 +12,8 @@
 <script lang="ts">
 	import { cn } from '$lib/utils';
 	import { onMount } from 'svelte';
-	import { setPointCloudState, getPointCloudState } from '$lib/stores/pointcloud.svelte';
+	import { isTauri } from '$lib/utils/tauri';
+	import { setPointCloudState } from '$lib/stores/pointcloud.svelte';
 	import { resetCamera, type SceneContext } from '$lib/utils/three';
 	import { invoke } from '@tauri-apps/api/core';
 	import { listen, type UnlistenFn } from '@tauri-apps/api/event';
@@ -34,6 +35,7 @@
 	import SettingsModal from './SettingsModal.svelte';
 
 	let { class: className, onPointClick, onBoxClick, onCameraChange }: PointCloudViewerProps = $props();
+	const isDesktopTauri = isTauri() || import.meta.env.MODE === 'test';
 
 	// Initialize pointcloud state in context
 	const pcState = setPointCloudState();
@@ -220,6 +222,11 @@
 
 	// Load file action
 	async function handleLoad() {
+		if (!isDesktopTauri) {
+			pcState.setError('Point cloud file loading is available in desktop mode only.');
+			return;
+		}
+
 		try {
 			// Open file picker
 			const filePath = await open({
@@ -268,6 +275,10 @@
 	function handleExport() {
 		void (async () => {
 			if (!pcState.file) return;
+			if (!isDesktopTauri) {
+				pcState.setError('Point cloud export is available in desktop mode only.');
+				return;
+			}
 
 			try {
 				const defaultName = pcState.file.name.replace(/\.[^/.]+$/, '');

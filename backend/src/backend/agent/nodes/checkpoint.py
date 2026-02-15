@@ -75,6 +75,11 @@ def checkpoint_node(state: PipelineState) -> dict[str, Any]:
         "id": f"ckpt-{uuid4().hex[:8]}",
         "step_index": current_step,
         "trigger_reason": trigger.value,
+        "progress_percent": (
+            (current_step / len(state.get("plan", [])) * 100)
+            if state.get("plan")
+            else 0.0
+        ),
         "quality_metrics": {
             "average_confidence": metrics.average_confidence,
             "error_count": metrics.error_count,

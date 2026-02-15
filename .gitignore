@@ -232,6 +232,17 @@ vite.config.ts.timestamp-*
 # Model weights (download on demand)
 /backend/models/*.pt
 /backend/models/**/*.pt
+/backend/models/*.onnx
+/backend/models/**/*.onnx
+
+# Runtime and QA artifacts
+/backend/.artifacts/
+/backend/data/review/
+/data/review/
+/test-results/
+/playwright-report/
+/tests/e2e/screenshots/
+/tmp/
 
 # OS files
 .DS_Store

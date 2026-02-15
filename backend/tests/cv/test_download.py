@@ -94,6 +94,7 @@ class TestModelRegistry:
         """Registry should contain known models."""
         assert "yolo11m" in MODEL_REGISTRY
         assert "sam2-hiera-large" in MODEL_REGISTRY
+        assert "sam3" in MODEL_REGISTRY
         assert "scrfd-10g" in MODEL_REGISTRY
 
     def test_registry_entry_structure(self) -> None:
@@ -102,6 +103,13 @@ class TestModelRegistry:
         assert entry.name == "yolo11m"
         assert entry.source == ModelSource.ULTRALYTICS
         assert entry.size_mb > 0
+
+    def test_sam3_registry_entry(self) -> None:
+        """SAM3 should point to the published HuggingFace checkpoint."""
+        entry = MODEL_REGISTRY["sam3"]
+        assert entry.source == ModelSource.HUGGINGFACE
+        assert entry.repo_id == "facebook/sam3"
+        assert entry.filename == "sam3.pt"
 
     def test_register_custom_model(self) -> None:
         """register_model should add to registry."""

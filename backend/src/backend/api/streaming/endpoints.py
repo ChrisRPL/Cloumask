@@ -120,10 +120,7 @@ async def _cleanup_expired_threads() -> None:
     """Periodic task to clean up expired threads."""
     while True:
         await asyncio.sleep(CLEANUP_INTERVAL_SECONDS)
-        expired = [
-            tid for tid, thread in _threads.items()
-            if thread.is_expired()
-        ]
+        expired = [tid for tid, thread in _threads.items() if thread.is_expired()]
         for tid in expired:
             logger.info(f"Cleaning up expired thread {tid}")
             _delete_thread(tid)
@@ -216,10 +213,7 @@ async def stream_chat(
 
     # Check for existing connection (prevent race condition)
     if thread.connection_count >= MAX_CONNECTIONS_PER_THREAD:
-        raise HTTPException(
-            status_code=409,
-            detail="Thread already has an active SSE connection"
-        )
+        raise HTTPException(status_code=409, detail="Thread already has an active SSE connection")
 
     async def event_generator() -> AsyncGenerator[dict[str, Any], None]:
         thread.connection_count += 1
@@ -310,7 +304,7 @@ async def send_message(
     )
 
 
-@router.post("/thread/new")
+@router.post("/threads")
 async def create_thread() -> ThreadInfo:
     """
     Create a new chat thread.
@@ -333,7 +327,7 @@ async def create_thread() -> ThreadInfo:
     )
 
 
-@router.get("/thread/{thread_id}")
+@router.get("/threads/{thread_id}")
 async def get_thread_info(thread_id: str) -> ThreadInfo:
     """
     Get information about a chat thread.
@@ -363,7 +357,7 @@ async def get_thread_info(thread_id: str) -> ThreadInfo:
     )
 
 
-@router.delete("/thread/{thread_id}")
+@router.delete("/threads/{thread_id}")
 async def close_thread(thread_id: str) -> dict[str, str]:
     """
     Close a chat thread and cleanup resources.
@@ -446,19 +440,19 @@ async def process_agent_request(
 
         # Handle CANCEL decision
         if decision == UserDecision.CANCEL:
+            await queue.put(message_event("system", "Operation cancelled by user."))
             await queue.put(
-                message_event("system", "Operation cancelled by user.")
-            )
-            await queue.put(
-                complete_event({
-                    "pipeline_id": thread.pipeline_state.get("metadata", {}).get(
-                        "pipeline_id", thread_id
-                    ),
-                    "total_steps": len(thread.pipeline_state.get("plan", [])),
-                    "completed_steps": thread.pipeline_state.get("current_step", 0),
-                    "failed_steps": 0,
-                    "summary": "Cancelled by user",
-                })
+                complete_event(
+                    {
+                        "pipeline_id": thread.pipeline_state.get("metadata", {}).get(
+                            "pipeline_id", thread_id
+                        ),
+                        "total_steps": len(thread.pipeline_state.get("plan", [])),
+                        "completed_steps": thread.pipeline_state.get("current_step", 0),
+                        "failed_steps": 0,
+                        "summary": "Cancelled by user",
+                    }
+                )
             )
             # Reset thread state for new requests
             thread.pipeline_state = {}
@@ -549,7 +543,7 @@ def _sanitize_error_message(message: str) -> str:
         "/home/",
         "/root/",
         "traceback",
-        "File \"",
+        'File "',
     ]
 
     message_lower = message.lower()
@@ -588,8 +582,9 @@ def _apply_user_decision(
     # Clear awaiting flag
     state["awaiting_user"] = False
 
-    # Apply plan edits if provided
-    if plan_edits and decision == UserDecision.EDIT:
+    # Apply plan edits whenever the frontend sends them.
+    # This allows "approve + edited plan" flows from the plan editor.
+    if plan_edits:
         state["plan"] = plan_edits
 
     # If approving plan for first time
@@ -599,9 +594,7 @@ def _apply_user_decision(
 
 def _compute_plan_hash(plan: list[dict[str, Any]]) -> str:
     """Compute a simple hash of plan for change detection."""
-    return str(len(plan)) + ":" + ",".join(
-        step.get("id", str(i)) for i, step in enumerate(plan)
-    )
+    return str(len(plan)) + ":" + ",".join(step.get("id", str(i)) for i, step in enumerate(plan))
 
 
 def state_to_events(
@@ -644,24 +637,17 @@ def state_to_events(
 
     if plan:
         plan_hash = _compute_plan_hash(plan)
-        should_emit_plan = (
-            thread is None or
-            thread.last_emitted_plan_hash != plan_hash
-        )
+        should_emit_plan = thread is None or thread.last_emitted_plan_hash != plan_hash
 
         if should_emit_plan and not plan_approved:
-            pipeline_id = (
-                state_update.get("metadata", {}).get("pipeline_id", "") or thread_id
-            )
+            pipeline_id = state_update.get("metadata", {}).get("pipeline_id", "") or thread_id
             events.append(plan_event(pipeline_id, plan))
             if thread:
                 thread.last_emitted_plan_hash = plan_hash
 
     # Emit PLAN_APPROVED event when plan is first approved
     if plan_approved and thread and not thread.plan_approved_emitted:
-        events.append(
-            message_event("system", "Plan approved. Starting execution...")
-        )
+        events.append(message_event("system", "Plan approved. Starting execution..."))
         thread.plan_approved_emitted = True
 
     # Check for current step changes (execution progress)
@@ -715,10 +701,7 @@ def state_to_events(
     if checkpoints:
         latest = checkpoints[-1]
         checkpoint_id = latest.get("id", "")
-        is_new_checkpoint = (
-            thread is None or
-            thread.last_emitted_checkpoint_id != checkpoint_id
-        )
+        is_new_checkpoint = thread is None or thread.last_emitted_checkpoint_id != checkpoint_id
 
         if not latest.get("resolved_at") and is_new_checkpoint:
             events.append(
@@ -758,15 +741,21 @@ def state_to_events(
         # Calculate stats
         total_steps = len(plan)
         completed_steps = sum(
-            1
-            for r in execution_results.values()
-            if r.get("status") == StepStatus.COMPLETED.value
+            1 for step in plan if step.get("status") == StepStatus.COMPLETED.value
         )
-        failed_steps = sum(
-            1
-            for r in execution_results.values()
-            if r.get("status") == StepStatus.FAILED.value
-        )
+        failed_steps = sum(1 for step in plan if step.get("status") == StepStatus.FAILED.value)
+        # Fallback for legacy states where plan statuses are missing.
+        if completed_steps == 0 and failed_steps == 0 and execution_results:
+            completed_steps = sum(
+                1
+                for r in execution_results.values()
+                if isinstance(r, dict) and r.get("status") == StepStatus.COMPLETED.value
+            )
+            failed_steps = sum(
+                1
+                for r in execution_results.values()
+                if isinstance(r, dict) and r.get("status") == StepStatus.FAILED.value
+            )
 
         events.append(
             complete_event(
