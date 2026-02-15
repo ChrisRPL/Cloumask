@@ -1,0 +1,4 @@
+interface:
+  display_name: "Open Source Handoff"
+  short_description: "Open-source repo cleanup and handoff docs"
+  default_prompt: "Use $prepare-open-source-handoff to clean this repository and upgrade README and contributor docs for open-source handoff readiness."
