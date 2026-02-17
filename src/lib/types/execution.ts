@@ -153,6 +153,16 @@ export interface ExecutionState {
   appendPreviews(previews: PreviewItem[]): void;
   clearPreviews(): void;
   setSelectedPointcloudPreview(preview: PreviewItem | null): void;
+  setPointcloudAnnotationStatus(
+    previewId: string,
+    annotationId: string,
+    status: PointcloudPreviewAnnotation["status"],
+  ): void;
+  updatePointcloudAnnotation(
+    previewId: string,
+    annotationId: string,
+    updates: Partial<Omit<PointcloudPreviewAnnotation, "id">>,
+  ): void;
 
   // Error actions
   addError(error: Omit<ExecutionError, "timestamp">): void;

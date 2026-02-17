@@ -66,6 +66,15 @@ function calculatePercentage(current: number, total: number): number {
   return Math.round((current / total) * 100);
 }
 
+function derivePointcloudPreviewStatus(
+  annotations: import("$lib/types/execution").PointcloudPreviewAnnotation[],
+): "processed" | "flagged" | "error" {
+  if (annotations.some((annotation) => annotation.status !== "rejected")) {
+    return "flagged";
+  }
+  return "processed";
+}
+
 // ============================================================================
 // State Factory
 // ============================================================================
@@ -93,6 +102,18 @@ export function createExecutionState(): ExecutionState {
   const errorRate = $derived(
     stats.processed > 0 ? stats.errors / stats.processed : 0,
   );
+
+  const updatePreviewById = (
+    previewId: string,
+    mutate: (preview: PreviewItem) => PreviewItem,
+  ): void => {
+    previews = previews.map((preview) =>
+      preview.id === previewId ? mutate(preview) : preview
+    );
+    if (selectedPointcloudPreview?.id === previewId) {
+      selectedPointcloudPreview = mutate(selectedPointcloudPreview);
+    }
+  };
 
   return {
     // Getters
@@ -253,6 +274,62 @@ export function createExecutionState(): ExecutionState {
 
     setSelectedPointcloudPreview(preview: PreviewItem | null) {
       selectedPointcloudPreview = preview;
+    },
+
+    setPointcloudAnnotationStatus(
+      previewId: string,
+      annotationId: string,
+      status,
+    ) {
+      updatePreviewById(previewId, (preview) => {
+        if (
+          preview.assetType !== "pointcloud" ||
+          !preview.pointcloudAnnotations ||
+          preview.pointcloudAnnotations.length === 0
+        ) {
+          return preview;
+        }
+        let changed = false;
+        const pointcloudAnnotations = preview.pointcloudAnnotations.map(
+          (annotation) => {
+            if (annotation.id !== annotationId) return annotation;
+            changed = true;
+            return { ...annotation, status };
+          },
+        );
+        if (!changed) return preview;
+        return {
+          ...preview,
+          pointcloudAnnotations,
+          status: derivePointcloudPreviewStatus(pointcloudAnnotations),
+        };
+      });
+    },
+
+    updatePointcloudAnnotation(previewId: string, annotationId: string, updates) {
+      updatePreviewById(previewId, (preview) => {
+        if (
+          preview.assetType !== "pointcloud" ||
+          !preview.pointcloudAnnotations ||
+          preview.pointcloudAnnotations.length === 0
+        ) {
+          return preview;
+        }
+        let changed = false;
+        const pointcloudAnnotations = preview.pointcloudAnnotations.map(
+          (annotation) => {
+            if (annotation.id !== annotationId) return annotation;
+            changed = true;
+            return { ...annotation, ...updates };
+          },
+        );
+        if (!changed) return preview;
+        return {
+          ...preview,
+          pointcloudAnnotations,
+          status: derivePointcloudPreviewStatus(pointcloudAnnotations),
+        };
+      });
     },
 
     // Error actions
