@@ -188,7 +188,8 @@ export async function closeWindow(): Promise<void> {
  * Useful for SSR compatibility and testing.
  */
 export function isTauri(): boolean {
-	return typeof window !== 'undefined' && '__TAURI__' in window;
+	if (typeof window === 'undefined') return false;
+	return '__TAURI_INTERNALS__' in window || '__TAURI__' in window;
 }
 
 /**
