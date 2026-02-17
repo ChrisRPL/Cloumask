@@ -100,6 +100,10 @@ function createFetchMock(options?: {
 describe('App user flows', () => {
 	beforeEach(() => {
 		localStorage.clear();
+		// @ts-expect-error test cleanup
+		delete window.__TAURI__;
+		// @ts-expect-error test cleanup
+		delete window.__TAURI_INTERNALS__;
 		vi.stubGlobal('fetch', createFetchMock());
 	});
 
@@ -119,6 +123,19 @@ describe('App user flows', () => {
 		});
 
 		expect(screen.getAllByText('Chat').length).toBeGreaterThan(0);
+	});
+
+	it('shows welcome setup on tauri startup even if setup was completed before', async () => {
+		localStorage.setItem('cloumask:setup', 'complete');
+		Object.defineProperty(window, '__TAURI_INTERNALS__', {
+			value: {},
+			writable: true,
+			configurable: true,
+		});
+
+		render(AppTestHost);
+
+		expect(screen.getByText('Setting up Cloumask')).toBeTruthy();
 	});
 
 	it('supports primary navigation via keyboard shortcuts for key user flows', async () => {
