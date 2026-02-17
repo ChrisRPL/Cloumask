@@ -131,6 +131,17 @@ Free the conflicting process or stop existing dev sessions.
 - `backend/README.md`
 - `CONTRIBUTING.md`
 
+## Contributing
+
+Please read `CONTRIBUTING.md` before opening issues or pull requests.
+
+Basic flow:
+
+1. Create a feature branch.
+2. Make focused, test-backed changes.
+3. Run the verify gate (`just ci`).
+4. Open a PR with clear scope and validation notes.
+
 ## License
 
 MIT
