@@ -30,7 +30,7 @@ docs/                Architecture, plans, testing docs
 tests/               Playwright end-to-end tests
 ```
 
-## Install
+## Quickstart
 
 ### Prerequisites
 
@@ -39,16 +39,14 @@ tests/               Playwright end-to-end tests
 - Rust (for desktop builds/dev)
 - Ollama (for local model-backed agent flows)
 
-### Setup
+### Install
 
 ```bash
 npm install
 npm run backend:install
 ```
 
-## Run
-
-### Web app (recommended for dev loop)
+### Start (web mode)
 
 ```bash
 # Terminal 1
@@ -60,13 +58,19 @@ npm run dev
 
 Open `http://localhost:5173`.
 
-### Desktop app
+## Run modes
+
+### Web mode (recommended dev loop)
+
+Use the Quickstart commands above (`npm run backend:dev` + `npm run dev`).
+
+### Desktop mode
 
 ```bash
 npm run tauri:dev
 ```
 
-### Build desktop artifacts
+### Desktop build
 
 ```bash
 npm run tauri:build

@@ -12,10 +12,12 @@ const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as Pack
 
 describe('README contract', () => {
 	it('includes key OSS contributor sections', () => {
-		expect(readme).toContain('## Install');
-		expect(readme).toContain('## Run');
+		expect(readme).toContain('## Quickstart');
 		expect(readme).toContain('## Architecture');
+		expect(readme).toContain('## Run modes');
+		expect(readme).toContain('## Verify');
 		expect(readme).toContain('## Troubleshooting');
+		expect(readme).toContain('## Contributing');
 	});
 
 	it('references only existing npm scripts', () => {
