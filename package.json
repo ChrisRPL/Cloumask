@@ -47,7 +47,6 @@
     "@testing-library/svelte": "^5.3.1",
     "@types/node": "^25.0.5",
     "@types/three": "^0.182.0",
-    "@vitest/coverage-v8": "^4.0.18",
     "autoprefixer": "^10.4.23",
     "jsdom": "^28.0.0",
     "postcss": "^8.5.6",

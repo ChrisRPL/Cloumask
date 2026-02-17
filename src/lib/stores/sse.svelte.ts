@@ -11,7 +11,6 @@ import type {
 	ConnectionState,
 	SSEEvent,
 	MessageEventData,
-	ThinkingEventData,
 	PlanEventData,
 	ToolProgressEventData,
 	ToolResultEventData,
@@ -182,11 +181,10 @@ function routeEventToStores(
 			break;
 		}
 
-		case 'thinking': {
-			const data = event.data as ThinkingEventData;
-			agent.setPhase('understanding');
-			agent.setStreaming(true);
-			// Could update a thinking message here if needed
+			case 'thinking': {
+				agent.setPhase('understanding');
+				agent.setStreaming(true);
+				// Could update a thinking message here if needed
 			break;
 		}
 
