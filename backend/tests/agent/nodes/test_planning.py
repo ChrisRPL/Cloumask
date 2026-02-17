@@ -765,6 +765,93 @@ class TestGeneratePlanNode:
         assert "detect" in tool_names
         assert "export" in tool_names
 
+    @pytest.mark.asyncio
+    async def test_rule_based_pointcloud_plan_uses_3d_tools_for_file_input(self) -> None:
+        """Pointcloud requests should map to 3D tools without LLM round-trip."""
+        state = PipelineState(
+            messages=[
+                {
+                    "role": MessageRole.USER.value,
+                    "content": "label cars and pedestrians in /tmp/lidar/frame_001.bin",
+                    "timestamp": "2024-01-01T00:00:00",
+                    "tool_calls": [],
+                    "tool_call_id": None,
+                }
+            ],
+            metadata={
+                "understanding": {
+                    "intent": "label",
+                    "input_path": "/tmp/lidar/frame_001.bin",
+                    "input_type": "pointcloud",
+                    "operations": ["label", "detect", "export"],
+                    "parameters": {"classes": ["car", "person"], "confidence": 0.42},
+                    "output_path": None,
+                    "clarification_needed": None,
+                }
+            },
+            plan=[],
+            plan_approved=False,
+            current_step=0,
+            execution_results={},
+            checkpoints=[],
+            awaiting_user=False,
+            last_error=None,
+            retry_count=0,
+        )
+
+        with patch("backend.agent.nodes.plan.get_llm") as mock_get_llm:
+            result = await generate_plan(state)
+            mock_get_llm.assert_not_called()
+
+        tool_names = [step["tool_name"] for step in result["plan"]]
+        assert tool_names == ["pointcloud_stats", "detect_3d"]
+        detect_step = next(step for step in result["plan"] if step["tool_name"] == "detect_3d")
+        assert detect_step["parameters"]["classes"] == ["Car", "Pedestrian"]
+        assert detect_step["parameters"]["confidence"] == 0.42
+
+    @pytest.mark.asyncio
+    async def test_rule_based_pointcloud_plan_handles_directory_input(self) -> None:
+        """Directory pointcloud requests should scan first, then run 3D detection."""
+        state = PipelineState(
+            messages=[
+                {
+                    "role": MessageRole.USER.value,
+                    "content": "label point cloud data in /tmp/lidar_dataset",
+                    "timestamp": "2024-01-01T00:00:00",
+                    "tool_calls": [],
+                    "tool_call_id": None,
+                }
+            ],
+            metadata={
+                "understanding": {
+                    "intent": "label",
+                    "input_path": "/tmp/lidar_dataset",
+                    "input_type": "pointcloud",
+                    "operations": ["label", "detect", "export", "script"],
+                    "parameters": {"custom_step_description": "visualize with open3d"},
+                    "output_path": None,
+                    "clarification_needed": None,
+                }
+            },
+            plan=[],
+            plan_approved=False,
+            current_step=0,
+            execution_results={},
+            checkpoints=[],
+            awaiting_user=False,
+            last_error=None,
+            retry_count=0,
+        )
+
+        with patch("backend.agent.nodes.plan.get_llm") as mock_get_llm:
+            result = await generate_plan(state)
+            mock_get_llm.assert_not_called()
+
+        tool_names = [step["tool_name"] for step in result["plan"]]
+        assert tool_names[0] == "scan_directory"
+        assert "detect_3d" in tool_names
+        assert "run_script" in tool_names
+
 
 # -----------------------------------------------------------------------------
 # Edge cases and integration tests

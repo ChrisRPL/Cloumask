@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
@@ -50,6 +51,29 @@ VALID_TOOLS = frozenset(
     ]
 )
 
+POINTCLOUD_FILE_EXTENSIONS = frozenset({".pcd", ".ply", ".las", ".laz", ".bin", ".xyz", ".pts", ".e57"})
+ROSBAG_EXTENSIONS = frozenset({".bag", ".db3", ".mcap"})
+POINTCLOUD_CLASS_ALIASES = {
+    "car": "Car",
+    "cars": "Car",
+    "vehicle": "Car",
+    "vehicles": "Car",
+    "truck": "Car",
+    "trucks": "Car",
+    "person": "Pedestrian",
+    "people": "Pedestrian",
+    "pedestrian": "Pedestrian",
+    "pedestrians": "Pedestrian",
+    "cyclist": "Cyclist",
+    "cyclists": "Cyclist",
+    "bicycle": "Cyclist",
+    "bicycles": "Cyclist",
+    "bike": "Cyclist",
+    "bikes": "Cyclist",
+}
+VALID_3D_CLASSES = {"Car", "Pedestrian", "Cyclist"}
+DEFAULT_3D_CLASSES = ["Car", "Pedestrian"]
+
 
 def _normalize_classes(value: Any) -> list[str]:
     if isinstance(value, list):
@@ -59,6 +83,161 @@ def _normalize_classes(value: Any) -> list[str]:
         classes = [part.strip() for part in value.split(",") if part.strip()]
         return classes
     return []
+
+
+def _normalize_3d_classes(value: Any) -> list[str]:
+    """Normalize class labels for 3D detection tools."""
+    normalized: list[str] = []
+    for cls in _normalize_classes(value):
+        mapped = POINTCLOUD_CLASS_ALIASES.get(cls.lower(), cls)
+        if mapped not in VALID_3D_CLASSES:
+            continue
+        if mapped not in normalized:
+            normalized.append(mapped)
+    return normalized
+
+
+def _is_pointcloud_request(
+    *,
+    input_path: str,
+    input_type: Any,
+    operations: list[str],
+) -> bool:
+    if isinstance(input_type, str) and input_type.lower() == "pointcloud":
+        return True
+
+    suffix = Path(input_path).suffix.lower()
+    if suffix in POINTCLOUD_FILE_EXTENSIONS or suffix in ROSBAG_EXTENSIONS:
+        return True
+
+    pointcloud_ops = {
+        "pointcloud_stats",
+        "process_pointcloud",
+        "detect_3d",
+        "project_3d_to_2d",
+        "anonymize_pointcloud",
+        "extract_rosbag",
+    }
+    return any(op in pointcloud_ops for op in operations)
+
+
+def _build_pointcloud_rule_based_plan(
+    *,
+    input_path: str,
+    operations: list[str],
+    parameters: dict[str, Any],
+    output_path: str | None,
+) -> list[dict[str, Any]] | None:
+    """Build deterministic pointcloud-first plans from parsed understanding."""
+    plan: list[dict[str, Any]] = []
+    working_path = input_path
+    suffix = Path(input_path).suffix.lower()
+
+    if suffix in ROSBAG_EXTENSIONS or "extract_rosbag" in operations:
+        extract_output = str(output_path or f"{input_path}_extracted")
+        plan.append(
+            {
+                "tool_name": "extract_rosbag",
+                "parameters": {
+                    "bag_path": input_path,
+                    "output_dir": extract_output,
+                    "max_frames": int(parameters.get("max_frames", 100)),
+                    "sync_sensors": bool(parameters.get("sync_sensors", True)),
+                },
+                "description": "Extract synchronized LiDAR frames from ROS bag",
+            }
+        )
+        working_path = f"{extract_output}/pointclouds"
+        suffix = ""
+
+    if suffix in POINTCLOUD_FILE_EXTENSIONS:
+        plan.append(
+            {
+                "tool_name": "pointcloud_stats",
+                "parameters": {"path": working_path},
+                "description": "Inspect point cloud metadata before processing",
+            }
+        )
+    else:
+        plan.append(
+            {
+                "tool_name": "scan_directory",
+                "parameters": {"path": working_path, "recursive": True},
+                "description": "Scan pointcloud directory and validate supported files",
+            }
+        )
+
+    wants_detection = "detect" in operations or "label" in operations or "detect_3d" in operations
+    if wants_detection:
+        classes = _normalize_3d_classes(parameters.get("classes"))
+        if not classes:
+            classes = DEFAULT_3D_CLASSES.copy()
+
+        plan.append(
+            {
+                "tool_name": "detect_3d",
+                "parameters": {
+                    "input_path": working_path,
+                    "classes": classes,
+                    "confidence": float(parameters.get("confidence", 0.3)),
+                    "coordinate_system": str(parameters.get("coordinate_system", "kitti")),
+                },
+                "description": "Detect and label 3D objects in pointcloud data",
+            }
+        )
+
+    if "anonymize" in operations or "anonymize_pointcloud" in operations:
+        anonymized_output = str(output_path or f"{input_path}_anonymized.pcd")
+        plan.append(
+            {
+                "tool_name": "anonymize_pointcloud",
+                "parameters": {
+                    "input_path": working_path,
+                    "output_path": anonymized_output,
+                    "mode": str(parameters.get("mode", "remove")),
+                    "verify": bool(parameters.get("verify", True)),
+                },
+                "description": "Anonymize sensitive regions in the pointcloud",
+            }
+        )
+        working_path = anonymized_output
+
+    if "script" in operations or "train" in operations:
+        script_params: dict[str, Any] = {"input_path": working_path}
+        if output_path:
+            script_params["output_path"] = output_path
+
+        model_type = str(parameters.get("model_type", "yolov8"))
+        is_training = parameters.get("training") or "train" in operations
+
+        if is_training:
+            script_content = _generate_training_script(model_type, working_path, parameters)
+            script_params["script"] = script_content
+            script_params["description"] = (
+                f"Train {model_type} model on features derived from pointcloud data"
+            )
+            description = f"Train {model_type} model using the prepared data"
+        else:
+            custom_desc = parameters.get("custom_step_description", "")
+            if parameters.get("script"):
+                script_params["script"] = parameters["script"]
+            if parameters.get("command"):
+                script_params["command"] = parameters["command"]
+            if custom_desc:
+                description = custom_desc.capitalize()
+                script_params["description"] = custom_desc
+            else:
+                description = "Run custom post-processing for pointcloud workflow"
+
+        plan.append(
+            {
+                "tool_name": "run_script",
+                "parameters": script_params,
+                "description": description,
+            }
+        )
+
+    return plan if plan else None
 
 
 def _generate_training_script(
@@ -148,9 +327,18 @@ def build_rule_based_plan(understanding: dict[str, Any]) -> list[dict[str, Any]]
     ]
     parameters = dict(understanding.get("parameters", {}))
     output_path = understanding.get("output_path")
+    input_type = understanding.get("input_type")
 
     if not input_path or not operations:
         return None
+
+    if _is_pointcloud_request(input_path=input_path, input_type=input_type, operations=operations):
+        return _build_pointcloud_rule_based_plan(
+            input_path=input_path,
+            operations=operations,
+            parameters=parameters,
+            output_path=output_path,
+        )
 
     # Keep scan-only flows in the LLM path for broader backwards compatibility.
     if len(operations) == 1 and operations[0] == "scan":
@@ -171,6 +359,12 @@ def build_rule_based_plan(understanding: dict[str, Any]) -> list[dict[str, Any]]
         "script",
         "train",
         "review",
+        "pointcloud_stats",
+        "process_pointcloud",
+        "detect_3d",
+        "project_3d_to_2d",
+        "anonymize_pointcloud",
+        "extract_rosbag",
     }
     operations = [op for op in operations if op in allowed]
     if not operations:
