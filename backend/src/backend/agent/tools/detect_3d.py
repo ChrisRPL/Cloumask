@@ -238,6 +238,11 @@ Examples:
                 f"Supported: {', '.join(sorted(POINTCLOUD_EXTENSIONS))}"
             )
 
+        # Single-file execution context used by heuristic fallback metadata.
+        source_path = input_p
+        source_was_directory = False
+        source_file_count = 1
+
         if confidence < 0 or confidence > 1:
             return error_result(
                 f"Invalid confidence: {confidence}. Must be between 0 and 1."
