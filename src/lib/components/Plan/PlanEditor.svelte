@@ -16,6 +16,7 @@
 	import { getUIState } from '$lib/stores/ui.svelte';
 	import { getKeyboardState } from '$lib/stores/keyboard.svelte';
 	import { sendMessage } from '$lib/utils/tauri';
+	import { defaultToolNameForStepType, isPointcloudToolName } from '$lib/utils/pipeline-step-type';
 	import type { PipelineStep, StepType, StepConfig as StepConfigType } from '$lib/types/pipeline';
 
 	import PlanHeader from './PlanHeader.svelte';
@@ -223,8 +224,11 @@
 	// Handle add step
 	function handleAddStep(type: StepType) {
 		const defaultConfig = getDefaultConfig(type);
+		const preferPointcloud = pipeline.steps.some((step) => isPointcloudToolName(step.toolName));
+		const toolName = defaultToolNameForStepType(type, { preferPointcloud });
+
 		pipeline.addStep({
-			toolName: type,
+			toolName,
 			type,
 			description: `${type.charAt(0).toUpperCase() + type.slice(1)} step`,
 			config: {
