@@ -113,14 +113,37 @@ Examples:
         """
         from backend.cv.detection_3d import CoordinateSystem, get_3d_detector
 
-        input_p = Path(input_path)
+        source_path = Path(input_path)
+        input_p = source_path
+        source_was_directory = False
+        source_file_count = 1
 
         # Validate input
-        if not input_p.exists():
+        if not source_path.exists():
             return error_result(f"Input not found: {input_path}")
 
-        if not input_p.is_file():
-            return error_result("3D detection requires a single point cloud file")
+        if source_path.is_dir():
+            source_was_directory = True
+            candidates = sorted({
+                path
+                for ext in POINTCLOUD_EXTENSIONS
+                for path in source_path.rglob(f"*{ext}")
+                if path.is_file()
+            })
+            source_file_count = len(candidates)
+            if not candidates:
+                return error_result(
+                    f"No supported pointcloud files found in directory: {input_path}"
+                )
+            input_p = candidates[0]
+            logger.info(
+                "Resolved pointcloud directory %s to %s (%d candidate files)",
+                source_path,
+                input_p,
+                source_file_count,
+            )
+        elif not source_path.is_file():
+            return error_result("3D detection requires a point cloud file or directory")
 
         if input_p.suffix.lower() not in POINTCLOUD_EXTENSIONS:
             return error_result(
@@ -196,6 +219,9 @@ Examples:
                 return success_result(
                     {
                         "pointcloud_path": str(input_p),
+                        "source_path": str(source_path),
+                        "source_was_directory": source_was_directory,
+                        "source_file_count": source_file_count,
                         "count": len(result.detections),
                         "classes_found": class_counts,
                         "detections": detections_data,

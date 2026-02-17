@@ -556,6 +556,45 @@ class TestDetect3DTool:
             assert result.success
 
     @pytest.mark.asyncio
+    async def test_detect_3d_directory_input(self, tmp_path, mock_3d_detection_result):
+        """Directory input should resolve to the first supported pointcloud file."""
+        pointcloud_dir = tmp_path / "lidar"
+        pointcloud_dir.mkdir()
+        first_file = pointcloud_dir / "a_scan.bin"
+        second_file = pointcloud_dir / "b_scan.bin"
+        first_file.touch()
+        second_file.touch()
+
+        with patch("backend.cv.detection_3d.get_3d_detector") as mock_get:
+            mock_detector = MagicMock()
+            mock_detector.info.name = "pvrcnn++"
+            mock_detector.predict.return_value = mock_3d_detection_result
+            mock_get.return_value = mock_detector
+
+            tool = Detect3DTool()
+            result = await tool.run(input_path=str(pointcloud_dir))
+
+            assert result.success
+            assert result.data["source_was_directory"] is True
+            assert result.data["source_file_count"] == 2
+            assert result.data["pointcloud_path"] == str(first_file)
+            mock_detector.predict.assert_called_once()
+            called_path = mock_detector.predict.call_args[0][0]
+            assert called_path == str(first_file)
+
+    @pytest.mark.asyncio
+    async def test_detect_3d_empty_directory_fails(self, tmp_path):
+        """Directory input without pointcloud files should fail clearly."""
+        pointcloud_dir = tmp_path / "empty_lidar"
+        pointcloud_dir.mkdir()
+
+        tool = Detect3DTool()
+        result = await tool.run(input_path=str(pointcloud_dir))
+
+        assert not result.success
+        assert "no supported pointcloud files" in result.error.lower()
+
+    @pytest.mark.asyncio
     async def test_detect_3d_invalid_class(self, temp_pointcloud):
         """Test 3D detection with invalid class name."""
         tool = Detect3DTool()
