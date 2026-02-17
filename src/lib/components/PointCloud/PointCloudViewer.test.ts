@@ -153,4 +153,77 @@ describe('PointCloudViewer', () => {
 			expect(document.body.textContent).toContain('detect-output.pcd');
 		});
 	});
+
+	it('supports accepting, rejecting, and editing pointcloud annotations', async () => {
+		const metadata = createMockMetadata({
+			path: '/data/reviewable.pcd',
+			point_count: 3,
+		});
+		const data = createMockPointCloudData({ metadata });
+
+		mockInvoke.mockImplementation((command: string, payload?: { path?: string }) => {
+			if (command === 'read_pointcloud_metadata') {
+				return Promise.resolve({
+					...metadata,
+					path: payload?.path ?? metadata.path,
+				});
+			}
+			if (command === 'read_pointcloud') {
+				return Promise.resolve({
+					...data,
+					metadata: {
+						...metadata,
+						path: payload?.path ?? metadata.path,
+					},
+				});
+			}
+			return Promise.reject(new Error(`Unknown command: ${command}`));
+		});
+
+		const preview = {
+			id: 'detect_3d-0-/data/reviewable.pcd',
+			imagePath: '/data/reviewable.pcd',
+			thumbnailUrl: '/data/reviewable.pcd',
+			assetType: 'pointcloud' as const,
+			annotations: [],
+			pointcloudAnnotations: [
+				{
+					id: 'det-0-car',
+					className: 'car',
+					confidence: 0.81,
+					center: [0, 0, 0] as [number, number, number],
+					size: [2, 1, 1] as [number, number, number],
+					yaw: 0,
+					status: 'pending' as const,
+				},
+			],
+			status: 'flagged' as const,
+		};
+
+		const { getByLabelText, getByText } = render(PointCloudViewerTestHarness, {
+			selectedPointcloudPreview: preview,
+		});
+
+		await waitFor(() => {
+			expect(getByText('pending')).toBeTruthy();
+		});
+
+		await fireEvent.click(getByLabelText('Accept det-0-car'));
+		await waitFor(() => {
+			expect(getByText('accepted')).toBeTruthy();
+		});
+
+		const classInput = getByLabelText('Class det-0-car') as HTMLInputElement;
+		classInput.value = 'truck';
+		await fireEvent.change(classInput);
+		await waitFor(() => {
+			expect(getByText('edited')).toBeTruthy();
+		});
+		expect(classInput.value).toBe('truck');
+
+		await fireEvent.click(getByLabelText('Reject det-0-car'));
+		await waitFor(() => {
+			expect(getByText('rejected')).toBeTruthy();
+		});
+	});
 });

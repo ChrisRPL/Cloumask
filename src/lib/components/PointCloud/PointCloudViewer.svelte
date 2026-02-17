@@ -162,6 +162,57 @@
 		});
 	}
 
+	function getSelectedPointcloudPreview(): PreviewItem | null {
+		if (!execution) return null;
+		const preview = execution.selectedPointcloudPreview;
+		if (!preview || preview.assetType !== 'pointcloud') return null;
+		return preview;
+	}
+
+	function annotationStatusClasses(status: PointcloudPreviewAnnotation['status']): string {
+		switch (status) {
+			case 'accepted':
+				return 'text-green-500 bg-green-500/10 border-green-500/40';
+			case 'rejected':
+				return 'text-red-500 bg-red-500/10 border-red-500/40';
+			case 'edited':
+				return 'text-sky-500 bg-sky-500/10 border-sky-500/40';
+			default:
+				return 'text-amber-500 bg-amber-500/10 border-amber-500/40';
+		}
+	}
+
+	function updateAnnotationStatus(
+		annotationId: string,
+		status: PointcloudPreviewAnnotation['status']
+	): void {
+		const preview = getSelectedPointcloudPreview();
+		if (!preview) return;
+		execution?.setPointcloudAnnotationStatus(preview.id, annotationId, status);
+	}
+
+	function editAnnotationClass(annotationId: string, event: Event): void {
+		const preview = getSelectedPointcloudPreview();
+		if (!preview) return;
+		const className = (event.target as HTMLInputElement).value.trim();
+		if (!className) return;
+		execution?.updatePointcloudAnnotation(preview.id, annotationId, {
+			className,
+			status: 'edited',
+		});
+	}
+
+	function editAnnotationConfidence(annotationId: string, event: Event): void {
+		const preview = getSelectedPointcloudPreview();
+		if (!preview) return;
+		const confidence = Number.parseFloat((event.target as HTMLInputElement).value);
+		if (Number.isNaN(confidence)) return;
+		execution?.updatePointcloudAnnotation(preview.id, annotationId, {
+			confidence: Math.max(0, Math.min(1, confidence)),
+			status: 'edited',
+		});
+	}
+
 	// Load file via streaming for large files
 	async function loadStreamedPointCloud(path: string, metadata: PointCloudMetadata): Promise<void> {
 		const appendChunk = (target: number[], source: number[]) => {
@@ -490,6 +541,108 @@
 
 		<!-- Controls Panel -->
 		<Controls collapsed={controlsCollapsed} onToggle={() => (controlsCollapsed = !controlsCollapsed)} />
+
+		<!-- Annotation review panel -->
+		{#if execution?.selectedPointcloudPreview?.assetType === 'pointcloud' && execution.selectedPointcloudPreview.pointcloudAnnotations && execution.selectedPointcloudPreview.pointcloudAnnotations.length > 0}
+			<div
+				class="absolute top-3 left-3 w-[26rem] max-h-[58%] overflow-y-auto rounded-md border border-border bg-card/90 backdrop-blur-sm p-3 space-y-2 shadow-lg"
+			>
+				<div class="flex items-center justify-between">
+					<p class="text-xs uppercase tracking-wide font-mono text-muted-foreground">
+						Annotations
+					</p>
+					<span class="text-xs font-mono text-foreground">
+						{execution.selectedPointcloudPreview.pointcloudAnnotations.length}
+					</span>
+				</div>
+				{#each execution.selectedPointcloudPreview.pointcloudAnnotations as annotation (annotation.id)}
+					<div
+						class={cn(
+							'rounded-md border border-border/70 bg-background/60 p-2 space-y-2',
+							pcState.selectedBoxId === annotation.id && 'border-primary/60'
+						)}
+					>
+						<div class="flex items-center justify-between gap-2">
+							<input
+								type="text"
+								value={annotation.className}
+								aria-label={`Class ${annotation.id}`}
+								class="h-7 w-36 rounded border border-border bg-background px-2 text-xs font-mono"
+								onchange={(event) => editAnnotationClass(annotation.id, event)}
+								onfocus={() => pcState.setSelectedBoxId(annotation.id)}
+							/>
+							<span
+								class={cn(
+									'inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide font-mono',
+									annotationStatusClasses(annotation.status)
+								)}
+							>
+								{annotation.status}
+							</span>
+						</div>
+
+						<div class="flex items-center justify-between gap-2">
+							<span class="text-[10px] uppercase tracking-wide font-mono text-muted-foreground">
+								Confidence
+							</span>
+							<input
+								type="number"
+								min="0"
+								max="1"
+								step="0.01"
+								value={annotation.confidence.toFixed(2)}
+								aria-label={`Confidence ${annotation.id}`}
+								class="h-7 w-20 rounded border border-border bg-background px-2 text-xs font-mono"
+								onchange={(event) => editAnnotationConfidence(annotation.id, event)}
+								onfocus={() => pcState.setSelectedBoxId(annotation.id)}
+							/>
+						</div>
+
+						<div class="flex items-center gap-1">
+							<button
+								type="button"
+								aria-label={`Accept ${annotation.id}`}
+								class={cn(
+									'h-7 rounded border px-2 text-[10px] uppercase tracking-wide font-mono',
+									annotation.status === 'accepted'
+										? 'border-green-500/70 bg-green-500/15 text-green-500'
+										: 'border-border text-muted-foreground hover:text-foreground'
+								)}
+								onclick={() => updateAnnotationStatus(annotation.id, 'accepted')}
+							>
+								Accept
+							</button>
+							<button
+								type="button"
+								aria-label={`Reject ${annotation.id}`}
+								class={cn(
+									'h-7 rounded border px-2 text-[10px] uppercase tracking-wide font-mono',
+									annotation.status === 'rejected'
+										? 'border-red-500/70 bg-red-500/15 text-red-500'
+										: 'border-border text-muted-foreground hover:text-foreground'
+								)}
+								onclick={() => updateAnnotationStatus(annotation.id, 'rejected')}
+							>
+								Reject
+							</button>
+							<button
+								type="button"
+								aria-label={`Edit ${annotation.id}`}
+								class={cn(
+									'h-7 rounded border px-2 text-[10px] uppercase tracking-wide font-mono',
+									annotation.status === 'edited'
+										? 'border-sky-500/70 bg-sky-500/15 text-sky-500'
+										: 'border-border text-muted-foreground hover:text-foreground'
+								)}
+								onclick={() => updateAnnotationStatus(annotation.id, 'edited')}
+							>
+								Mark edited
+							</button>
+						</div>
+					</div>
+				{/each}
+			</div>
+		{/if}
 
 		<!-- Loading overlay -->
 		{#if pcState.isLoading}
