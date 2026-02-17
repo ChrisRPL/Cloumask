@@ -24,6 +24,13 @@ from backend.api.models.review import (
     SuccessResponse,
 )
 from backend.cv.utils.thumbnail import generate_thumbnail, get_image_dimensions
+from backend.data.yolo_annotations import (
+    build_annotation_index,
+    find_annotation_for_image,
+    find_yolo_labels_dir,
+    load_yolo_class_names,
+    parse_yolo_annotation_file,
+)
 
 router = APIRouter(prefix="/api/review", tags=["review"])
 
@@ -167,17 +174,18 @@ async def update_review_item(item_id: str, updates: ReviewItemUpdate):
     """
     item = _get_item_or_404(item_id)
 
-    # Apply updates
-    update_data = updates.model_dump(exclude_unset=True)
-
-    for field, value in update_data.items():
-        setattr(item, field, value)
-
-    # Update reviewed timestamp if status changed
-    if "status" in update_data:
+    # Apply updates while preserving typed model fields.
+    if updates.status is not None:
+        item.status = updates.status
         from datetime import datetime
 
         item.reviewed_at = datetime.now(UTC)
+    if updates.annotations is not None:
+        item.annotations = updates.annotations
+    if updates.flagged is not None:
+        item.flagged = updates.flagged
+    if updates.flag_reason is not None:
+        item.flag_reason = updates.flag_reason
 
     _review_items[item_id] = item
 
@@ -210,10 +218,19 @@ async def update_annotation(item_id: str, annotation_id: str, updates: Annotatio
             detail=f"Annotation {annotation_id} not found in item {item_id}",
         )
 
-    # Apply updates
-    update_data = updates.model_dump(exclude_unset=True)
-    for field, value in update_data.items():
-        setattr(annotation, field, value)
+    # Apply updates while preserving nested model types.
+    if updates.label is not None:
+        annotation.label = updates.label
+    if updates.confidence is not None:
+        annotation.confidence = updates.confidence
+    if updates.bbox is not None:
+        annotation.bbox = updates.bbox
+    if updates.polygon is not None:
+        annotation.polygon = updates.polygon
+    if updates.color is not None:
+        annotation.color = updates.color
+    if updates.visible is not None:
+        annotation.visible = updates.visible
 
     # Mark item as modified
     item.status = ReviewStatus.MODIFIED
@@ -428,8 +445,6 @@ async def import_annotations(
     Returns:
         Count of items updated with annotations
     """
-    import uuid
-
     annot_path = Path(annotations_dir)
     img_path = Path(image_dir)
 
@@ -440,175 +455,79 @@ async def import_annotations(
     if not img_path.exists():
         raise HTTPException(status_code=404, detail=f"Image directory not found: {image_dir}")
 
+    labels_dir = find_yolo_labels_dir(annot_path)
+    if labels_dir is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No YOLO labels found under path: {annotations_dir}",
+        )
+
+    class_names = load_yolo_class_names(annot_path)
+    exact_index, normalized_index = build_annotation_index(labels_dir)
+
     # Load existing items
     if not _review_items:
         _load_from_disk(execution_id)
 
     updated_count = 0
 
-    # Create mapping of filename to review item
-    file_to_item = {item.file_name: item for item in _review_items.values()}
+    # Create fast lookups from existing review items.
+    path_to_item: dict[Path, ReviewItem] = {}
+    name_to_items: dict[str, list[ReviewItem]] = {}
+    for item in _review_items.values():
+        resolved_path = Path(item.file_path).resolve()
+        path_to_item[resolved_path] = item
+        name_to_items.setdefault(item.file_name, []).append(item)
+
+    image_files = sorted(
+        file_path
+        for file_path in img_path.rglob("*")
+        if file_path.is_file() and file_path.suffix.lower() in _VALID_IMAGE_EXTENSIONS
+    )
 
     # Parse and import annotations
-    for annot_file in annot_path.glob("*.txt"):
-        # Find corresponding image
-        image_name = annot_file.stem
-        image_file = None
-
-        # Try common image extensions
-        for ext in [".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"]:
-            candidate = img_path / f"{image_name}{ext}"
-            if candidate.exists():
-                image_file = candidate
-                break
-
-        if not image_file or image_file.name not in file_to_item:
+    for image_file in image_files:
+        annot_file = find_annotation_for_image(
+            image_file,
+            exact_index,
+            normalized_index,
+        )
+        if annot_file is None:
             continue
 
-        item = file_to_item[image_file.name]
+        item = path_to_item.get(image_file.resolve())
+        if item is None:
+            candidates = name_to_items.get(image_file.name, [])
+            if len(candidates) == 1:
+                item = candidates[0]
+        if item is None:
+            continue
 
         try:
             # Parse YOLO annotations
             annotations = []
-
-            # COCO classes mapping
-            coco_classes = [
-                "person",
-                "bicycle",
-                "car",
-                "motorcycle",
-                "airplane",
-                "bus",
-                "train",
-                "truck",
-                "boat",
-                "traffic light",
-                "fire hydrant",
-                "stop sign",
-                "parking meter",
-                "bench",
-                "bird",
-                "cat",
-                "dog",
-                "horse",
-                "sheep",
-                "cow",
-                "elephant",
-                "bear",
-                "zebra",
-                "giraffe",
-                "backpack",
-                "umbrella",
-                "handbag",
-                "tie",
-                "suitcase",
-                "frisbee",
-                "skis",
-                "snowboard",
-                "sports ball",
-                "kite",
-                "baseball bat",
-                "baseball glove",
-                "skateboard",
-                "surfboard",
-                "tennis racket",
-                "bottle",
-                "wine glass",
-                "cup",
-                "fork",
-                "knife",
-                "spoon",
-                "bowl",
-                "banana",
-                "apple",
-                "sandwich",
-                "orange",
-                "broccoli",
-                "carrot",
-                "hot dog",
-                "pizza",
-                "donut",
-                "cake",
-                "chair",
-                "couch",
-                "potted plant",
-                "bed",
-                "dining table",
-                "toilet",
-                "tv",
-                "laptop",
-                "mouse",
-                "remote",
-                "keyboard",
-                "cell phone",
-                "microwave",
-                "oven",
-                "toaster",
-                "sink",
-                "refrigerator",
-                "book",
-                "clock",
-                "vase",
-                "scissors",
-                "teddy bear",
-                "hair drier",
-                "toothbrush",
-            ]
-
-            with annot_file.open() as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-
-                    parts = line.split()
-                    if len(parts) < 5:
-                        continue
-
-                    class_id = int(parts[0])
-                    x_center = float(parts[1])
-                    y_center = float(parts[2])
-                    width = float(parts[3])
-                    height = float(parts[4])
-                    confidence = float(parts[5]) if len(parts) > 5 else 1.0
-
-                    # Convert from center to top-left
-                    x = x_center - (width / 2)
-                    y = y_center - (height / 2)
-
-                    # Get class name
-                    class_name = (
-                        coco_classes[class_id]
-                        if class_id < len(coco_classes)
-                        else f"class_{class_id}"
-                    )
-
-                    annotation = Annotation(
-                        id=str(uuid.uuid4()),
-                        type="bbox",
-                        label=class_name,
-                        confidence=confidence,
-                        bbox=BoundingBox(
-                            x=max(0, min(1, x)),
-                            y=max(0, min(1, y)),
-                            width=max(0, min(1, width)),
-                            height=max(0, min(1, height)),
-                        ),
-                        polygon=None,
-                        mask_url=None,
-                        color="#166534",
-                        visible=True,
-                    )
-                    annotations.append(annotation)
+            parsed_annotations = parse_yolo_annotation_file(annot_file, class_names)
+            for parsed in parsed_annotations:
+                annotation = Annotation(
+                    id=str(uuid.uuid4()),
+                    type="bbox",
+                    label=parsed["label"],
+                    confidence=parsed["confidence"],
+                    bbox=BoundingBox(**parsed["bbox"]),
+                    polygon=None,
+                    mask_url=None,
+                    color="#166534",
+                    visible=True,
+                )
+                annotations.append(annotation)
 
             # Update item with annotations
-            if annotations:
-                item.annotations = annotations
-                item.original_annotations = annotations.copy()
-                updated_count += 1
+            item.annotations = annotations
+            item.original_annotations = annotations.copy()
+            updated_count += 1
 
         except Exception as e:
-            print(f"Error importing annotations for {annot_file}: {e}")
+            print(f"Error importing annotations for {image_file}: {e}")
             continue
 
     # Save updated items

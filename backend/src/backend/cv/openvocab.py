@@ -213,14 +213,35 @@ class YOLOWorldWrapper(BaseModelWrapper[DetectionResult]):
 
         # Create dummy image tensor (aligned to model stride)
         dummy = np.zeros((self._imgsz, self._imgsz, 3), dtype=np.uint8)
-        self._yoloworld.predict(  # type: ignore[union-attr]
+        self._predict_with_optional_imgsz(
             dummy,
             verbose=False,
             device=device,
-            imgsz=self._imgsz,
         )
 
         logger.debug("YOLO-World warmed up on %s", device)
+
+    def _predict_with_optional_imgsz(self, source: Any, **kwargs: Any) -> Any:
+        """
+        Run predict while tolerating YOLOWorld variants without `imgsz` kwarg.
+
+        Some mocked/older API surfaces reject `imgsz`. Retry once without it.
+        """
+        if self._yoloworld is None:
+            raise RuntimeError("Model not loaded. Call load() first.")
+
+        predict_kwargs = dict(kwargs)
+        predict_kwargs.setdefault("imgsz", self._imgsz)
+
+        try:
+            return self._yoloworld.predict(source, **predict_kwargs)
+        except TypeError as exc:
+            message = str(exc)
+            if "imgsz" not in message or "unexpected keyword argument" not in message:
+                raise
+            logger.debug("YOLOWorld.predict does not accept imgsz, retrying without it")
+            predict_kwargs.pop("imgsz", None)
+            return self._yoloworld.predict(source, **predict_kwargs)
 
     def _unload_model(self) -> None:
         """Unload model and free memory."""
@@ -278,12 +299,11 @@ class YOLOWorldWrapper(BaseModelWrapper[DetectionResult]):
         self.set_classes(classes)
 
         start = time.perf_counter()
-        results = self._yoloworld.predict(
+        results = self._predict_with_optional_imgsz(
             input_path,
             conf=confidence,
             iou=iou_threshold,
             device=self._device,
-            imgsz=self._imgsz,
             verbose=False,
         )
         elapsed_ms = (time.perf_counter() - start) * 1000
@@ -344,12 +364,11 @@ class YOLOWorldWrapper(BaseModelWrapper[DetectionResult]):
             batch = input_paths[i : i + batch_size]
 
             start = time.perf_counter()
-            batch_results = self._yoloworld.predict(
+            batch_results = self._predict_with_optional_imgsz(
                 batch,
                 conf=confidence,
                 iou=iou_threshold,
                 device=self._device,
-                imgsz=self._imgsz,
                 verbose=False,
             )
             batch_time = (time.perf_counter() - start) * 1000
