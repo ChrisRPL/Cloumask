@@ -172,6 +172,16 @@ class TestDetectTool:
             assert result.data["mode"] == "coco"
             assert result.data["model"] == "yolo11m"
             assert result.data["count"] == 2
+            assert len(result.data["preview_items"]) == 1
+            assert result.data["preview_items"][0]["image_path"] == "test.jpg"
+            assert len(result.data["preview_items"][0]["annotations"]) == 2
+            # Preview overlays use top-left normalized coordinates.
+            assert result.data["preview_items"][0]["annotations"][0]["bbox"] == {
+                "x": 0.4,
+                "y": 0.3,
+                "width": 0.2,
+                "height": 0.4,
+            }
             mock_detector.load.assert_called_once()
             mock_detector.unload.assert_called_once()
 

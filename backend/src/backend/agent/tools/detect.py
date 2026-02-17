@@ -32,6 +32,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+MAX_PREVIEW_ITEMS = 6
+MAX_PREVIEW_ANNOTATIONS = 50
+
 
 def _is_mps_runtime_error(error: Exception) -> bool:
     """Return True when inference fails due to known Apple MPS runtime issues."""
@@ -106,6 +109,98 @@ def _masks_to_detections(
         })
 
     return detections, class_counts
+
+
+def _clamp_unit(value: float) -> float:
+    """Clamp numeric values to [0, 1] for normalized geometry payloads."""
+    return max(0.0, min(1.0, value))
+
+
+def _center_bbox_to_top_left(
+    bbox: dict[str, Any] | None,
+) -> dict[str, float]:
+    """
+    Convert normalized center-format bbox to normalized top-left format.
+
+    Input keys are expected as:
+    - x: center x
+    - y: center y
+    - width: box width
+    - height: box height
+    """
+    if not isinstance(bbox, dict):
+        return {"x": 0.0, "y": 0.0, "width": 0.0, "height": 0.0}
+
+    cx = _clamp_unit(float(bbox.get("x", 0.0)))
+    cy = _clamp_unit(float(bbox.get("y", 0.0)))
+    width = _clamp_unit(float(bbox.get("width", 0.0)))
+    height = _clamp_unit(float(bbox.get("height", 0.0)))
+
+    x = _clamp_unit(cx - width / 2.0)
+    y = _clamp_unit(cy - height / 2.0)
+
+    width = min(width, 1.0 - x)
+    height = min(height, 1.0 - y)
+
+    return {
+        "x": round(x, 6),
+        "y": round(y, 6),
+        "width": round(max(0.0, width), 6),
+        "height": round(max(0.0, height), 6),
+    }
+
+
+def _build_preview_items_from_results(results: list[Any]) -> list[dict[str, Any]]:
+    """Build compact preview payload for frontend overlay rendering."""
+    preview_items: list[dict[str, Any]] = []
+
+    for result in results[:MAX_PREVIEW_ITEMS]:
+        annotations: list[dict[str, Any]] = []
+        detections = getattr(result, "detections", []) or []
+
+        for detection in detections[:MAX_PREVIEW_ANNOTATIONS]:
+            annotations.append({
+                "label": str(getattr(detection, "class_name", "object")),
+                "confidence": round(float(getattr(detection, "confidence", 1.0)), 4),
+                "bbox": _center_bbox_to_top_left({
+                    "x": getattr(getattr(detection, "bbox", None), "x", 0.0),
+                    "y": getattr(getattr(detection, "bbox", None), "y", 0.0),
+                    "width": getattr(getattr(detection, "bbox", None), "width", 0.0),
+                    "height": getattr(getattr(detection, "bbox", None), "height", 0.0),
+                }),
+            })
+
+        preview_items.append({
+            "image_path": str(getattr(result, "image_path", "")),
+            "annotations": annotations,
+        })
+
+    return preview_items
+
+
+def _build_preview_items_from_annotation_records(
+    records: list[tuple[str, list[dict[str, Any]]]],
+) -> list[dict[str, Any]]:
+    """Build preview payload from detection-like annotation records."""
+    preview_items: list[dict[str, Any]] = []
+
+    for image_path, detections in records[:MAX_PREVIEW_ITEMS]:
+        annotations: list[dict[str, Any]] = []
+        for detection in detections[:MAX_PREVIEW_ANNOTATIONS]:
+            confidence_raw = detection.get("confidence", 1.0)
+            confidence = float(confidence_raw) if isinstance(confidence_raw, int | float) else 1.0
+            annotations.append({
+                "label": str(detection.get("class_name", "object")),
+                "confidence": round(_clamp_unit(confidence), 4),
+                "bbox": _center_bbox_to_top_left(detection.get("bbox")),  # type: ignore[arg-type]
+            })
+
+        preview_items.append({
+            "image_path": str(image_path),
+            "annotations": annotations,
+        })
+
+    return preview_items
 
 
 @register_tool
@@ -353,6 +448,7 @@ Examples:
 
             avg_confidence = total_confidence / total_detections if total_detections > 0 else 0.0
 
+            preview_items = _build_preview_items_from_results(results)
             annotations_path: str | None = None
             if save_annotations:
                 annotations_root = self._resolve_annotations_output_path(input_path, output_path)
@@ -382,6 +478,7 @@ Examples:
                     "count": total_detections,
                     "classes": class_counts,
                     "sample_images": image_paths[:6],
+                    "preview_items": preview_items,
                     "confidence_threshold": confidence,
                     "confidence": round(avg_confidence, 3),
                     "model": detector.info.name,
@@ -457,6 +554,7 @@ Examples:
 
             avg_confidence = total_confidence / total_detections if total_detections > 0 else 0.0
 
+            preview_items = _build_preview_items_from_results(results)
             annotations_path: str | None = None
             if save_annotations:
                 annotations_root = self._resolve_annotations_output_path(input_path, output_path)
@@ -486,6 +584,7 @@ Examples:
                     "count": total_detections,
                     "classes": class_counts,
                     "sample_images": image_paths[:6],
+                    "preview_items": preview_items,
                     "confidence_threshold": confidence,
                     "confidence": round(avg_confidence, 3),
                     "model": detector.info.name,
@@ -544,6 +643,7 @@ Examples:
 
             avg_confidence = total_confidence / total_detections if total_detections > 0 else 0.0
 
+            preview_items = _build_preview_items_from_annotation_records(annotation_records)
             annotations_path: str | None = None
             if save_annotations:
                 annotations_root = self._resolve_annotations_output_path(input_path, output_path)
@@ -555,6 +655,7 @@ Examples:
                     "count": total_detections,
                     "classes": class_counts,
                     "sample_images": image_paths[:6],
+                    "preview_items": preview_items,
                     "confidence_threshold": confidence,
                     "confidence": round(avg_confidence, 3),
                     "model": segmenter.info.name,
