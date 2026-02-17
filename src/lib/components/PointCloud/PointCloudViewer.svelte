@@ -1,5 +1,6 @@
 <script lang="ts" module>
 	import type { BoundingBox3D } from '$lib/utils/three';
+	import type { PreviewItem, PointcloudPreviewAnnotation } from '$lib/types/execution';
 
 	export interface PointCloudViewerProps {
 		class?: string;
@@ -12,8 +13,10 @@
 <script lang="ts">
 	import { cn } from '$lib/utils';
 	import { onMount } from 'svelte';
+	import * as THREE from 'three';
 	import { isTauri } from '$lib/utils/tauri';
 	import { setPointCloudState } from '$lib/stores/pointcloud.svelte';
+	import { getExecutionState } from '$lib/stores/execution.svelte';
 	import { resetCamera, type SceneContext } from '$lib/utils/three';
 	import { invoke } from '@tauri-apps/api/core';
 	import { listen, type UnlistenFn } from '@tauri-apps/api/event';
@@ -39,9 +42,17 @@
 
 	// Initialize pointcloud state in context
 	const pcState = setPointCloudState();
+	const execution = (() => {
+		try {
+			return getExecutionState();
+		} catch {
+			return null;
+		}
+	})();
 
 	// Scene context reference
 	let sceneContext: SceneContext | null = $state(null);
+	let hydratedPreviewLoadKey = $state<string | null>(null);
 
 	// Panel collapsed states
 	let infoPanelCollapsed = $state(false);
@@ -119,6 +130,37 @@
 
 	// Streaming timeout (60 seconds)
 	const STREAMING_TIMEOUT_MS = 60_000;
+
+	function toBoxColor(status: PointcloudPreviewAnnotation['status']): string {
+		switch (status) {
+			case 'accepted':
+				return '#22c55e';
+			case 'rejected':
+				return '#ef4444';
+			case 'edited':
+				return '#38bdf8';
+			default:
+				return '#f59e0b';
+		}
+	}
+
+	function previewToBoundingBoxes(preview: PreviewItem): BoundingBox3D[] {
+		const annotations = preview.pointcloudAnnotations ?? [];
+		return annotations.map((annotation) => {
+			const [cx, cy, cz] = annotation.center;
+			const [sx, sy, sz] = annotation.size;
+			return {
+				id: annotation.id,
+				className: annotation.className,
+				confidence: annotation.confidence,
+				center: new THREE.Vector3(cx, cy, cz),
+				size: new THREE.Vector3(sx, sy, sz),
+				rotation: new THREE.Euler(0, 0, annotation.yaw),
+				color: toBoxColor(annotation.status),
+				visible: annotation.status !== 'rejected',
+			};
+		});
+	}
 
 	// Load file via streaming for large files
 	async function loadStreamedPointCloud(path: string, metadata: PointCloudMetadata): Promise<void> {
@@ -220,28 +262,8 @@
 		});
 	}
 
-	// Load file action
-	async function handleLoad() {
-		if (!isDesktopTauri) {
-			pcState.setError('Point cloud file loading is available in desktop mode only.');
-			return;
-		}
-
+	async function loadPointCloudPath(filePath: string): Promise<void> {
 		try {
-			// Open file picker
-			const filePath = await open({
-				multiple: false,
-				filters: [
-					{
-						name: 'Point Cloud',
-						extensions: ['las', 'laz', 'ply', 'pcd'],
-					},
-				],
-			});
-
-			// User cancelled
-			if (!filePath || Array.isArray(filePath)) return;
-
 			pcState.setLoading(true);
 			pcState.setError(null);
 			pcState.setLoadProgress(0);
@@ -269,6 +291,30 @@
 		} finally {
 			pcState.setLoading(false);
 		}
+	}
+
+	// Load file action
+	async function handleLoad() {
+		if (!isDesktopTauri) {
+			pcState.setError('Point cloud file loading is available in desktop mode only.');
+			return;
+		}
+
+		// Open file picker
+		const filePath = await open({
+			multiple: false,
+			filters: [
+				{
+					name: 'Point Cloud',
+					extensions: ['las', 'laz', 'ply', 'pcd'],
+				},
+			],
+		});
+
+		// User cancelled
+		if (!filePath || Array.isArray(filePath)) return;
+
+		await loadPointCloudPath(filePath);
 	}
 
 	// Export action
@@ -398,6 +444,24 @@
 		return () => {
 			window.removeEventListener('keydown', handleKeydown);
 		};
+	});
+
+	$effect(() => {
+		if (!execution) return;
+		const preview = execution.selectedPointcloudPreview;
+		if (!preview || preview.assetType !== 'pointcloud') return;
+
+		pcState.setBoundingBoxes(previewToBoundingBoxes(preview));
+
+		const loadKey = `${preview.id}:${preview.imagePath}`;
+		if (pcState.file?.path === preview.imagePath) {
+			hydratedPreviewLoadKey = loadKey;
+			return;
+		}
+		if (hydratedPreviewLoadKey === loadKey) return;
+		hydratedPreviewLoadKey = loadKey;
+
+		void loadPointCloudPath(preview.imagePath);
 	});
 </script>
 

@@ -83,4 +83,74 @@ describe('PointCloudViewer', () => {
 			});
 		});
 	});
+
+	it('auto-loads selected pointcloud preview from execution state', async () => {
+		const metadata = createMockMetadata({
+			path: '/data/detect-output.pcd',
+			point_count: 3,
+		});
+		const data = createMockPointCloudData({ metadata });
+
+		mockInvoke.mockImplementation((command: string, payload?: { path?: string }) => {
+			if (command === 'read_pointcloud_metadata') {
+				return Promise.resolve({
+					...metadata,
+					path: payload?.path ?? metadata.path,
+				});
+			}
+			if (command === 'read_pointcloud') {
+				return Promise.resolve({
+					...data,
+					metadata: {
+						...metadata,
+						path: payload?.path ?? metadata.path,
+					},
+				});
+			}
+			if (command === 'convert_pointcloud') {
+				return Promise.resolve(metadata);
+			}
+			return Promise.reject(new Error(`Unknown command: ${command}`));
+		});
+
+		const preview = {
+			id: 'detect_3d-0-/data/detect-output.pcd',
+			imagePath: '/data/detect-output.pcd',
+			thumbnailUrl: '/data/detect-output.pcd',
+			assetType: 'pointcloud' as const,
+			annotations: [],
+			pointcloudAnnotations: [
+				{
+					id: 'det-0-car',
+					className: 'car',
+					confidence: 0.91,
+					center: [1, 2, 3] as [number, number, number],
+					size: [4, 2, 1] as [number, number, number],
+					yaw: 0.25,
+					status: 'pending' as const,
+				},
+			],
+			status: 'flagged' as const,
+		};
+
+		render(PointCloudViewerTestHarness, {
+			selectedPointcloudPreview: preview,
+		});
+
+		await waitFor(() => {
+			expect(mockInvoke).toHaveBeenCalledWith('read_pointcloud_metadata', {
+				path: '/data/detect-output.pcd',
+			});
+		});
+
+		await waitFor(() => {
+			expect(mockInvoke).toHaveBeenCalledWith('read_pointcloud', {
+				path: '/data/detect-output.pcd',
+			});
+		});
+
+		await waitFor(() => {
+			expect(document.body.textContent).toContain('detect-output.pcd');
+		});
+	});
 });
