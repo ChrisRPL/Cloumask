@@ -14,9 +14,3 @@ pydantic-settings==2.6.1
 
 # HTTP client (for Ollama, external APIs)
 httpx==0.28.1
-
-# Async support
-anyio==4.7.0
-
-# Type hints backports (if needed)
-typing-extensions==4.12.2
