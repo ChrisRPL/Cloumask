@@ -39,6 +39,8 @@ export interface HealthResponse {
   timestamp: string;
   /** Status of individual components. */
   components: Record<string, string>;
+  /** Absolute backend/src path reported by the sidecar. */
+  backend_src_path?: string;
 }
 
 /**
@@ -50,6 +52,8 @@ export interface ReadyResponse {
   ready: boolean;
   /** Individual readiness checks. */
   checks: Record<string, boolean>;
+  /** Absolute backend/src path reported by the sidecar. */
+  backend_src_path?: string;
 }
 
 // ============================================================================

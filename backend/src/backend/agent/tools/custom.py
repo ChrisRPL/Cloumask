@@ -329,3 +329,10 @@ def validate_script_interface(script_path: str | Path) -> tuple[bool, str | None
         return False, f"Syntax error at line {e.lineno}: {e.msg}"
     except Exception as e:
         return False, f"Validation failed: {e}"
+
+
+@register_tool
+class RunScriptToolAlias(CustomScriptTool):
+    """Backward-compatible alias for planner steps that still use `run_script`."""
+
+    name = "run_script"

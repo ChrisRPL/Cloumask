@@ -6,6 +6,7 @@
  */
 
 import { getContext, setContext } from "svelte";
+import { isTauri } from "$lib/utils/tauri";
 
 // ============================================================================
 // Types
@@ -87,6 +88,9 @@ export function createSetupState(): SetupState {
   // Check if setup was previously completed
   const getInitialComplete = (): boolean => {
     if (typeof window === "undefined") return false;
+    // Desktop should always enter the initialization screen on app launch.
+    // It verifies that sidecar and model bootstrap are started before the main UI.
+    if (isTauri()) return false;
     return localStorage.getItem(STORAGE_KEY) === "complete";
   };
 

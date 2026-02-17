@@ -20,6 +20,7 @@
 		checkLLMReady,
 		ensureLLMReady,
 		pullLLMModelWithProgress,
+		startSidecar,
 		waitForSidecarReady,
 		isTauri,
 		type LLMPullProgressEvent
@@ -81,7 +82,23 @@
 
 	let isSkipping = $state(false);
 	let setupStarted = $state(false);
-	let backgroundModelInit = $state(false);
+
+	async function ensureDesktopServicesReady() {
+		if (!isInTauri) return;
+
+		setup.updateProgress(10, 'Starting local services...');
+		await startSidecar();
+		setup.updateProgress(25, 'Waiting for local services...');
+
+		const sidecarReady = await waitForSidecarReady(SIDECAR_READY_TIMEOUT_MS);
+		if (!sidecarReady) {
+			throw new Error(
+				'Local backend is not ready yet. Check startup logs and retry setup.'
+			);
+		}
+
+		setup.updateProgress(100, 'Local services ready');
+	}
 
 	async function finishRemainingSetup() {
 		// Step 3: Build executor (local execution defaults)
@@ -100,19 +117,6 @@
 	}
 
 	async function autoBootstrapModel() {
-		if (isInTauri) {
-			setup.updateProgress(10, 'Waiting for local services...');
-			const sidecarReady = await waitForSidecarReady(SIDECAR_READY_TIMEOUT_MS);
-			if (!sidecarReady) {
-				backgroundModelInit = true;
-				setup.updateProgress(25, 'Continuing while services finish starting...');
-				void ensureLLMReady().catch((error) => {
-					console.error('[SetupWizard] Deferred model bootstrap failed:', error);
-				});
-				return;
-			}
-		}
-
 		let llmStatus = await checkLLMReady();
 		if (llmStatus.ready) {
 			setup.updateProgress(100, 'AI model already available');
@@ -147,24 +151,19 @@
 			await wait(1200);
 		}
 
-		// Do not block users on first-run if model bootstrap is temporarily unavailable.
-		backgroundModelInit = true;
-		setup.updateProgress(100, 'Continuing setup. AI model download will keep retrying automatically.');
-		void ensureLLMReady().catch((error) => {
-			console.error('[SetupWizard] Background model bootstrap failed:', error);
-		});
+		throw new Error(llmStatus.error ?? 'AI model is not ready yet. Please retry setup.');
 	}
 
 	// Run setup steps
 	async function runSetup() {
 		setupStarted = true;
-		backgroundModelInit = false;
 		setup.startSetup();
 
 		try {
 			// Step 1: Check prerequisites
 			setup.updateProgress(0, 'Checking desktop prerequisites...');
 			await wait(300);
+			await ensureDesktopServicesReady();
 			setup.updateProgress(100, 'Requirements validated');
 			await wait(250);
 
@@ -175,18 +174,18 @@
 
 			await finishRemainingSetup();
 		} catch (error) {
-			// Never hard-block onboarding on model/bootstrap errors.
-			console.error('[SetupWizard] Setup step failed, continuing with fallback:', error);
-			backgroundModelInit = true;
-			setup.updateProgress(100, 'Continuing setup while background services initialize...');
-			await wait(250);
-			await finishRemainingSetup();
+			console.error('[SetupWizard] Setup failed:', error);
+			setup.setError(
+				error instanceof Error
+					? error.message
+					: 'Setup failed. Please retry after local services start.'
+			);
+			setupStarted = false;
 		}
 	}
 
 	function handleRetry() {
 		setup.retry();
-		backgroundModelInit = false;
 		runSetup();
 	}
 
@@ -280,16 +279,6 @@
 			</div>
 		{/each}
 	</div>
-
-		<!-- Background model bootstrap info -->
-		{#if backgroundModelInit}
-			<div class="mb-6 p-4 rounded-lg border bg-muted/40 border-border">
-				<p class="text-sm font-medium mb-1">AI model initialization in progress</p>
-				<p class="text-sm text-muted-foreground">
-					Cloumask will continue automatically and keep retrying model download in the background.
-				</p>
-			</div>
-		{/if}
 
 		<!-- Error Retry Button -->
 		{#if setup.progress.hasError}

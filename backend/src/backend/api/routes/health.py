@@ -1,6 +1,7 @@
 """Health check endpoint for sidecar status verification."""
 
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter
@@ -9,6 +10,7 @@ from pydantic import BaseModel, Field
 from backend import __version__
 
 router = APIRouter()
+BACKEND_SRC_PATH = str(Path(__file__).resolve().parents[3])
 
 
 class HealthResponse(BaseModel):
@@ -23,6 +25,9 @@ class HealthResponse(BaseModel):
         default_factory=dict,
         description="Status of individual components",
     )
+    backend_src_path: str = Field(
+        description="Absolute path to backend/src for sidecar ownership checks"
+    )
 
 
 class ReadyResponse(BaseModel):
@@ -32,6 +37,9 @@ class ReadyResponse(BaseModel):
     checks: dict[str, bool] = Field(
         default_factory=dict,
         description="Individual readiness checks",
+    )
+    backend_src_path: str = Field(
+        description="Absolute path to backend/src for sidecar ownership checks"
     )
 
 
@@ -52,6 +60,7 @@ async def health_check() -> HealthResponse:
             "agent": "not_loaded",  # Will be updated in 02-agent-system
             "cv_models": "not_loaded",  # Will be updated in 03-cv-models
         },
+        backend_src_path=BACKEND_SRC_PATH,
     )
 
 
@@ -70,6 +79,7 @@ async def readiness_check() -> ReadyResponse:
     return ReadyResponse(
         ready=all(checks.values()),
         checks=checks,
+        backend_src_path=BACKEND_SRC_PATH,
     )
 
 
