@@ -1,92 +1,43 @@
 # Cloumask
 
-Local-first agentic computer vision data processing for images, video, and point clouds.
+Cloumask is a local-first computer-vision workbench for dataset prep and review.
 
-From cloud to canvas.
-
-## Project Status
-
-Cloumask core development is complete through `06-data-pipeline`.
-
-| Area | Status |
-|------|--------|
-| Foundation (Tauri + FastAPI + IPC) | Complete |
-| Agent System (LangGraph + tools + checkpoints) | Complete |
-| CV Models (2D anonymization/detection/segmentation) | Complete |
-| Frontend UI (chat/plan/execute/review/point cloud views) | Complete |
-| Point Cloud (I/O, processing, fusion, 3D tools) | Complete |
-| Data Pipeline (formats, QA, split, augmentation, duplicates) | Complete |
-| Release Engineering (packaging/distribution hardening) | In progress |
+It combines:
+- A Svelte 5 frontend (`src/`)
+- A Rust/Tauri shell (`src-tauri/`) for desktop packaging and native bridge commands
+- A FastAPI + LangGraph backend sidecar (`backend/`) using local Ollama models
 
 ## Architecture
 
-```plantuml
-@startuml
-skinparam backgroundColor transparent
-skinparam componentStyle rectangle
-skinparam shadowing false
+```text
+Web mode
+  Browser (SvelteKit) ──HTTP/SSE──> FastAPI sidecar ──> LangGraph agent ──> Ollama
 
-component "Desktop App\nTauri 2 + Svelte 5 UI" as desktop
-component "Rust Core\nIPC bridge, sidecar lifecycle,\npoint cloud I/O" as rust
-component "Python Sidecar\nFastAPI + LangGraph" as py
-component "CV + Data Modules\nDetection, segmentation, anonymization,\nformats, QA, splitting, augmentation" as cv
-component "Local LLM Service\nOllama API" as llm
-
-desktop --> rust : invoke commands
-rust --> py : HTTP / SSE
-py --> cv : tool and pipeline calls
-py --> llm : chat/tool-calling requests
-
-@enduml
+Desktop mode
+  Tauri shell + Svelte UI ──IPC/HTTP──> Rust sidecar manager ──> FastAPI sidecar
+                                                  └──────────> native point-cloud commands
 ```
 
-## Implemented Capabilities
-
-### Agent and Orchestration
-- Conversational planning with clarify-plan-execute flow
-- Human-in-the-loop checkpointing and resume support
-- Tool registry for CV, data pipeline, and point cloud operations
-- Streaming execution updates over SSE
-
-### CV and Privacy
-- Face and plate anonymization workflows
-- 2D object detection and segmentation tool integrations
-- 3D detection, projection, and point-cloud anonymization routes/tools
-
-### Data Pipeline
-- Import/export: YOLO, COCO, KITTI, Pascal VOC, CVAT, nuScenes, OpenLABEL
-- Duplicate and similarity detection (hash-based + embedding-based options)
-- Label QA checks with report generation
-- Dataset splitting (train/val/test, stratified, CV folds)
-- Dataset augmentation via Albumentations
-
-### Frontend
-- Chat, plan editor, execution monitoring, review queue
-- Point cloud viewer and related controls
-- Keyboard-driven workflows and command palette
-- Design system aligned to current brand tokens:
-  - Primary `#166534` (forest green)
-  - Background `#FAF7F0` (cream)
-  - Monospace-first typography
+Reference: `docs/ARCHITECTURE_TECH_FIT_AUDIT.md`
 
 ## Repository Layout
 
 ```text
 src/                 Svelte frontend
-src-tauri/           Rust shell and native commands
-backend/             FastAPI sidecar, agent, CV/data pipeline
-assets/              App icon and branding assets
-docs/plan/           Phase specs and module plans
-scripts/             Utility scripts
+src-tauri/           Rust/Tauri desktop shell + sidecar management
+backend/             FastAPI API, agent graph, CV/data tools
+docs/                Architecture, plans, testing docs
+tests/               Playwright end-to-end tests
 ```
 
-## Local Development
+## Install
 
 ### Prerequisites
+
 - Node.js 20+
-- Rust 1.75+
 - Python 3.11+
-- Ollama (optional, required for local LLM chat/tool-calling)
+- Rust (for desktop builds/dev)
+- Ollama (for local model-backed agent flows)
 
 ### Setup
 
@@ -95,22 +46,9 @@ npm install
 npm run backend:install
 ```
 
-### Run
+## Run
 
-```bash
-# Full desktop app (frontend + Rust + sidecar lifecycle)
-npm run tauri:dev
-
-# Frontend only
-npm run dev
-
-# Backend only (from repo root)
-npm run backend:dev
-```
-
-## User Delivery
-
-### Web App
+### Web app (recommended for dev loop)
 
 ```bash
 # Terminal 1
@@ -122,94 +60,76 @@ npm run dev
 
 Open `http://localhost:5173`.
 
-### Desktop App (Installer)
+### Desktop app
+
+```bash
+npm run tauri:dev
+```
+
+### Build desktop artifacts
 
 ```bash
 npm run tauri:build
 ```
 
-If you build in a non-GUI shell/CI environment on macOS, use:
+## Verify
+
+Project gate:
 
 ```bash
-CI=true npm run tauri:build
+just ci
 ```
 
-Installer/artifacts are generated in:
-
-- `src-tauri/target/release/bundle/dmg/Cloumask_0.1.0_aarch64.dmg`
-- `src-tauri/target/release/bundle/macos/Cloumask.app`
-
-### First-Run Wizard UX
-
-- First launch runs an in-app setup wizard (no CLI steps required).
-- The wizard validates prerequisites and automatically bootstraps required AI models in-app.
-- If model download cannot finish immediately, setup still continues and Cloumask retries model initialization automatically in the background.
-- While a model is downloading, the wizard and chat panel show live progress (percent + downloaded bytes).
-- Chat input stays editable during model bootstrap; sending is enabled automatically once the model is ready.
-
-### Model Choice (Desktop/Web)
-
-Default model is `qwen3:8b` to balance reasoning/tool-calling quality with lower thermal load than 14B models.
-
-If your machine has enough memory and you prefer stronger reasoning quality, set:
+Equivalent manual checks:
 
 ```bash
-CLOUMASK_OLLAMA_MODEL=qwen3:14b
-```
-
-If you need the lightest footprint, set:
-
-```bash
-CLOUMASK_OLLAMA_MODEL=mistral:7b-instruct
-```
-
-Examples:
-
-```bash
-# Backend-only/web flow
-CLOUMASK_OLLAMA_MODEL=qwen3:14b npm run backend:dev
-
-# Desktop dev flow
-CLOUMASK_OLLAMA_MODEL=qwen3:14b npm run tauri:dev
-```
-
-## Validation Commands
-
-```bash
-# Backend tests
-cd backend && PYTHONPATH=src pytest -q
-
-# Rust tests
-cd src-tauri && cargo test
-
-# Frontend static checks
 npm run check
-
-# Frontend tests (component + user flows)
 npm test -- --run
+cd backend && PYTHONPATH=src pytest -q
+cd src-tauri && cargo test
 ```
 
-Current known state (February 10, 2026):
-- `backend`: `1309 passed, 39 skipped`
-- `src-tauri`: `24 passed, 2 ignored`
-- `npm run check`: `0 errors, 0 warnings`
-- `npm test -- --run`: `14 passed`
-- `npm run tauri:build`: macOS app bundle + DMG generated successfully
+## Troubleshooting
 
-## Backend Endpoints
+### `dyld: Library not loaded ... libsimdjson.26.dylib`
 
-When running locally (`127.0.0.1:8765`):
-- `GET /health`
-- `GET /docs`
-- LLM/agent, streaming, scripts, review, point cloud, ROS bag, 3D detect, fusion, and 3D anonymization routes under the FastAPI app
+Your Node runtime is linked against a missing Homebrew library.
 
-## Documentation
+1. Reinstall Node (or your version manager runtime).
+2. Reinstall/update `simdjson` via Homebrew.
+3. Re-run `npm install`.
 
-- [Project Description](PROJECT_DESCRIPTION.md)
-- [Development Plan](docs/plan/README.md)
-- [Data Pipeline Spec](docs/plan/06-data-pipeline/SPEC.md)
-- [Backend Guide](backend/README.md)
-- [Contributing Guide](CONTRIBUTING.md)
+### Backend not reachable on `127.0.0.1:8765`
+
+- Confirm backend is running: `npm run backend:dev`
+- Check health endpoint: `curl -fsS http://127.0.0.1:8765/health`
+
+### Ollama/model errors
+
+- Ensure Ollama daemon is running.
+- Confirm model availability in Ollama.
+- Optional model override:
+
+```bash
+CLOUMASK_OLLAMA_MODEL=qwen3:14b npm run backend:dev
+```
+
+### Port conflicts
+
+Default ports:
+- Frontend: `5173`
+- Backend: `8765`
+- Ollama: `11434`
+
+Free the conflicting process or stop existing dev sessions.
+
+## Docs
+
+- `docs/ARCHITECTURE_TECH_FIT_AUDIT.md`
+- `docs/plan/README.md`
+- `docs/testing/PLAYWRIGHT_FULL_QA_SCENARIOS.md`
+- `backend/README.md`
+- `CONTRIBUTING.md`
 
 ## License
 
