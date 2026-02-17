@@ -24,9 +24,10 @@ This scenario suite covers:
 ## Test Data
 
 - image folder for review seeding: `tmp/test-images/`
+- download point cloud fixtures: `./scripts/download-pointcloud-samples.sh`
 - point cloud fixtures:
-  - `tmp/pointclouds/bunny.pcd`
-  - `tmp/pointclouds/fragment.ply`
+  - `tmp/pointclouds/lamppost.pcd`
+  - `tmp/pointclouds/milk.pcd`
 
 ## Scenario Matrix
 
@@ -109,7 +110,7 @@ This scenario suite covers:
 - Review filtering/search now keeps selection/index consistent (`1/1` instead of `0/1` under active filters).
 - Point cloud web mode fails gracefully with a clear desktop-only message (no runtime crash).
 - Mobile default sidebar state is collapsed for better first-load usability.
-- Point cloud processing endpoints execute successfully with downloaded fixtures (`bunny.pcd`, `milk.pcd`).
+- Point cloud processing endpoints execute successfully with downloaded fixtures (`lamppost.pcd`, `milk.pcd`).
 - Point cloud normals endpoint accepts both `search_radius` and legacy `radius`.
 
 ### Fixed Defects (This Run)
