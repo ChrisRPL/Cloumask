@@ -6,8 +6,10 @@ Owner: BUILDER-A (docs-only pass)
 ## Scope
 
 - As-built architecture map (from current code/manifests)
-- Tech-fit audit (keep/adjust/drop recommendations)
+- Use-case -> tech-fit matrix (keep/adjust/remove recommendations)
 - Desktop app keep/drop decision record
+- Cleanup candidate inventory (unused imports/libs/folders/packages) with confidence + risk
+- Prioritized cleanup plan for follow-on builders
 
 ## 1) As-Built Architecture Map
 
@@ -33,18 +35,17 @@ LangChain-Ollama provider (backend/src/backend/agent/llm/provider.py)
 Local Ollama API (default: http://localhost:11434)
 ```
 
-## 2) Tech-Fit Audit
+## 2) Use-Case -> Tech-Fit Matrix
 
-| Area | Current Tech | Fit | Recommendation | Why |
-|---|---|---|---|---|
-| Desktop shell | Tauri 2 + Rust | High | Keep | Native shell is already integrated with sidecar lifecycle, app state checks, and point-cloud native commands. |
-| Frontend | Svelte 5 + Vite | High | Keep | Frontend supports both Tauri and browser mode; existing tests cover key user flows. |
-| Backend API | FastAPI + Pydantic + SSE | High | Keep | Clear route separation, typed contracts, and SSE thread model for live agent updates. |
-| Agent orchestration | LangGraph + checkpoints | High | Keep | Graph/node architecture is explicit and testable; checkpoint/approval flow matches product needs. |
-| LLM integration | LangChain-Ollama (`ChatOllama`) | Medium-High | Keep (monitor) | Good tool-calling abstraction + retries/fallbacks; tied to local Ollama model availability and host health. |
-| LLM serving | Ollama local-only default | Medium | Keep for local-first | Strong privacy/offline fit; weaker for multi-user throughput and shared infra. |
-| Point-cloud processing | Mixed Rust + Python | Medium-High | Keep | Rust path gives native performance for I/O/transforms; Python path covers model-heavy ML flows. |
-| Dependency mgmt (Python) | `pyproject.toml` + `requirements*.txt` | Medium | Adjust | Dual source of truth can drift; keep but enforce sync policy in release checklist. |
+| Use Case | Active Path | Current Tech | Fit | Recommendation | Rationale |
+|---|---|---|---|---|---|
+| Conversational planning + step execution | Frontend chat -> FastAPI SSE -> LangGraph -> LangChain/Ollama | `backend/api/streaming`, `backend/agent/graph.py`, `backend/agent/llm/provider.py` | High | Keep | Node graph + HITL checkpoints match product workflow and are already test-covered. |
+| Dataset review + annotation | Svelte review UI + Annotorious + backend review routes | `src/lib/components/Review/*`, `@annotorious/annotorious`, FastAPI routes | High | Keep | Clean split between UI and API; local-first review loop is functional. |
+| Local desktop runtime | Tauri shell + Rust sidecar manager + IPC bridge | `src-tauri/src/lib.rs`, `src-tauri/src/sidecar.rs`, `src/lib/utils/tauri.ts` | High | Keep | Desktop mode gives bundled local runtime and native integration without server ops. |
+| Point cloud inspect/transform | Three.js viewer + Rust native I/O/convert + Python CV routes | `src/lib/utils/three/*`, `src-tauri/src/pointcloud/*`, `backend/api/routes/pointcloud.py` | Medium-High | Keep (tighten contracts) | Hybrid Rust+Python stack is justified by performance and model tooling needs. |
+| LLM model readiness + pull UX | Backend LLM routes + Tauri/web client actions | `backend/api/routes/llm.py`, `src/lib/utils/tauri.ts`, `src-tauri/src/commands/llm.rs` | Medium | Keep (monitor) | Works for local-first usage; sensitive to Ollama health/model availability. |
+| Multi-user/shared infra mode | Local Ollama default + local sidecar assumptions | `backend/api/config.py`, local host defaults | Medium-Low | Adjust | Current defaults are single-host oriented; shared mode needs explicit provider/runtime policy. |
+| Dependency/install reliability | Mixed `pyproject.toml` + `requirements*.txt` + root scripts | `backend/pyproject.toml`, `backend/requirements*.txt`, `package.json` | Medium-Low | Adjust | Multiple install paths can drift and produce inconsistent runtime capability. |
 
 ## 3) Desktop Need Decision Record
 
@@ -81,7 +82,25 @@ Local Ollama API (default: http://localhost:11434)
 - New features should avoid unnecessary desktop-only coupling unless native capability is required.
 - Point-cloud/file-system-heavy flows can stay desktop-optimized, but must fail clearly in web mode.
 
-## 4) Evidence Pointers
+## 4) Cleanup Candidate Inventory (Docs-Only Baseline)
+
+| Candidate | Type | Evidence | Confidence | Risk if Removed/Changed |
+|---|---|---|---|---|
+| `@internationalized/date` in frontend deps | Unused package | Present in `package.json`; no source imports found in `src/` or `tests/` | High | Low |
+| `src-tauri/src/docker.rs` + `bollard` crate | Unused module/dependency path | `mod docker;` exists, but no command wiring or call sites outside module/tests | High | Medium |
+| Python dependency source-of-truth drift (`pyproject.toml` vs `requirements*.txt`) | Duplicate manifests | Same capabilities declared in multiple files with non-identical package sets/versions | High | Medium |
+| Backend install path mismatch (`pip install -e .` without extras) | Install/runtime gap | Root `backend:install` script installs core package only; agent/CV routes require optional deps | Medium | Medium-High |
+| Dual model scaffold roots (`models/` and `backend/models/`) | Folder duplication | Both roots contain model READMEs/scaffolds; runtime default can vary by working directory | Medium | Medium |
+
+## 5) Prioritized Cleanup Plan (for B/C)
+
+1. `P1` Validate `src-tauri/src/docker.rs` usage; either wire into command surface or remove module + `bollard` safely (BUILDER-B).
+2. `P1` Pick one Python dependency authority (`pyproject` or lockfile flow), then make `backend:install` deterministic for agent+CV runtime (BUILDER-B).
+3. `P2` Remove confirmed-unused frontend dependency `@internationalized/date` with `npm run check` + `npm test -- --run` validation (BUILDER-C).
+4. `P2` Normalize model-root policy (`backend/models` vs repo `models`) and document exact runtime expectation (BUILDER-B/C).
+5. `P3` After above, run a second unused-dependency sweep and only remove items with passing full gate (`just ci`) (BUILDER-B/C).
+
+## 6) Evidence Pointers
 
 - Frontend/Tauri bridge: `src/lib/utils/tauri.ts`
 - Desktop app bootstrap + command registry: `src-tauri/src/lib.rs`
@@ -90,4 +109,5 @@ Local Ollama API (default: http://localhost:11434)
 - Streaming SSE API: `backend/src/backend/api/streaming/endpoints.py`
 - Agent graph: `backend/src/backend/agent/graph.py`
 - Ollama provider/config: `backend/src/backend/agent/llm/provider.py`, `backend/src/backend/agent/llm/config.py`
-- Runtime/dependency manifests: `package.json`, `backend/pyproject.toml`, `src-tauri/Cargo.toml`
+- Runtime/dependency manifests: `package.json`, `backend/pyproject.toml`, `backend/requirements*.txt`, `src-tauri/Cargo.toml`
+- Desktop Docker candidate path: `src-tauri/src/docker.rs`
