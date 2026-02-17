@@ -74,6 +74,29 @@ def _resolve_aligned_imgsz(model: Any, base: int = 640) -> int:
     return ((base_size + stride - 1) // stride) * stride
 
 
+def _predict_with_optional_imgsz(
+    model: Any,
+    source: Any,
+    *,
+    imgsz: int,
+    **kwargs: Any,
+) -> Any:
+    """
+    Call Ultralytics predict with graceful fallback when `imgsz` is unsupported.
+
+    Some YOLO-World versions (and tests using lightweight mocks) do not accept
+    the `imgsz` keyword. Keep runtime behavior aligned while remaining backward-
+    compatible by retrying without `imgsz` only for that signature mismatch.
+    """
+    try:
+        return model.predict(source, imgsz=imgsz, **kwargs)
+    except TypeError as exc:
+        if "imgsz" not in str(exc):
+            raise
+        logger.debug("YOLO-World predict does not accept imgsz; retrying without imgsz")
+        return model.predict(source, **kwargs)
+
+
 def _parse_prompt(prompt: str) -> list[str]:
     """
     Parse comma-separated prompt into list of class names.
@@ -213,7 +236,8 @@ class YOLOWorldWrapper(BaseModelWrapper[DetectionResult]):
 
         # Create dummy image tensor (aligned to model stride)
         dummy = np.zeros((self._imgsz, self._imgsz, 3), dtype=np.uint8)
-        self._yoloworld.predict(  # type: ignore[union-attr]
+        _predict_with_optional_imgsz(
+            self._yoloworld,
             dummy,
             verbose=False,
             device=device,
@@ -278,7 +302,8 @@ class YOLOWorldWrapper(BaseModelWrapper[DetectionResult]):
         self.set_classes(classes)
 
         start = time.perf_counter()
-        results = self._yoloworld.predict(
+        results = _predict_with_optional_imgsz(
+            self._yoloworld,
             input_path,
             conf=confidence,
             iou=iou_threshold,
@@ -344,7 +369,8 @@ class YOLOWorldWrapper(BaseModelWrapper[DetectionResult]):
             batch = input_paths[i : i + batch_size]
 
             start = time.perf_counter()
-            batch_results = self._yoloworld.predict(
+            batch_results = _predict_with_optional_imgsz(
+                self._yoloworld,
                 batch,
                 conf=confidence,
                 iou=iou_threshold,
