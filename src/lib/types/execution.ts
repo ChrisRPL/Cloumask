@@ -120,6 +120,7 @@ export interface ExecutionState {
   readonly progress: ExecutionProgress;
   readonly stats: ExecutionStats;
   readonly previews: PreviewItem[];
+  readonly selectedPointcloudPreview: PreviewItem | null;
   readonly errors: ExecutionError[];
   readonly currentStepId: string | null;
   readonly checkpoint: CheckpointInfo | null;
@@ -151,6 +152,7 @@ export interface ExecutionState {
   setPreviews(previews: PreviewItem[]): void;
   appendPreviews(previews: PreviewItem[]): void;
   clearPreviews(): void;
+  setSelectedPointcloudPreview(preview: PreviewItem | null): void;
 
   // Error actions
   addError(error: Omit<ExecutionError, "timestamp">): void;

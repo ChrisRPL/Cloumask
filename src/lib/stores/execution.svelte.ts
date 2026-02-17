@@ -80,6 +80,7 @@ export function createExecutionState(): ExecutionState {
   let progress = $state<ExecutionProgress>({ ...INITIAL_PROGRESS });
   let stats = $state<ExecutionStats>({ ...INITIAL_STATS });
   let previews = $state<PreviewItem[]>([]);
+  let selectedPointcloudPreview = $state<PreviewItem | null>(null);
   let errors = $state<ExecutionError[]>([]);
   let currentStepId = $state<string | null>(null);
   let checkpoint = $state<CheckpointInfo | null>(null);
@@ -106,6 +107,9 @@ export function createExecutionState(): ExecutionState {
     },
     get previews() {
       return previews;
+    },
+    get selectedPointcloudPreview() {
+      return selectedPointcloudPreview;
     },
     get errors() {
       return errors;
@@ -148,6 +152,7 @@ export function createExecutionState(): ExecutionState {
       progress = { ...INITIAL_PROGRESS };
       errors = [];
       previews = [];
+      selectedPointcloudPreview = null;
       checkpoint = null;
     },
 
@@ -174,6 +179,7 @@ export function createExecutionState(): ExecutionState {
       progress = { ...INITIAL_PROGRESS };
       stats = { ...INITIAL_STATS };
       previews = [];
+      selectedPointcloudPreview = null;
       errors = [];
       currentStepId = null;
       checkpoint = null;
@@ -242,6 +248,11 @@ export function createExecutionState(): ExecutionState {
 
     clearPreviews() {
       previews = [];
+      selectedPointcloudPreview = null;
+    },
+
+    setSelectedPointcloudPreview(preview: PreviewItem | null) {
+      selectedPointcloudPreview = preview;
     },
 
     // Error actions

@@ -7,6 +7,7 @@
 <script lang="ts">
 	import { cn } from '$lib/utils.js';
 	import { getExecutionState } from '$lib/stores/execution.svelte';
+	import { getUIState } from '$lib/stores/ui.svelte';
 	import { convertFileSrc } from '@tauri-apps/api/core';
 	import { isTauri } from '$lib/utils/tauri';
 	import { toLocalImageUrl } from '$lib/utils/local-image';
@@ -17,6 +18,7 @@
 
 	// Get execution state to show context-aware messages
 	const execution = getExecutionState();
+	const ui = getUIState();
 
 	const isDesktopTauri = isTauri();
 	const safeConvertFileSrc: ((path: string) => string) | null =
@@ -38,6 +40,12 @@
 	const isRunning = $derived(execution.isRunning);
 	const isIdle = $derived(execution.status === 'idle');
 	const hasProcessed = $derived(execution.stats.processed > 0 || previews.length > 0);
+
+	function handlePreviewClick(preview: (typeof previews)[number]) {
+		if (preview.assetType !== 'pointcloud') return;
+		execution.setSelectedPointcloudPreview(preview);
+		ui.setView('pointcloud');
+	}
 </script>
 
 <div class={cn('flex flex-col h-full', className)}>
@@ -89,7 +97,7 @@
 		{:else}
 			<div class="grid grid-cols-3 gap-3">
 				{#each previews as preview (preview.id)}
-					<PreviewThumbnail {preview} />
+					<PreviewThumbnail {preview} onClick={() => handlePreviewClick(preview)} />
 				{/each}
 				<!-- Fill remaining slots with empty placeholders -->
 				{#each Array(Math.max(0, 6 - previews.length)) as _}
