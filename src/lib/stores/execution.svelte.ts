@@ -230,7 +230,8 @@ export function createExecutionState(): ExecutionState {
       const deduped: PreviewItem[] = [];
       const seen = new Set<string>();
       for (const preview of merged) {
-        const key = `${preview.imagePath}|${preview.status}`;
+        const assetType = preview.assetType ?? "image";
+        const key = `${assetType}|${preview.imagePath}|${preview.status}`;
         if (seen.has(key)) continue;
         seen.add(key);
         deduped.push(preview);

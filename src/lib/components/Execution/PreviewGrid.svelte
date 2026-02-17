@@ -26,7 +26,9 @@
 		execution.previews.map((preview) => ({
 			...preview,
 			thumbnailUrl:
-				isDesktopTauri && safeConvertFileSrc
+				preview.assetType === 'pointcloud'
+					? preview.thumbnailUrl
+					: isDesktopTauri && safeConvertFileSrc
 					? safeConvertFileSrc(preview.thumbnailUrl)
 					: toLocalImageUrl(preview.thumbnailUrl)
 		}))

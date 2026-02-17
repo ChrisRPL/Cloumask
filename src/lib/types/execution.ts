@@ -51,11 +51,25 @@ export interface PreviewAnnotation {
   };
 }
 
+export interface PointcloudPreviewAnnotation {
+  id: string;
+  className: string;
+  confidence: number;
+  center: [number, number, number];
+  size: [number, number, number];
+  yaw: number;
+  status: "pending" | "accepted" | "rejected" | "edited";
+}
+
+export type PreviewAssetType = "image" | "pointcloud";
+
 export interface PreviewItem {
   id: string;
   imagePath: string;
   thumbnailUrl: string;
   annotations: PreviewAnnotation[];
+  assetType?: PreviewAssetType;
+  pointcloudAnnotations?: PointcloudPreviewAnnotation[];
   status: "processed" | "flagged" | "error";
 }
 

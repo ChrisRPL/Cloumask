@@ -15,6 +15,16 @@
 		imagePath: string;
 		thumbnailUrl: string;
 		annotations: Annotation[];
+		assetType?: 'image' | 'pointcloud';
+		pointcloudAnnotations?: Array<{
+			id: string;
+			className: string;
+			confidence: number;
+			center: [number, number, number];
+			size: [number, number, number];
+			yaw: number;
+			status: 'pending' | 'accepted' | 'rejected' | 'edited';
+		}>;
 		status: 'processed' | 'flagged' | 'error';
 	}
 
@@ -52,27 +62,43 @@
 	)}
 	onclick={onClick}
 >
-	<!-- Image -->
-	<img
-		src={preview.thumbnailUrl}
-		alt={preview.imagePath}
-		class="w-full h-full object-cover"
-		loading="lazy"
-	/>
+	{#if preview.assetType === 'pointcloud'}
+		<div class="w-full h-full flex flex-col items-center justify-center gap-1 bg-muted/30">
+			<span class="text-lg leading-none">◉</span>
+			<span class="text-[10px] font-mono text-muted-foreground uppercase tracking-wide">
+				pointcloud
+			</span>
+			{#if preview.pointcloudAnnotations && preview.pointcloudAnnotations.length > 0}
+				<div
+					class="px-1.5 py-0.5 bg-background/80 rounded text-[10px] font-mono tabular-nums"
+				>
+					{preview.pointcloudAnnotations.length} boxes
+				</div>
+			{/if}
+		</div>
+	{:else}
+		<!-- Image -->
+		<img
+			src={preview.thumbnailUrl}
+			alt={preview.imagePath}
+			class="w-full h-full object-cover"
+			loading="lazy"
+		/>
 
-	<!-- Bounding box overlays -->
-	<svg class="absolute inset-0 w-full h-full pointer-events-none">
-		{#each preview.annotations as ann}
-			<rect
-				x="{ann.bbox.x * 100}%"
-				y="{ann.bbox.y * 100}%"
-				width="{ann.bbox.width * 100}%"
-				height="{ann.bbox.height * 100}%"
-				class="fill-none stroke-forest-light stroke-2"
-				rx="2"
-			/>
-		{/each}
-	</svg>
+		<!-- Bounding box overlays -->
+		<svg class="absolute inset-0 w-full h-full pointer-events-none">
+			{#each preview.annotations as ann}
+				<rect
+					x="{ann.bbox.x * 100}%"
+					y="{ann.bbox.y * 100}%"
+					width="{ann.bbox.width * 100}%"
+					height="{ann.bbox.height * 100}%"
+					class="fill-none stroke-forest-light stroke-2"
+					rx="2"
+				/>
+			{/each}
+		</svg>
+	{/if}
 
 	<!-- Status indicator dot -->
 	<div
@@ -83,7 +109,13 @@
 	></div>
 
 	<!-- Annotation count badge -->
-	{#if preview.annotations.length > 0}
+	{#if preview.assetType === 'pointcloud' && preview.pointcloudAnnotations && preview.pointcloudAnnotations.length > 0}
+		<div
+			class="absolute bottom-1 left-1 px-1.5 py-0.5 bg-background/80 rounded text-xs font-mono tabular-nums"
+		>
+			{preview.pointcloudAnnotations.length}
+		</div>
+	{:else if preview.annotations.length > 0}
 		<div
 			class="absolute bottom-1 left-1 px-1.5 py-0.5 bg-background/80 rounded text-xs font-mono tabular-nums"
 		>

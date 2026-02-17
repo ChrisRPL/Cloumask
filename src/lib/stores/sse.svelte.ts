@@ -359,7 +359,11 @@ function applyToolResultToExecution(data: ToolResultEventData, execution: Execut
 	}
 
 	const detectedCount = numberFromResult(result.count);
-	if (typeof detectedCount === 'number' && detectedCount > 0 && data.tool_name === 'detect') {
+	if (
+		typeof detectedCount === 'number' &&
+		detectedCount > 0 &&
+		(data.tool_name === 'detect' || data.tool_name === 'detect_3d')
+	) {
 		execution.updateStats({
 			detected: Math.max(execution.stats.detected, detectedCount)
 		});
@@ -400,9 +404,28 @@ const IMAGE_EXTENSIONS = new Set([
 	'.webp'
 ]);
 
+const POINTCLOUD_EXTENSIONS = new Set([
+	'.pcd',
+	'.ply',
+	'.las',
+	'.laz',
+	'.bin',
+	'.xyz',
+	'.pts',
+	'.e57'
+]);
+
 function isImagePath(path: string): boolean {
 	const lower = path.toLowerCase();
 	for (const ext of IMAGE_EXTENSIONS) {
+		if (lower.endsWith(ext)) return true;
+	}
+	return false;
+}
+
+function isPointcloudPath(path: string): boolean {
+	const lower = path.toLowerCase();
+	for (const ext of POINTCLOUD_EXTENSIONS) {
 		if (lower.endsWith(ext)) return true;
 	}
 	return false;
@@ -439,8 +462,92 @@ function collectPreviewPaths(result: Record<string, unknown>): string[] {
 	return Array.from(new Set(paths));
 }
 
+function extractPointcloudPreviewPath(result: Record<string, unknown>): string | null {
+	const candidates = [result.pointcloud_path, result.output_path, result.input_path];
+	for (const candidate of candidates) {
+		if (typeof candidate !== 'string') continue;
+		if (!candidate.trim()) continue;
+		if (isPointcloudPath(candidate)) return candidate;
+	}
+	return null;
+}
+
+type PointcloudDetectionRow = {
+	class?: unknown;
+	class_name?: unknown;
+	confidence?: unknown;
+	score?: unknown;
+	center?: unknown;
+	dimensions?: unknown;
+	rotation?: unknown;
+	yaw?: unknown;
+};
+
+function parseVector3FromObject(value: unknown): [number, number, number] | null {
+	if (typeof value !== 'object' || !value) return null;
+	const row = value as Record<string, unknown>;
+	const x = numberFromResult(row.x) ?? numberFromResult(row.length);
+	const y = numberFromResult(row.y) ?? numberFromResult(row.width);
+	const z = numberFromResult(row.z) ?? numberFromResult(row.height);
+	if (x === null || y === null || z === null) return null;
+	return [x, y, z];
+}
+
+function parsePointcloudDetections(
+	detections: unknown
+): import('$lib/types/execution').PointcloudPreviewAnnotation[] {
+	if (!Array.isArray(detections)) return [];
+
+	const parsed: import('$lib/types/execution').PointcloudPreviewAnnotation[] = [];
+	for (let index = 0; index < detections.length; index += 1) {
+		const row = detections[index] as PointcloudDetectionRow;
+		if (!row || typeof row !== 'object') continue;
+
+		const center = parseVector3FromObject(row.center);
+		const dimensions = parseVector3FromObject(row.dimensions);
+		if (!center || !dimensions) continue;
+
+		const className =
+			(typeof row.class_name === 'string' && row.class_name) ||
+			(typeof row.class === 'string' && row.class) ||
+			'object';
+		const confidence = numberFromResult(row.confidence) ?? numberFromResult(row.score) ?? 0;
+		const yaw = numberFromResult(row.rotation) ?? numberFromResult(row.yaw) ?? 0;
+
+		parsed.push({
+			id: `det-${index}-${className}`,
+			className,
+			confidence,
+			center,
+			size: dimensions,
+			yaw,
+			status: 'pending'
+		});
+	}
+
+	return parsed;
+}
+
 function extractPreviewItems(data: ToolResultEventData): import('$lib/types/execution').PreviewItem[] {
 	const result = data.result ?? {};
+	const pointcloudPath = extractPointcloudPreviewPath(result);
+	if (pointcloudPath) {
+		const pointcloudAnnotations = parsePointcloudDetections(result.detections);
+		const status: 'processed' | 'flagged' | 'error' =
+			pointcloudAnnotations.length > 0 ? 'flagged' : 'processed';
+		return [
+			{
+				id: `${data.tool_name}-${data.step_index}-${pointcloudPath}`,
+				imagePath: pointcloudPath,
+				thumbnailUrl: pointcloudPath,
+				annotations: [],
+				assetType: 'pointcloud',
+				pointcloudAnnotations,
+				status
+			}
+		];
+	}
+
 	const imagePaths = collectPreviewPaths(result);
 	if (imagePaths.length === 0) return [];
 
