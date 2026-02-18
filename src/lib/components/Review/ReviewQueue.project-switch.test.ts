@@ -85,7 +85,9 @@ describe('ReviewQueue project switching', () => {
 	it('clears old project items before loading the next project', async () => {
 		const projectAItem = createBackendItem('item-a', 'project-a-image.jpg');
 		const projectBItem = createBackendItem('item-b', 'project-b-image.jpg');
-		let resolveProjectBLoad: ((response: Response) => void) | null = null;
+		let resolveProjectBLoad: (response: Response) => void = () => {
+			throw new Error('project-b resolver not set');
+		};
 
 		const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
 			const method = (init?.method ?? 'GET').toUpperCase();
@@ -127,9 +129,7 @@ describe('ReviewQueue project switching', () => {
 			expect(screen.getByText('Loading...')).toBeTruthy();
 		});
 
-		resolveProjectBLoad?.(
-			jsonResponse({ items: [projectBItem], total: 1, skip: 0, limit: 50 })
-		);
+		resolveProjectBLoad(jsonResponse({ items: [projectBItem], total: 1, skip: 0, limit: 50 }));
 
 		await waitFor(() => {
 			expect(screen.getByText('project-b-image.jpg')).toBeTruthy();
@@ -140,8 +140,12 @@ describe('ReviewQueue project switching', () => {
 	it('ignores stale responses from the previous project after a switch', async () => {
 		const projectAItem = createBackendItem('item-a-stale', 'project-a-stale.jpg');
 		const projectBItem = createBackendItem('item-b-fresh', 'project-b-fresh.jpg');
-		let resolveProjectALoad: ((response: Response) => void) | null = null;
-		let resolveProjectBLoad: ((response: Response) => void) | null = null;
+		let resolveProjectALoad: (response: Response) => void = () => {
+			throw new Error('project-a resolver not set');
+		};
+		let resolveProjectBLoad: (response: Response) => void = () => {
+			throw new Error('project-b resolver not set');
+		};
 
 		const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
 			const method = (init?.method ?? 'GET').toUpperCase();
@@ -182,17 +186,13 @@ describe('ReviewQueue project switching', () => {
 			expect(fetchMock).toHaveBeenCalledTimes(2);
 		});
 
-		resolveProjectBLoad?.(
-			jsonResponse({ items: [projectBItem], total: 1, skip: 0, limit: 50 })
-		);
+		resolveProjectBLoad(jsonResponse({ items: [projectBItem], total: 1, skip: 0, limit: 50 }));
 
 		await waitFor(() => {
 			expect(screen.getByText('project-b-fresh.jpg')).toBeTruthy();
 		});
 
-		resolveProjectALoad?.(
-			jsonResponse({ items: [projectAItem], total: 1, skip: 0, limit: 50 })
-		);
+		resolveProjectALoad(jsonResponse({ items: [projectAItem], total: 1, skip: 0, limit: 50 }));
 
 		await waitFor(() => {
 			expect(screen.getByText('project-b-fresh.jpg')).toBeTruthy();
