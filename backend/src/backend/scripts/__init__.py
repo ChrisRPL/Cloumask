@@ -17,6 +17,10 @@ from backend.scripts.docker_executor import (
     ExecutionResult,
     execute_script_in_docker,
 )
+from backend.scripts.env_executor import (
+    ScriptEnvironmentExecutor,
+    ScriptExecutionResult,
+)
 from backend.scripts.generator import ScriptGeneratorService
 from backend.scripts.templates import SCRIPT_GENERATION_PROMPT
 from backend.scripts.validator import ScriptValidator
@@ -33,4 +37,6 @@ __all__ = [
     "ExecutionConfig",
     "ExecutionResult",
     "execute_script_in_docker",
+    "ScriptEnvironmentExecutor",
+    "ScriptExecutionResult",
 ]
