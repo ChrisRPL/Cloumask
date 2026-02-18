@@ -684,15 +684,40 @@
 	// Data Loading
 	// ============================================================================
 	let lastLoadedContextKey = $state<string | null>(null);
+	let loadRequestSequence = 0;
 
-	async function loadReviewItems() {
+	function getContextKey(): string | null {
 		const execId = executionId?.trim();
-		if (!execId) {
-			reviewState.loadItems([]);
-			reviewState.setLoading(false);
+		if (!execId) return null;
+		const activeProjectId = projectId?.trim() ?? '__default__';
+		return `${activeProjectId}:${execId}`;
+	}
+
+	function resetReviewViewStateForContextSwitch() {
+		if (saveTimeout) {
+			clearTimeout(saveTimeout);
+			saveTimeout = null;
+		}
+		lastSavedAnnotations = '';
+		isEditMode = false;
+		drawingTool = 'select';
+		selectedAnnotationId = null;
+		zoom = 1;
+		undoStack = [];
+		redoStack = [];
+	}
+
+	async function loadReviewItems(expectedContextKey: string | null = getContextKey()) {
+		const execId = executionId?.trim();
+		if (!execId || !expectedContextKey) {
+			if (expectedContextKey === lastLoadedContextKey) {
+				reviewState.loadItems([]);
+				reviewState.setLoading(false);
+			}
 			return;
 		}
 
+		const requestSequence = ++loadRequestSequence;
 		reviewState.setLoading(true);
 		try {
 			const params = new URLSearchParams({ execution_id: execId });
@@ -707,26 +732,41 @@
 			}
 			const data = await response.json();
 			const items = Array.isArray(data.items) ? (data.items as BackendReviewItem[]) : [];
+			if (requestSequence !== loadRequestSequence || expectedContextKey !== lastLoadedContextKey) {
+				return;
+			}
 			reviewState.loadItems(items.map(normalizeItem));
 		} catch (error) {
+			if (requestSequence !== loadRequestSequence || expectedContextKey !== lastLoadedContextKey) {
+				return;
+			}
 			console.error('Error loading review items:', error);
 			// TODO: Show error toast
 		} finally {
-			reviewState.setLoading(false);
+			if (requestSequence === loadRequestSequence && expectedContextKey === lastLoadedContextKey) {
+				reviewState.setLoading(false);
+			}
 		}
 	}
 
 	// Reload whenever execution context changes.
 	$effect(() => {
-		const execId = executionId?.trim();
-		if (!execId) return;
+		const contextKey = getContextKey();
+		if (!contextKey) {
+			lastLoadedContextKey = null;
+			resetReviewViewStateForContextSwitch();
+			reviewState.loadItems([]);
+			reviewState.setLoading(false);
+			return;
+		}
 
-		const activeProjectId = projectId?.trim() ?? '__default__';
-		const contextKey = `${activeProjectId}:${execId}`;
 		if (contextKey === lastLoadedContextKey) return;
 
 		lastLoadedContextKey = contextKey;
-		void loadReviewItems();
+		resetReviewViewStateForContextSwitch();
+		reviewState.loadItems([]);
+		reviewState.setLoading(true);
+		void loadReviewItems(contextKey);
 	});
 
 	// Polling: Auto-refresh items during active execution
