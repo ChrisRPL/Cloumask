@@ -559,7 +559,7 @@ class TestUnderstandNode:
 
         understanding = result["metadata"]["understanding"]
         assert understanding["parameters"]["prompt"] == "roads"
-        assert understanding["parameters"]["custom_step_description"] == "rf-detr training from roboflow"
+        assert understanding["parameters"]["custom_step_description"] == "RF-DETR training from Roboflow"
         assert "segment" in understanding["operations"]
         assert "script" in understanding["operations"]
 
@@ -572,7 +572,36 @@ class TestUnderstandNode:
         segment_step = next(step for step in plan if step["tool_name"] == "segment")
         script_step = next(step for step in plan if step["tool_name"] == "run_script")
         assert segment_step["parameters"]["prompt"] == "roads"
-        assert "rf-detr training from roboflow" in script_step["description"].lower()
+        assert script_step["description"] == "RF-DETR training from Roboflow"
+
+    @pytest.mark.asyncio
+    async def test_fast_path_segment_prompt_ignores_followup_custom_step(self) -> None:
+        """Segmentation prompt extraction should stop before follow-up workflow clauses."""
+        state = _state_with_message(
+            "Segment roads and add a final step for RF-DETR training from Roboflow in /data/urban."
+        )
+
+        with patch("backend.agent.nodes.understand.get_llm") as mock_get_llm:
+            result = await understand(state)
+            mock_get_llm.assert_not_called()
+
+        understanding = result["metadata"]["understanding"]
+        assert understanding["parameters"]["prompt"] == "roads"
+        assert understanding["parameters"]["custom_step_description"] == "RF-DETR training from Roboflow"
+
+    @pytest.mark.asyncio
+    async def test_fast_path_custom_step_ignores_trailing_instructions(self) -> None:
+        """Custom final-step extraction should stop before trailing pipeline commands."""
+        state = _state_with_message(
+            "Detect objects in /data/site and add a final step for RF-DETR training from Roboflow and export yolo."
+        )
+
+        with patch("backend.agent.nodes.understand.get_llm") as mock_get_llm:
+            result = await understand(state)
+            mock_get_llm.assert_not_called()
+
+        understanding = result["metadata"]["understanding"]
+        assert understanding["parameters"]["custom_step_description"] == "RF-DETR training from Roboflow"
 
     @pytest.mark.asyncio
     async def test_fast_path_custom_step_detect_does_not_default_classes(self) -> None:
@@ -592,7 +621,7 @@ class TestUnderstandNode:
         detect_step = next(step for step in plan if step["tool_name"] == "detect")
         script_step = next(step for step in plan if step["tool_name"] == "run_script")
         assert "classes" not in detect_step["parameters"]
-        assert "roboflow rf-detr training" in script_step["description"].lower()
+        assert script_step["description"] == "Roboflow RF-DETR training"
 
 
 # -----------------------------------------------------------------------------
