@@ -113,8 +113,8 @@ class TestValidatePlan:
         assert result is not None
         assert "output_path" in result.lower()
 
-    def test_detect_missing_classes_fails(self) -> None:
-        """detect without classes should fail."""
+    def test_detect_missing_classes_passes(self) -> None:
+        """detect without classes should pass (planner must not invent classes)."""
         plan = [
             {
                 "tool_name": "detect",
@@ -122,8 +122,7 @@ class TestValidatePlan:
             }
         ]
         result = validate_plan(plan)
-        assert result is not None
-        assert "classes" in result.lower()
+        assert result is None
 
     def test_segment_missing_prompt_fails(self) -> None:
         """segment without prompt should fail."""
@@ -546,6 +545,54 @@ class TestUnderstandNode:
 
         understanding = result["metadata"]["understanding"]
         assert understanding["input_path"] == "/Users/krzysztof/Documents/data"
+
+    @pytest.mark.asyncio
+    async def test_fast_path_keeps_segment_target_and_custom_final_step(self) -> None:
+        """Segment target + custom final step should stay specific in the generated plan."""
+        state = _state_with_message(
+            "Segment roads in /data/urban and add a final step for RF-DETR training from Roboflow."
+        )
+
+        with patch("backend.agent.nodes.understand.get_llm") as mock_get_llm:
+            result = await understand(state)
+            mock_get_llm.assert_not_called()
+
+        understanding = result["metadata"]["understanding"]
+        assert understanding["parameters"]["prompt"] == "roads"
+        assert understanding["parameters"]["custom_step_description"] == "rf-detr training from roboflow"
+        assert "segment" in understanding["operations"]
+        assert "script" in understanding["operations"]
+
+        plan = build_rule_based_plan(understanding)
+        assert plan is not None
+        tool_names = [step["tool_name"] for step in plan]
+        assert "segment" in tool_names
+        assert tool_names[-1] == "run_script"
+
+        segment_step = next(step for step in plan if step["tool_name"] == "segment")
+        script_step = next(step for step in plan if step["tool_name"] == "run_script")
+        assert segment_step["parameters"]["prompt"] == "roads"
+        assert "rf-detr training from roboflow" in script_step["description"].lower()
+
+    @pytest.mark.asyncio
+    async def test_fast_path_custom_step_detect_does_not_default_classes(self) -> None:
+        """Custom-step detect flow should not inject person/car classes by default."""
+        state = _state_with_message(
+            "Detect objects in /data/site and add a final step for Roboflow RF-DETR training."
+        )
+
+        with patch("backend.agent.nodes.understand.get_llm") as mock_get_llm:
+            result = await understand(state)
+            mock_get_llm.assert_not_called()
+
+        understanding = result["metadata"]["understanding"]
+        plan = build_rule_based_plan(understanding)
+        assert plan is not None
+
+        detect_step = next(step for step in plan if step["tool_name"] == "detect")
+        script_step = next(step for step in plan if step["tool_name"] == "run_script")
+        assert "classes" not in detect_step["parameters"]
+        assert "roboflow rf-detr training" in script_step["description"].lower()
 
 
 # -----------------------------------------------------------------------------
