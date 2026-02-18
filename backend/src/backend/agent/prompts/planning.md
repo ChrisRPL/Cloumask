@@ -23,7 +23,7 @@ Blur faces and license plates in images/videos
 Object detection using YOLO11
 - **Parameters:**
   - `input_path` (str, required): Path to input files
-  - `classes` (list[str], required): Object classes to detect
+  - `classes` (list[str], optional): Object classes to detect (only when explicitly requested)
   - `confidence` (float, optional): Confidence threshold (default: 0.5)
 
 ### segment
@@ -179,6 +179,8 @@ Respond ONLY with a valid JSON array of steps. No markdown, no explanation, just
 4. **Keep plans focused and minimal** - only include steps that are necessary
 5. **Use the user's specified paths** when provided
 6. **Generate output paths** if not specified (use input_path + "_output" pattern)
+7. **Do not invent detection classes** - only include `classes` when user requested them
+8. **Preserve specificity** - keep explicit targets (e.g. `segment roads`) and custom final-step text verbatim
 
 ## Examples
 

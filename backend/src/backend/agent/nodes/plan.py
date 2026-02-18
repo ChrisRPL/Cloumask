@@ -262,19 +262,21 @@ def build_rule_based_plan(understanding: dict[str, Any]) -> list[dict[str, Any]]
     if "detect" in operations:
         classes = _normalize_classes(parameters.get("classes"))
         if not classes:
-            classes = ["person", "car"]
+            classes = []
         confidence = float(parameters.get("confidence", 0.5))
         detection_annotations_path = f"{working_path}_detections_yolo"
+        detect_parameters: dict[str, Any] = {
+            "input_path": working_path,
+            "confidence": confidence,
+            "save_annotations": True,
+            "output_path": detection_annotations_path,
+        }
+        if classes:
+            detect_parameters["classes"] = classes
         plan.append(
             {
                 "tool_name": "detect",
-                "parameters": {
-                    "input_path": working_path,
-                    "classes": classes,
-                    "confidence": confidence,
-                    "save_annotations": True,
-                    "output_path": detection_annotations_path,
-                },
+                "parameters": detect_parameters,
                 "description": "Detect target objects in the input dataset",
             }
         )
@@ -377,7 +379,7 @@ def build_rule_based_plan(understanding: dict[str, Any]) -> list[dict[str, Any]]
             if parameters.get("command"):
                 script_params["command"] = parameters["command"]
             if custom_desc:
-                description = custom_desc.capitalize()
+                description = custom_desc
                 script_params["description"] = custom_desc
             else:
                 description = "Execute custom processing script on the data"
@@ -503,8 +505,6 @@ def validate_plan(plan: list[dict[str, Any]]) -> str | None:
         elif tool_name == "detect":
             if "input_path" not in parameters:
                 return f"Step {step_num} (detect) missing required 'input_path' parameter"
-            if "classes" not in parameters:
-                return f"Step {step_num} (detect) missing required 'classes' parameter"
 
         elif tool_name == "segment":
             if "input_path" not in parameters:
