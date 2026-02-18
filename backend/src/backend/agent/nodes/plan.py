@@ -293,6 +293,7 @@ def build_rule_based_plan(understanding: dict[str, Any]) -> list[dict[str, Any]]
     Returns None if request is too ambiguous and should fall back to LLM planning.
     """
     input_path = understanding.get("input_path")
+    input_type = str(understanding.get("input_type") or "").lower()
     operations = [
         str(op).strip().lower() for op in understanding.get("operations", []) if str(op).strip()
     ]
@@ -300,6 +301,9 @@ def build_rule_based_plan(understanding: dict[str, Any]) -> list[dict[str, Any]]
     output_path = understanding.get("output_path")
 
     if not input_path or not operations:
+        return None
+
+    if input_type == "pointcloud":
         return None
 
     # Keep scan-only flows in the LLM path for broader backwards compatibility.

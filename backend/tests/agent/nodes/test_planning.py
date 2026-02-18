@@ -276,6 +276,28 @@ class TestValidatePlan:
 
 
 # -----------------------------------------------------------------------------
+# build_rule_based_plan() tests
+# -----------------------------------------------------------------------------
+
+
+class TestBuildRuleBasedPlan:
+    """Tests for deterministic plan building."""
+
+    def test_pointcloud_understanding_uses_llm_path(self) -> None:
+        """Point-cloud requests should bypass image-centric rule-based planner."""
+        understanding = {
+            "intent": "detect",
+            "input_path": "/data/scene.pcd",
+            "input_type": "pointcloud",
+            "operations": ["detect"],
+            "parameters": {},
+            "output_path": None,
+        }
+
+        assert build_rule_based_plan(understanding) is None
+
+
+# -----------------------------------------------------------------------------
 # format_plan_for_display() tests
 # -----------------------------------------------------------------------------
 
@@ -496,6 +518,34 @@ class TestUnderstandNode:
         assert "detect" in understanding["operations"]
         assert "anonymize" in understanding["operations"]
         assert "export" in understanding["operations"]
+
+    @pytest.mark.asyncio
+    async def test_pointcloud_request_skips_fast_path(self) -> None:
+        """Point-cloud requests should use LLM understanding, not regex fast-path."""
+        state = _state_with_message("detect cars in /tmp/scan.pcd")
+
+        mock_response = MagicMock()
+        mock_response.content = json.dumps({
+            "intent": "detect_3d",
+            "input_path": "/tmp/scan.pcd",
+            "input_type": "pointcloud",
+            "operations": ["pointcloud_stats", "detect_3d"],
+            "parameters": {"classes": ["Car"]},
+            "output_path": None,
+            "clarification_needed": None,
+        })
+
+        with patch("backend.agent.nodes.understand.get_llm") as mock_get_llm:
+            mock_llm = AsyncMock()
+            mock_llm.ainvoke.return_value = mock_response
+            mock_get_llm.return_value = mock_llm
+
+            result = await understand(state)
+            mock_get_llm.assert_called_once()
+
+        understanding = result["metadata"]["understanding"]
+        assert understanding["input_type"] == "pointcloud"
+        assert understanding["operations"] == ["pointcloud_stats", "detect_3d"]
 
     @pytest.mark.asyncio
     async def test_fast_path_detect_classes_excludes_anonymization_targets(self) -> None:
