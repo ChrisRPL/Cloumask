@@ -443,7 +443,6 @@ version = "0.1.0"
 dependencies = [
  "bollard",
  "env_logger",
- "futures-util",
  "libc",
  "log",
  "pasture-core",

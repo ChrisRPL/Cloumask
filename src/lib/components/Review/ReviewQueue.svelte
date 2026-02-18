@@ -1,6 +1,7 @@
 <script lang="ts" module>
 	export interface ReviewQueueProps {
 		executionId?: string;
+		projectId?: string | null;
 		onDone?: () => void;
 		class?: string;
 	}
@@ -28,7 +29,8 @@
 	import AnnotationDetails from './details/AnnotationDetails.svelte';
 	import ActionBar from './actions/ActionBar.svelte';
 
-	let { executionId = 'current', onDone, class: className }: ReviewQueueProps = $props();
+	let { executionId = 'current', projectId = null, onDone, class: className }: ReviewQueueProps =
+		$props();
 
 	const isDesktopTauri = isTauri();
 	const safeConvertFileSrc: ((path: string) => string) | null =
@@ -681,14 +683,25 @@
 	// ============================================================================
 	// Data Loading
 	// ============================================================================
-	let lastLoadedExecutionId = $state<string | null>(null);
+	let lastLoadedContextKey = $state<string | null>(null);
 
 	async function loadReviewItems() {
+		const execId = executionId?.trim();
+		if (!execId) {
+			reviewState.loadItems([]);
+			reviewState.setLoading(false);
+			return;
+		}
+
 		reviewState.setLoading(true);
 		try {
-			const response = await fetch(
-				`http://localhost:8765/api/review/items?execution_id=${executionId}`
-			);
+			const params = new URLSearchParams({ execution_id: execId });
+			const activeProjectId = projectId?.trim();
+			if (activeProjectId) {
+				params.set('project_id', activeProjectId);
+			}
+
+			const response = await fetch(`http://localhost:8765/api/review/items?${params.toString()}`);
 			if (!response.ok) {
 				throw new Error(`Failed to load review items: ${response.statusText}`);
 			}
@@ -706,8 +719,13 @@
 	// Reload whenever execution context changes.
 	$effect(() => {
 		const execId = executionId?.trim();
-		if (!execId || execId === lastLoadedExecutionId) return;
-		lastLoadedExecutionId = execId;
+		if (!execId) return;
+
+		const activeProjectId = projectId?.trim() ?? '__default__';
+		const contextKey = `${activeProjectId}:${execId}`;
+		if (contextKey === lastLoadedContextKey) return;
+
+		lastLoadedContextKey = contextKey;
 		void loadReviewItems();
 	});
 

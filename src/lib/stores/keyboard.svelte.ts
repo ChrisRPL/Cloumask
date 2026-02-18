@@ -18,9 +18,7 @@ import type {
 } from "$lib/types/keyboard";
 import {
   getPlatform,
-  parseCombo,
   formatComboString,
-  matchesCombo,
   isInputElement,
   generateShortcutId,
   normalizeCombo,
@@ -104,10 +102,7 @@ export function createKeyboardState(): KeyboardState {
   }
 
   // Helper: find matching shortcut for a combo
-  function findMatchingShortcut(
-    combo: string,
-    currentScope: KeyboardScope
-  ): Shortcut | null {
+  function findMatchingShortcut(combo: string): Shortcut | null {
     const normalized = normalizeCombo(combo);
     let bestMatch: Shortcut | null = null;
     let bestPriority = -Infinity;
@@ -416,7 +411,7 @@ export function createKeyboardState(): KeyboardState {
       clearSequence();
 
       // Look for single combo match
-      const match = findMatchingShortcut(comboStr, activeScope);
+      const match = findMatchingShortcut(comboStr);
       if (match) {
         event.preventDefault();
         match.action();

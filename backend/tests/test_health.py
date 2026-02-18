@@ -30,6 +30,7 @@ class TestHealthEndpoint:
         assert "version" in data
         assert "timestamp" in data
         assert "components" in data
+        assert "backend_src_path" in data
 
     def test_health_status_is_healthy(self, client: TestClient) -> None:
         """Health status should be 'healthy' when server is running."""
@@ -67,6 +68,7 @@ class TestReadyEndpoint:
         data = response.json()
 
         assert all(data["checks"].values())
+        assert "backend_src_path" in data
 
 
 class TestRootEndpoint:

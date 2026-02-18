@@ -11,6 +11,7 @@ Implements spec: 04-agent-nodes-execution
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -33,6 +34,7 @@ logger = logging.getLogger(__name__)
 
 # Maximum retries for transient errors
 MAX_RETRIES = 3
+GENERATED_SCRIPT_ROOT = Path("/tmp/cloumask-generated-steps")
 
 
 def _coerce_parameter_value(param: ToolParameter, value: Any) -> Any:
@@ -116,6 +118,79 @@ def _resolve_export_parameters(
         resolved.get("source_path"),
         resolved.get("source_format"),
     )
+    return resolved
+
+
+def _looks_like_inline_python_script(value: Any) -> bool:
+    if not isinstance(value, str):
+        return False
+
+    content = value.strip()
+    if not content:
+        return False
+
+    if "\n" in content:
+        return True
+
+    if content.lower().startswith("#!/usr/bin/env python"):
+        return True
+
+    python_markers = ("def process(", "import ", "from ", "class ", "return ")
+    return any(marker in content for marker in python_markers)
+
+
+def _sanitize_path_component(value: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9_.-]", "_", value).strip("._")
+    return cleaned or "default"
+
+
+def _default_run_script_output_path(input_path: str) -> str:
+    input_p = Path(input_path).expanduser()
+    if input_p.suffix:
+        return str(input_p.with_name(f"{input_p.stem}_custom_output{input_p.suffix}"))
+    return str(input_p.parent / f"{input_p.name}_custom_output")
+
+
+def _prepare_run_script_parameters(
+    step: dict[str, Any],
+    parameters: dict[str, Any],
+    metadata: dict[str, Any],
+) -> dict[str, Any]:
+    """Normalize legacy run_script payloads into executable tool parameters."""
+    resolved = dict(parameters)
+    script_value = resolved.get("script")
+    generated_code = step.get("generated_code")
+
+    if (not isinstance(generated_code, str) or not generated_code.strip()) and _looks_like_inline_python_script(script_value):
+        generated_code = str(script_value).strip()
+        step_parameters = dict(step.get("parameters", {}))
+        step_parameters.pop("script", None)
+        step["parameters"] = step_parameters
+        step["generated_code"] = generated_code
+
+    if isinstance(generated_code, str) and generated_code.strip():
+        pipeline_id = _sanitize_path_component(str(metadata.get("pipeline_id", "pipeline")))
+        step_id = _sanitize_path_component(str(step.get("id", "step")))
+        script_dir = GENERATED_SCRIPT_ROOT / pipeline_id
+        script_dir.mkdir(parents=True, exist_ok=True)
+        script_path = script_dir / f"{step_id}.py"
+        script_path.write_text(generated_code.strip(), encoding="utf-8")
+        resolved["script_path"] = str(script_path)
+        resolved.pop("script", None)
+    elif "script_path" not in resolved and isinstance(script_value, str) and script_value.strip():
+        # Backward compatibility for legacy planner shape (`script` as file path).
+        resolved["script_path"] = script_value.strip()
+        resolved.pop("script", None)
+
+    if "output_path" not in resolved and isinstance(resolved.get("input_path"), str):
+        input_path = resolved["input_path"].strip()
+        if input_path:
+            default_output = _default_run_script_output_path(input_path)
+            resolved["output_path"] = default_output
+            step_parameters = dict(step.get("parameters", {}))
+            step_parameters.setdefault("output_path", default_output)
+            step["parameters"] = step_parameters
+
     return resolved
 
 
@@ -459,6 +534,13 @@ async def execute_step_node(state: PipelineState) -> dict[str, Any]:
             "retry_count": 0,
             "awaiting_user": False,
         }
+
+    if tool_name == "run_script":
+        parameters = _prepare_run_script_parameters(
+            step,
+            parameters,
+            state.get("metadata", {}),
+        )
 
     # Drop unsupported UI-only parameters and coerce common value shapes.
     parameter_defs = {param.name: param for param in getattr(tool, "parameters", [])}

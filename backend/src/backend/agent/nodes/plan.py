@@ -61,6 +61,71 @@ def _normalize_classes(value: Any) -> list[str]:
     return []
 
 
+def _looks_like_inline_python_script(value: Any) -> bool:
+    """Heuristic for distinguishing inline code from script file paths."""
+    if not isinstance(value, str):
+        return False
+
+    content = value.strip()
+    if not content:
+        return False
+
+    if "\n" in content:
+        return True
+
+    if content.lower().startswith("#!/usr/bin/env python"):
+        return True
+
+    python_markers = ("def process(", "import ", "from ", "class ", "return ")
+    if any(marker in content for marker in python_markers):
+        return True
+
+    return False
+
+
+def _normalize_run_script_step(step: dict[str, Any]) -> dict[str, Any]:
+    """Move inline run_script code into step-level generated_code."""
+    normalized = dict(step)
+    if normalized.get("tool_name") != "run_script":
+        return normalized
+
+    parameters = dict(normalized.get("parameters", {}))
+    generated_code = normalized.get("generated_code")
+    if not isinstance(generated_code, str) or not generated_code.strip():
+        script_value = parameters.get("script")
+        if _looks_like_inline_python_script(script_value):
+            generated_code = str(script_value).strip()
+            parameters.pop("script", None)
+
+    if isinstance(generated_code, str) and generated_code.strip():
+        normalized["generated_code"] = generated_code.strip()
+
+    normalized["parameters"] = parameters
+    return normalized
+
+
+def _to_pipeline_step(step: dict[str, Any], step_index: int) -> dict[str, Any]:
+    """Normalize planner output into persisted pipeline step shape."""
+    normalized = _normalize_run_script_step(step)
+    pipeline_step: dict[str, Any] = {
+        "id": f"step-{uuid4().hex[:8]}",
+        "tool_name": normalized.get("tool_name", "unknown"),
+        "parameters": normalized.get("parameters", {}),
+        "description": normalized.get("description", f"Step {step_index + 1}"),
+        "status": StepStatus.PENDING.value,
+        "result": None,
+        "error": None,
+        "started_at": None,
+        "completed_at": None,
+    }
+
+    generated_code = normalized.get("generated_code")
+    if isinstance(generated_code, str) and generated_code.strip():
+        pipeline_step["generated_code"] = generated_code.strip()
+
+    return pipeline_step
+
+
 def _generate_training_script(
     model_type: str,
     data_dir: str,
@@ -283,6 +348,7 @@ def build_rule_based_plan(understanding: dict[str, Any]) -> list[dict[str, Any]]
         script_params: dict[str, Any] = {
             "input_path": working_path,
         }
+        generated_code: str | None = None
         if output_path:
             script_params["output_path"] = output_path
 
@@ -293,8 +359,7 @@ def build_rule_based_plan(understanding: dict[str, Any]) -> list[dict[str, Any]]
         if is_training:
             # Build a training script for the detected model architecture.
             data_dir = working_path
-            script_content = _generate_training_script(model_type, data_dir, parameters)
-            script_params["script"] = script_content
+            generated_code = _generate_training_script(model_type, data_dir, parameters)
             script_params["description"] = (
                 f"Train {model_type} model on the prepared dataset"
             )
@@ -304,7 +369,11 @@ def build_rule_based_plan(understanding: dict[str, Any]) -> list[dict[str, Any]]
             # any explicit script/command parameters.
             custom_desc = parameters.get("custom_step_description", "")
             if parameters.get("script"):
-                script_params["script"] = parameters["script"]
+                script_value = str(parameters["script"])
+                if _looks_like_inline_python_script(script_value):
+                    generated_code = script_value.strip()
+                else:
+                    script_params["script"] = script_value
             if parameters.get("command"):
                 script_params["command"] = parameters["command"]
             if custom_desc:
@@ -313,14 +382,14 @@ def build_rule_based_plan(understanding: dict[str, Any]) -> list[dict[str, Any]]
             else:
                 description = "Execute custom processing script on the data"
 
-        plan.append(
-            {
-                "tool_name": "run_script",
-                "parameters": script_params,
-                "description": description,
-            }
-        )
-
+        script_step: dict[str, Any] = {
+            "tool_name": "run_script",
+            "parameters": script_params,
+            "description": description,
+        }
+        if generated_code:
+            script_step["generated_code"] = generated_code
+        plan.append(script_step)
 
     if "review" in operations:
         review_source = detection_annotations_path or working_path
@@ -527,6 +596,8 @@ def format_plan_for_display(plan: list[dict[str, Any]]) -> str:
                 v_str = ", ".join(str(item) for item in v) if isinstance(v, list) else str(v)
                 param_items.append(f"{k}={v_str}")
             lines.append(f"    Parameters: {', '.join(param_items)}")
+        if step.get("generated_code"):
+            lines.append("    Generated code: attached")
 
         lines.append("")  # Blank line between steps
 
@@ -563,21 +634,7 @@ async def generate_plan(state: PipelineState) -> dict[str, Any]:
     # Fast-path deterministic planning for clear multi-operation workflows.
     rule_based_steps = build_rule_based_plan(understanding)
     if rule_based_steps is not None:
-        plan: list[dict[str, Any]] = []
-        for i, step in enumerate(rule_based_steps):
-            plan.append(
-                {
-                    "id": f"step-{uuid4().hex[:8]}",
-                    "tool_name": step.get("tool_name", "unknown"),
-                    "parameters": step.get("parameters", {}),
-                    "description": step.get("description", f"Step {i + 1}"),
-                    "status": StepStatus.PENDING.value,
-                    "result": None,
-                    "error": None,
-                    "started_at": None,
-                    "completed_at": None,
-                }
-            )
+        plan = [_to_pipeline_step(step, i) for i, step in enumerate(rule_based_steps)]
 
         validation_error = validate_plan(plan)
         if validation_error is None:
@@ -656,21 +713,7 @@ Generate a JSON array of steps to accomplish this."""
                 continue
 
             # Convert to PipelineStep format
-            plan: list[dict[str, Any]] = []
-            for i, step in enumerate(steps_raw):
-                plan.append(
-                    {
-                        "id": f"step-{uuid4().hex[:8]}",
-                        "tool_name": step.get("tool_name", "unknown"),
-                        "parameters": step.get("parameters", {}),
-                        "description": step.get("description", f"Step {i + 1}"),
-                        "status": StepStatus.PENDING.value,
-                        "result": None,
-                        "error": None,
-                        "started_at": None,
-                        "completed_at": None,
-                    }
-                )
+            plan = [_to_pipeline_step(step, i) for i, step in enumerate(steps_raw)]
 
             # Validate the plan
             validation_error = validate_plan(plan)

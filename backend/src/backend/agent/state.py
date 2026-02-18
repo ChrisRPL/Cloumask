@@ -92,6 +92,10 @@ class PipelineStep(BaseModel):
     id: str = Field(description="Unique step identifier")
     tool_name: str = Field(description="Name of the tool to execute")
     parameters: dict[str, Any] = Field(default_factory=dict, description="Tool parameters")
+    generated_code: str | None = Field(
+        default=None,
+        description="Inline generated Python code for custom script steps",
+    )
     description: str = Field(description="Human-readable step description")
     status: StepStatus = Field(default=StepStatus.PENDING, description="Current status")
     result: dict[str, Any] | None = Field(default=None, description="Execution result")

@@ -10,8 +10,13 @@ Integration point: backend/cv/detection_3d.py
 from __future__ import annotations
 
 import logging
+import os
+import time
+from collections import defaultdict
 from pathlib import Path
 from typing import Any
+
+import numpy as np
 
 from backend.agent.tools.base import (
     BaseTool,
@@ -25,6 +30,111 @@ from backend.agent.tools.constants import DETECTION_3D_CLASSES, POINTCLOUD_EXTEN
 from backend.agent.tools.registry import register_tool
 
 logger = logging.getLogger(__name__)
+
+
+def _heuristic_fallback_enabled() -> bool:
+    return os.getenv("CLOUMASK_ENABLE_3D_HEURISTIC_FALLBACK", "0") == "1"
+
+
+def _heuristic_pointcloud_detections(
+    points: np.ndarray,
+    confidence_threshold: float,
+    classes: list[str] | None,
+) -> list[dict[str, Any]]:
+    """Build coarse 3D boxes from voxel clusters as a runtime fallback."""
+    if points.size == 0:
+        return []
+
+    xyz = points[:, :3].astype(np.float32, copy=False)
+    finite_mask = np.isfinite(xyz).all(axis=1)
+    xyz = xyz[finite_mask]
+    if xyz.shape[0] == 0:
+        return []
+
+    # Remove most ground points to keep coarse object-like clusters.
+    ground_z = float(np.percentile(xyz[:, 2], 12))
+    non_ground = xyz[xyz[:, 2] > ground_z + 0.12]
+    if non_ground.shape[0] >= 60:
+        xyz = non_ground
+
+    voxel_size = np.array([1.6, 1.6, 1.2], dtype=np.float32)
+    voxel_keys = np.floor(xyz / voxel_size).astype(np.int32)
+    clusters: dict[tuple[int, int, int], list[np.ndarray]] = defaultdict(list)
+    for key, point in zip(voxel_keys, xyz, strict=False):
+        clusters[tuple(int(v) for v in key)].append(point)
+
+    preferred_class = classes[0] if classes else "Car"
+    detections: list[dict[str, Any]] = []
+
+    for _, cluster_points in sorted(
+        clusters.items(),
+        key=lambda item: len(item[1]),
+        reverse=True,
+    ):
+        cluster_count = len(cluster_points)
+        if cluster_count < 90:
+            continue
+
+        cluster = np.asarray(cluster_points, dtype=np.float32)
+        mins = cluster.min(axis=0)
+        maxs = cluster.max(axis=0)
+        size = maxs - mins
+        if np.any(size < np.array([0.2, 0.2, 0.2], dtype=np.float32)):
+            continue
+
+        confidence = min(0.95, 0.5 + cluster_count / 6000.0)
+        if confidence < confidence_threshold:
+            continue
+
+        center = ((mins + maxs) / 2.0).tolist()
+        dimensions = np.maximum(size, np.array([0.4, 0.4, 0.4], dtype=np.float32)).tolist()
+        detections.append(
+            {
+                "class": preferred_class,
+                "confidence": round(float(confidence), 3),
+                "center": {
+                    "x": round(float(center[0]), 3),
+                    "y": round(float(center[1]), 3),
+                    "z": round(float(center[2]), 3),
+                },
+                "dimensions": {
+                    "length": round(float(dimensions[0]), 3),
+                    "width": round(float(dimensions[1]), 3),
+                    "height": round(float(dimensions[2]), 3),
+                },
+                "rotation": 0.0,
+            }
+        )
+
+        if len(detections) >= 10:
+            break
+
+    # Ensure at least one reviewable annotation for dense clouds.
+    if not detections and xyz.shape[0] >= 200:
+        mins = xyz.min(axis=0)
+        maxs = xyz.max(axis=0)
+        size = np.maximum(maxs - mins, np.array([0.4, 0.4, 0.4], dtype=np.float32))
+        center = (mins + maxs) / 2.0
+        fallback_confidence = max(confidence_threshold, 0.6)
+        detections.append(
+            {
+                "class": preferred_class,
+                "confidence": round(float(fallback_confidence), 3),
+                "center": {
+                    "x": round(float(center[0]), 3),
+                    "y": round(float(center[1]), 3),
+                    "z": round(float(center[2]), 3),
+                },
+                "dimensions": {
+                    "length": round(float(size[0]), 3),
+                    "width": round(float(size[1]), 3),
+                    "height": round(float(size[2]), 3),
+                },
+                "rotation": 0.0,
+            }
+        )
+
+    return detections
 
 
 @register_tool
@@ -128,6 +238,11 @@ Examples:
                 f"Supported: {', '.join(sorted(POINTCLOUD_EXTENSIONS))}"
             )
 
+        # Single-file execution context used by heuristic fallback metadata.
+        source_path = input_p
+        source_was_directory = False
+        source_file_count = 1
+
         if confidence < 0 or confidence > 1:
             return error_result(
                 f"Invalid confidence: {confidence}. Must be between 0 and 1."
@@ -209,6 +324,21 @@ Examples:
                 detector.unload()
 
         except ImportError as e:
+            if _heuristic_fallback_enabled():
+                logger.warning(
+                    "OpenPCDet unavailable (%s). Falling back to heuristic 3D clustering.",
+                    e,
+                )
+                return self._run_heuristic_fallback(
+                    input_p=input_p,
+                    source_path=source_path,
+                    source_was_directory=source_was_directory,
+                    source_file_count=source_file_count,
+                    confidence=confidence,
+                    classes=classes,
+                    coordinate_system=coordinate_system,
+                )
+
             logger.exception("CV dependencies not installed")
             return error_result(
                 f"CV dependencies not installed: {e}. "
@@ -221,8 +351,67 @@ Examples:
                     f"GPU out of memory. PV-RCNN++ needs ~4GB, CenterPoint needs ~3GB. "
                     f"Try: prefer_accuracy=False for lower VRAM usage. Error: {e}"
                 )
+
+            if _heuristic_fallback_enabled():
+                logger.warning(
+                    "3D detector runtime unavailable (%s). Falling back to heuristic clustering.",
+                    e,
+                )
+                return self._run_heuristic_fallback(
+                    input_p=input_p,
+                    source_path=source_path,
+                    source_was_directory=source_was_directory,
+                    source_file_count=source_file_count,
+                    confidence=confidence,
+                    classes=classes,
+                    coordinate_system=coordinate_system,
+                )
+
             logger.exception("3D detection failed")
             return error_result(f"3D detection failed: {e}")
         except Exception as e:
             logger.exception("3D detection failed")
             return error_result(f"3D detection failed: {e}")
+
+    def _run_heuristic_fallback(
+        self,
+        *,
+        input_p: Path,
+        source_path: Path,
+        source_was_directory: bool,
+        source_file_count: int,
+        confidence: float,
+        classes: list[str] | None,
+        coordinate_system: str,
+    ) -> ToolResult:
+        """Fallback 3D detection when OpenPCDet models are unavailable."""
+        from backend.cv.detection_3d import PointCloudLoader
+
+        start = time.perf_counter()
+        points = PointCloudLoader.load(str(input_p))
+        detections_data = _heuristic_pointcloud_detections(
+            points,
+            confidence_threshold=confidence,
+            classes=classes,
+        )
+        elapsed_ms = (time.perf_counter() - start) * 1000
+
+        class_counts: dict[str, int] = {}
+        for det in detections_data:
+            class_name = str(det["class"])
+            class_counts[class_name] = class_counts.get(class_name, 0) + 1
+
+        return success_result(
+            {
+                "pointcloud_path": str(input_p),
+                "source_path": str(source_path),
+                "source_was_directory": source_was_directory,
+                "source_file_count": source_file_count,
+                "count": len(detections_data),
+                "classes_found": class_counts,
+                "detections": detections_data,
+                "model": "heuristic_fallback",
+                "coordinate_system": coordinate_system,
+                "processing_time_ms": round(elapsed_ms, 2),
+            }
+        )

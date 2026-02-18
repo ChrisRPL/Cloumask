@@ -589,6 +589,34 @@ class TestDetect3DTool:
         assert not result.success
         assert "unsupported" in result.error.lower()
 
+    @pytest.mark.asyncio
+    async def test_detect_3d_uses_heuristic_fallback_when_models_missing(
+        self,
+        temp_pointcloud,
+        monkeypatch,
+    ):
+        """Fallback should still produce pointcloud annotations when OpenPCDet is unavailable."""
+
+        class FailingDetector:
+            info = type("Info", (), {"name": "pvrcnn++"})()
+
+            def load(self) -> None:
+                raise RuntimeError("OpenPCDet not installed")
+
+            def unload(self) -> None:
+                return None
+
+        monkeypatch.setenv("CLOUMASK_ENABLE_3D_HEURISTIC_FALLBACK", "1")
+
+        with patch("backend.cv.detection_3d.get_3d_detector", return_value=FailingDetector()):
+            tool = Detect3DTool()
+            result = await tool.run(input_path=str(temp_pointcloud), confidence=0.1)
+
+        assert result.success
+        assert result.data["model"] == "heuristic_fallback"
+        assert result.data["pointcloud_path"] == str(temp_pointcloud)
+        assert "detections" in result.data
+
 
 # =============================================================================
 # Tool Registration Tests
