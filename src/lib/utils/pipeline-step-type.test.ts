@@ -14,6 +14,12 @@ describe('inferStepType', () => {
 		expect(inferStepType('detect_3d')).toBe('detection');
 		expect(inferStepType('anonymize_3d')).toBe('anonymization');
 		expect(inferStepType('convert_format')).toBe('export');
-		expect(inferStepType('scan_directory')).toBe('custom');
+		expect(inferStepType('scan_directory')).toBe('utility');
+		expect(inferStepType('split_dataset')).toBe('utility');
+		expect(inferStepType('review')).toBe('utility');
+		expect(inferStepType('pointcloud_stats')).toBe('utility');
+		expect(inferStepType('process_pointcloud')).toBe('utility');
+		expect(inferStepType('extract_rosbag')).toBe('utility');
+		expect(inferStepType('custom_script')).toBe('custom');
 	});
 });

@@ -27,6 +27,7 @@ describe("plan backend step mapping", () => {
       ["anonymization", "anonymize"],
       ["export", "export"],
       ["classification", "label_qa"],
+      ["utility", "scan_directory"],
       ["custom", "custom_script"],
     ];
 

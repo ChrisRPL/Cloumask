@@ -218,6 +218,13 @@ export const STEP_TYPE_CONFIGS: Record<StepType, StepTypeConfig> = {
       },
     ],
   },
+  utility: {
+    type: "utility",
+    label: "Utility",
+    icon: "Wrench",
+    prefix: "[U]",
+    configSchema: [],
+  },
   custom: {
     type: "custom",
     label: "Custom",
@@ -265,6 +272,7 @@ export const TIME_FACTORS: Record<StepType, TimeFactors> = {
   anonymization: { baseMs: 20, modelMultiplier: 1.0, gpuSpeedup: 5 },
   classification: { baseMs: 30, modelMultiplier: 1.0, gpuSpeedup: 8 },
   export: { baseMs: 10, modelMultiplier: 1.0, gpuSpeedup: 1 },
+  utility: { baseMs: 20, modelMultiplier: 1.0, gpuSpeedup: 1 },
   custom: { baseMs: 100, modelMultiplier: 1.0, gpuSpeedup: 1 },
 };
 

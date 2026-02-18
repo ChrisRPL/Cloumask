@@ -18,6 +18,7 @@
 		EyeOff,
 		Download,
 		Tag,
+		Wrench,
 		Wand2,
 	} from '@lucide/svelte';
 	import { STEP_TYPE_CONFIGS } from './constants';
@@ -34,6 +35,7 @@
 		EyeOff,
 		Download,
 		Tag,
+		Wrench,
 		Wand2,
 	} as const;
 

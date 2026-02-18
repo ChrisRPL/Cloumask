@@ -28,8 +28,12 @@
 	const typeConfig = $derived(STEP_TYPE_CONFIGS[step.type]);
 	const schema = $derived(typeConfig?.configSchema ?? []);
 
-	// Check if this is a custom step (needs special UI)
-	const isCustomStep = $derived(step.type === 'custom');
+	// Only script-backed custom steps use the script builder UI.
+	const isCustomStep = $derived.by(() => {
+		if (step.type !== 'custom') return false;
+		const toolName = step.toolName.trim().toLowerCase();
+		return toolName === 'custom_script' || toolName === 'run_script';
+	});
 
 	// Local config state for editing
 	let localConfig = $state<Record<string, unknown>>({});

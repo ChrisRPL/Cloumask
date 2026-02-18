@@ -29,6 +29,7 @@ const STEP_TYPE_TOOL_NAME: Record<StepType, string> = {
   anonymization: "anonymize",
   export: "export",
   classification: "label_qa",
+  utility: "scan_directory",
   custom: "custom_script",
 };
 
@@ -38,6 +39,7 @@ const STEP_TYPE_DESCRIPTION: Record<StepType, string> = {
   anonymization: "Anonymize sensitive regions in images",
   export: "Export annotations to target format",
   classification: "Run label QA checks",
+  utility: "Run utility/data-management step",
   custom: "Run custom processing script",
 };
 
@@ -152,6 +154,12 @@ function buildRequiredParams(
       return {
         path: detectOutputPath,
         generate_report: true,
+      };
+
+    case "utility":
+      return {
+        path: basePath,
+        recursive: true,
       };
 
     case "custom":

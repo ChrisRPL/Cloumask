@@ -15,6 +15,7 @@ export type StepType =
   | "anonymization"
   | "export"
   | "classification"
+  | "utility"
   | "custom";
 
 export type StepStatus =
