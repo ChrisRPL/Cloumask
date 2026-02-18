@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -17,8 +17,13 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from backend.agent.llm import SimpleLLMConfig, get_llm
 from backend.agent.prompts import load_prompt
 from backend.agent.state import MessageRole, PipelineState, StepStatus
+from backend.agent.tools.discovery import initialize_tools
+from backend.agent.tools.registry import get_tool_registry
 from backend.agent.utils import extract_json_array
 from backend.api.config import settings
+
+if TYPE_CHECKING:
+    from backend.agent.tools.base import BaseTool
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +54,86 @@ VALID_TOOLS = frozenset(
         "extract_rosbag",
     ]
 )
+
+
+def _get_registered_tools() -> dict[str, BaseTool]:
+    """Return registered tools, initializing discovery if needed."""
+    registry = get_tool_registry()
+    if len(registry) == 0:
+        initialize_tools()
+    return {tool.name: tool for tool in registry.get_all()}
+
+
+def _validate_core_step_parameters(
+    step_num: int,
+    tool_name: str,
+    parameters: dict[str, Any],
+) -> str | None:
+    """
+    Validate required parameters for core planner tools.
+
+    This preserves backwards-compatible behavior for runtime environments where
+    registry discovery may not expose every core tool.
+    """
+    if tool_name == "scan_directory":
+        if "path" not in parameters:
+            return f"Step {step_num} (scan_directory) missing required 'path' parameter"
+
+    elif tool_name == "anonymize":
+        if "input_path" not in parameters:
+            return f"Step {step_num} (anonymize) missing required 'input_path' parameter"
+        if "output_path" not in parameters:
+            return f"Step {step_num} (anonymize) missing required 'output_path' parameter"
+
+    elif tool_name == "detect":
+        if "input_path" not in parameters:
+            return f"Step {step_num} (detect) missing required 'input_path' parameter"
+
+    elif tool_name == "segment":
+        if "input_path" not in parameters:
+            return f"Step {step_num} (segment) missing required 'input_path' parameter"
+        if "prompt" not in parameters:
+            return f"Step {step_num} (segment) missing required 'prompt' parameter"
+
+    elif tool_name == "export":
+        if "source_path" not in parameters:
+            return f"Step {step_num} (export) missing required 'source_path' parameter"
+        if "output_path" not in parameters:
+            return f"Step {step_num} (export) missing required 'output_path' parameter"
+        if "output_format" not in parameters:
+            return f"Step {step_num} (export) missing required 'output_format' parameter"
+
+    elif tool_name == "convert_format":
+        if "source_path" not in parameters:
+            return f"Step {step_num} (convert_format) missing required 'source_path' parameter"
+        if "output_path" not in parameters:
+            return f"Step {step_num} (convert_format) missing required 'output_path' parameter"
+        if "target_format" not in parameters:
+            return f"Step {step_num} (convert_format) missing required 'target_format' parameter"
+
+    elif tool_name == "find_duplicates" and "path" not in parameters:
+        return f"Step {step_num} (find_duplicates) missing required 'path' parameter"
+
+    elif tool_name == "label_qa" and "path" not in parameters:
+        return f"Step {step_num} (label_qa) missing required 'path' parameter"
+
+    elif tool_name == "split_dataset":
+        if "path" not in parameters:
+            return f"Step {step_num} (split_dataset) missing required 'path' parameter"
+        if "output_path" not in parameters:
+            return f"Step {step_num} (split_dataset) missing required 'output_path' parameter"
+
+    elif tool_name in {"run_script", "custom_script"}:
+        if "input_path" not in parameters:
+            return f"Step {step_num} ({tool_name}) missing required 'input_path' parameter"
+
+    elif tool_name == "review":
+        if "source_path" not in parameters:
+            return f"Step {step_num} (review) missing required 'source_path' parameter"
+        if "image_dir" not in parameters:
+            return f"Step {step_num} (review) missing required 'image_dir' parameter"
+
+    return None
 
 
 def _normalize_classes(value: Any) -> list[str]:
@@ -475,6 +560,9 @@ def validate_plan(plan: list[dict[str, Any]]) -> str | None:
     if not plan:
         return "Plan is empty"
 
+    registered_tools = _get_registered_tools()
+    valid_tools = set(VALID_TOOLS) | set(registered_tools)
+
     for i, step in enumerate(plan):
         step_num = i + 1
 
@@ -483,74 +571,38 @@ def validate_plan(plan: list[dict[str, Any]]) -> str | None:
         if not tool_name:
             return f"Step {step_num} has no tool_name"
 
-        if tool_name not in VALID_TOOLS:
+        if tool_name not in valid_tools:
             return f"Step {step_num} uses unknown tool: {tool_name}"
 
-        # Check parameters exist
+        # Check parameters shape
         parameters = step.get("parameters")
-        if not parameters:
-            return f"Step {step_num} ({tool_name}) has no parameters"
+        if parameters is None:
+            parameters = {}
+        if not isinstance(parameters, dict):
+            return f"Step {step_num} ({tool_name}) parameters must be an object"
 
-        # Tool-specific validation
-        if tool_name == "scan_directory":
-            if "path" not in parameters:
-                return f"Step {step_num} (scan_directory) missing required 'path' parameter"
+        # Validate core planner expectations first for backwards compatibility.
+        validation_error = _validate_core_step_parameters(step_num, tool_name, parameters)
+        if validation_error:
+            return validation_error
 
-        elif tool_name == "anonymize":
-            if "input_path" not in parameters:
-                return f"Step {step_num} (anonymize) missing required 'input_path' parameter"
-            if "output_path" not in parameters:
-                return f"Step {step_num} (anonymize) missing required 'output_path' parameter"
+        # Keep compatibility for run_script/custom_script planning conventions.
+        if tool_name in {"run_script", "custom_script"}:
+            continue
 
-        elif tool_name == "detect":
-            if "input_path" not in parameters:
-                return f"Step {step_num} (detect) missing required 'input_path' parameter"
+        # Validate required parameters from registered tool metadata when available.
+        tool = registered_tools.get(tool_name)
+        if tool is not None:
+            for param in getattr(tool, "parameters", []):
+                if param.required and param.default is None and param.name not in parameters:
+                    return (
+                        f"Step {step_num} ({tool_name}) missing required "
+                        f"'{param.name}' parameter"
+                    )
+            continue
 
-        elif tool_name == "segment":
-            if "input_path" not in parameters:
-                return f"Step {step_num} (segment) missing required 'input_path' parameter"
-            if "prompt" not in parameters:
-                return f"Step {step_num} (segment) missing required 'prompt' parameter"
-
-        elif tool_name == "export":
-            if "source_path" not in parameters:
-                return f"Step {step_num} (export) missing required 'source_path' parameter"
-            if "output_path" not in parameters:
-                return f"Step {step_num} (export) missing required 'output_path' parameter"
-            if "output_format" not in parameters:
-                return f"Step {step_num} (export) missing required 'output_format' parameter"
-
-        elif tool_name == "convert_format":
-            if "source_path" not in parameters:
-                return f"Step {step_num} (convert_format) missing required 'source_path' parameter"
-            if "output_path" not in parameters:
-                return f"Step {step_num} (convert_format) missing required 'output_path' parameter"
-            if "target_format" not in parameters:
-                return (
-                    f"Step {step_num} (convert_format) missing required 'target_format' parameter"
-                )
-
-        elif tool_name == "find_duplicates" and "path" not in parameters:
-            return f"Step {step_num} (find_duplicates) missing required 'path' parameter"
-
-        elif tool_name == "label_qa" and "path" not in parameters:
-            return f"Step {step_num} (label_qa) missing required 'path' parameter"
-
-        elif tool_name == "split_dataset":
-            if "path" not in parameters:
-                return f"Step {step_num} (split_dataset) missing required 'path' parameter"
-            if "output_path" not in parameters:
-                return f"Step {step_num} (split_dataset) missing required 'output_path' parameter"
-
-        elif tool_name == "run_script":
-            if "input_path" not in parameters:
-                return f"Step {step_num} (run_script) missing required 'input_path' parameter"
-
-        elif tool_name == "review":
-            if "source_path" not in parameters:
-                return f"Step {step_num} (review) missing required 'source_path' parameter"
-            if "image_dir" not in parameters:
-                return f"Step {step_num} (review) missing required 'image_dir' parameter"
+        # Unknown runtime tool but known to planner constants: keep permissive.
+        continue
 
     return None
 

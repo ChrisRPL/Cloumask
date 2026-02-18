@@ -24,6 +24,8 @@ from backend.agent.nodes.plan import (
 )
 from backend.agent.nodes.understand import understand
 from backend.agent.state import MessageRole, PipelineState, StepStatus
+from backend.agent.tools.base import BaseTool, ToolCategory, ToolParameter, success_result
+from backend.agent.tools.registry import get_tool_registry
 
 
 def _state_with_message(content: str) -> PipelineState:
@@ -80,7 +82,7 @@ class TestValidatePlan:
         plan = [{"tool_name": "scan_directory"}]
         result = validate_plan(plan)
         assert result is not None
-        assert "no parameters" in result.lower()
+        assert "missing required 'path'" in result.lower()
 
     def test_valid_plan_passes(self) -> None:
         """Valid plan should pass validation."""
@@ -195,6 +197,41 @@ class TestValidatePlan:
         result = validate_plan(plan)
         assert result is not None
         assert "output_path" in result.lower()
+
+    def test_run_script_generated_code_without_script_path_passes(self) -> None:
+        """run_script should accept generated_code-only planner output."""
+        plan = [
+            {
+                "tool_name": "run_script",
+                "parameters": {"input_path": "/data"},
+                "generated_code": "print('hello')",
+            }
+        ]
+        result = validate_plan(plan)
+        assert result is None
+
+    def test_registry_registered_tool_is_accepted(self) -> None:
+        """Validation should accept dynamically registered custom tools."""
+
+        class _AdhocTool(BaseTool):
+            name = "adhoc_plan_test_tool"
+            description = "Adhoc planner validation test tool"
+            category = ToolCategory.UTILITY
+            parameters = [ToolParameter("input_path", str, "Input path", required=True)]
+
+            async def execute(self, **kwargs: object):  # type: ignore[override]
+                return success_result({"ok": True})
+
+        registry = get_tool_registry()
+        tool = _AdhocTool()
+        registry.register(tool)
+        try:
+            result = validate_plan(
+                [{"tool_name": tool.name, "parameters": {"input_path": "/data"}}]
+            )
+            assert result is None
+        finally:
+            registry.unregister(tool.name)
 
     def test_all_tools_can_pass(self) -> None:
         """All valid tools should be able to pass validation."""
