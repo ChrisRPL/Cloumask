@@ -60,9 +60,24 @@ describe("plan backend step mapping", () => {
     });
 
     expect(draft.toolName).toBe("detect");
+    expect(draft.config.model).toBe("sam3");
     expect(draft.config.params.input_path).toBe("/data/images");
     expect(draft.config.params.output_path).toBe("/data/images_detections_yolo");
     expect(draft.config.params.save_annotations).toBe(true);
+  });
+
+  it("uses SAM3 defaults for segmentation and anonymization drafts", () => {
+    const segmentationDraft = createStepDraft("segmentation", {
+      existingSteps: [],
+      currentProjectPath: "/data/images",
+    });
+    const anonymizationDraft = createStepDraft("anonymization", {
+      existingSteps: [],
+      currentProjectPath: "/data/images",
+    });
+
+    expect(segmentationDraft.config.model).toBe("sam3");
+    expect(anonymizationDraft.config.model).toBe("sam3");
   });
 
   it("creates export draft using prior detection output when available", () => {
