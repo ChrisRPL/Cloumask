@@ -365,6 +365,7 @@
 	<!-- Review Queue View -->
 	<ReviewQueue
 		executionId={pipeline.pipelineId ?? 'current'}
+		projectId={ui.currentProject?.id ?? null}
 		onDone={() => ui.setView('execute')}
 		class="h-full"
 	/>

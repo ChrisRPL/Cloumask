@@ -8,6 +8,11 @@
 	import { setPipelineState } from '$lib/stores/pipeline.svelte';
 	import { setExecutionState } from '$lib/stores/execution.svelte';
 	import { setReviewState } from '$lib/stores/review.svelte';
+	import {
+		restoreProjectSession,
+		saveProjectSession,
+		toProjectSessionKey
+	} from '$lib/stores/project-session';
 	import { setSetupState } from '$lib/stores/setup.svelte';
 	import { setSSEState } from '$lib/stores/sse.svelte';
 	import { setKeyboardState, type KeyboardScope } from '$lib/stores/keyboard.svelte';
@@ -30,6 +35,50 @@
 	const pipeline = setPipelineState();
 	const execution = setExecutionState();
 	const review = setReviewState();
+	const persistedStores = { agent, pipeline, execution, review };
+
+	let activeProjectSessionKey = $state(toProjectSessionKey(ui.currentProject?.id));
+	let hasHydratedProjectSession = $state(false);
+	let isApplyingProjectSession = $state(false);
+
+	function applyProjectSessionFor(projectId: string | null | undefined) {
+		isApplyingProjectSession = true;
+		try {
+			restoreProjectSession(projectId, persistedStores);
+		} finally {
+			isApplyingProjectSession = false;
+		}
+	}
+
+	// Initial restore after stores are initialized.
+	$effect(() => {
+		if (typeof window === 'undefined') return;
+		if (hasHydratedProjectSession) return;
+
+		activeProjectSessionKey = toProjectSessionKey(ui.currentProject?.id);
+		applyProjectSessionFor(ui.currentProject?.id);
+		hasHydratedProjectSession = true;
+	});
+
+	// Save old project state and load new project snapshot when project changes.
+	$effect(() => {
+		if (typeof window === 'undefined') return;
+		if (!hasHydratedProjectSession) return;
+
+		const nextProjectSessionKey = toProjectSessionKey(ui.currentProject?.id);
+		if (nextProjectSessionKey === activeProjectSessionKey) return;
+
+		saveProjectSession(activeProjectSessionKey, persistedStores);
+		activeProjectSessionKey = nextProjectSessionKey;
+		applyProjectSessionFor(ui.currentProject?.id);
+	});
+
+	// Keep active project snapshot fresh while user works.
+	$effect(() => {
+		if (typeof window === 'undefined') return;
+		if (!hasHydratedProjectSession || isApplyingProjectSession) return;
+		saveProjectSession(activeProjectSessionKey, persistedStores);
+	});
 
 	// Apply theme class to html element based on settings
 	$effect(() => {
