@@ -19,7 +19,7 @@ the user wants (e.g. "hello" or "do something"). If the request is even slightly
 interpretable, fill in defaults:
 
 - No path → set `clarification_needed` (we MUST have a path)
-- No classes → default to common ones: `["person", "car"]`
+- No classes → leave `parameters.classes` unset (do NOT invent classes)
 - No format → default to `"yolo"`
 - No confidence → default to `0.5`
 - No output path → set to `null` (we will auto-generate one)
@@ -68,6 +68,12 @@ Respond ONLY with valid JSON. No markdown, no explanation, just JSON:
 - **label_qa**: Run quality-assurance checks on annotations and generate a report
 - **review**: Send results to the manual review queue for human verification
 - **script**: Run a custom processing script on the data
+
+## Specificity Rules
+
+- Preserve user-specified segmentation targets exactly (example: `"roads"`, not generic `"objects"`).
+- Preserve user-specified custom/final step text exactly in `parameters.custom_step_description`.
+- Do not add detections/classes the user did not request.
 
 ## Composite Workflow Detection
 
@@ -141,7 +147,7 @@ Response:
     "input_path": "/my/images",
     "input_type": "images",
     "operations": ["detect"],
-    "parameters": {"classes": ["person", "car"], "confidence": 0.5},
+    "parameters": {"confidence": 0.5},
     "output_path": null,
     "clarification_needed": null
 }
