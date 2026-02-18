@@ -72,6 +72,7 @@
 	>
 		<MessageContent
 			messageId={message.id}
+			messageTimestamp={message.timestamp}
 			content={message.content}
 			role={message.role}
 			isStreaming={isLatest && message.isStreaming}
