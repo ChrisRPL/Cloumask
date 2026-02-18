@@ -150,6 +150,10 @@
 		// Browser mode: route local files through backend image endpoint.
 		return toLocalImageUrl(currentItem.filePath || currentItem.thumbnailUrl);
 	});
+	const fallbackImageUrl = $derived.by(() => {
+		if (!currentItem) return '';
+		return toLocalImageUrl(currentItem.thumbnailUrl);
+	});
 
 	// Keep selection valid when filters hide the current item.
 	$effect(() => {
@@ -857,6 +861,7 @@
 					{#if currentItem}
 						<AnnotationCanvas
 							{imageUrl}
+							{fallbackImageUrl}
 							annotations={currentItem.annotations}
 							{selectedAnnotationId}
 							{isEditMode}
