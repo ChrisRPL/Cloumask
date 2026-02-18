@@ -152,6 +152,8 @@ def test_import_annotations_reads_nested_yolo_labels_and_yaml_names(
 
     review_item = ReviewItem(
         id="item-1",
+        execution_id=execution_id,
+        project_id="project-import",
         file_path=str(image_path.resolve()),
         file_name=image_path.name,
         dimensions=ImageDimensions(width=1, height=1),
@@ -214,6 +216,8 @@ def test_hitl_annotation_edit_approve_reject_flow(client: TestClient, tmp_path: 
 
     review_item = ReviewItem(
         id="item-flow",
+        execution_id="exec-flow",
+        project_id="project-flow",
         file_path=str(image_path.resolve()),
         file_name=image_path.name,
         dimensions=ImageDimensions(width=1, height=1),

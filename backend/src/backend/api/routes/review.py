@@ -41,6 +41,18 @@ _VALID_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".w
 _review_items: dict[str, ReviewItem] = {}
 
 
+def _items_for_execution(execution_id: str) -> list[ReviewItem]:
+    """Return in-memory review items for a specific execution."""
+    return [item for item in _review_items.values() if item.execution_id == execution_id]
+
+
+def _ensure_execution_loaded(execution_id: str) -> None:
+    """Load execution items from disk if they are not currently in memory."""
+    if _items_for_execution(execution_id):
+        return
+    _load_from_disk(execution_id)
+
+
 def _get_item_or_404(item_id: str) -> ReviewItem:
     """Get review item by ID or raise 404."""
     if item_id not in _review_items:
@@ -54,7 +66,11 @@ def _save_to_disk(execution_id: str):
     data_dir = Path("data/review")
     data_dir.mkdir(parents=True, exist_ok=True)
 
-    items_data = [item.model_dump(mode="json") for item in _review_items.values()]
+    items_data = [
+        item.model_dump(mode="json")
+        for item in _review_items.values()
+        if item.execution_id == execution_id
+    ]
     with (data_dir / f"{execution_id}.json").open("w") as f:
         json.dump(items_data, f, indent=2)
 
@@ -64,12 +80,21 @@ def _load_from_disk(execution_id: str):
     data_dir = Path("data/review")
     filepath = data_dir / f"{execution_id}.json"
 
+    # Keep in-memory cache fresh for this execution.
+    stale_ids = [
+        item_id for item_id, item in _review_items.items() if item.execution_id == execution_id
+    ]
+    for item_id in stale_ids:
+        _review_items.pop(item_id, None)
+
     if filepath.exists():
         with filepath.open() as f:
             items_data = json.load(f)
             for item_data in items_data:
                 try:
                     item = ReviewItem.model_validate(item_data)
+                    if not item.execution_id:
+                        item.execution_id = execution_id
                     _review_items[item.id] = item
                 except ValidationError:
                     # Skip invalid items
@@ -79,6 +104,9 @@ def _load_from_disk(execution_id: str):
 @router.get("/items", response_model=ReviewItemsResponse)
 async def get_review_items(  # noqa: B008
     execution_id: str = Query(..., description="Execution ID to load items from"),
+    project_id: str | None = Query(
+        None, description="Optional project ID for review queue isolation"
+    ),
     status: ReviewStatus | None = Query(None, description="Filter by review status"),
     skip: int = Query(0, ge=0, description="Number of items to skip"),
     limit: int = Query(50, ge=1, le=200, description="Maximum items to return"),
@@ -95,12 +123,13 @@ async def get_review_items(  # noqa: B008
     Returns:
         ReviewItemsResponse with paginated items and total count
     """
-    # Load from disk if not in memory
-    if not _review_items:
-        _load_from_disk(execution_id)
+    _ensure_execution_loaded(execution_id)
 
     # Filter by status if specified
-    items = list(_review_items.values())
+    items = _items_for_execution(execution_id)
+    normalized_project_id = project_id.strip() if project_id else None
+    if normalized_project_id:
+        items = [item for item in items if item.project_id == normalized_project_id]
     if status:
         items = [item for item in items if item.status == status]
 
@@ -368,7 +397,11 @@ async def batch_reject(request: BatchRequest):
 
 # Utility endpoint for testing - populate review queue with sample data
 @router.post("/seed")
-async def seed_review_items(execution_id: str, image_dir: str):
+async def seed_review_items(
+    execution_id: str,
+    image_dir: str,
+    project_id: str | None = None,
+):
     """
     Seed the review queue with items from a directory (for testing).
 
@@ -402,6 +435,8 @@ async def seed_review_items(execution_id: str, image_dir: str):
 
             item = ReviewItem(
                 id=str(uuid.uuid4()),
+                execution_id=execution_id,
+                project_id=project_id,
                 file_path=str(img_file.absolute()),
                 file_name=img_file.name,
                 dimensions=ImageDimensions(width=width, height=height),
@@ -465,16 +500,15 @@ async def import_annotations(
     class_names = load_yolo_class_names(annot_path)
     exact_index, normalized_index = build_annotation_index(labels_dir)
 
-    # Load existing items
-    if not _review_items:
-        _load_from_disk(execution_id)
+    _ensure_execution_loaded(execution_id)
+    execution_items = _items_for_execution(execution_id)
 
     updated_count = 0
 
     # Create fast lookups from existing review items.
     path_to_item: dict[Path, ReviewItem] = {}
     name_to_items: dict[str, list[ReviewItem]] = {}
-    for item in _review_items.values():
+    for item in execution_items:
         resolved_path = Path(item.file_path).resolve()
         path_to_item[resolved_path] = item
         name_to_items.setdefault(item.file_name, []).append(item)
@@ -537,5 +571,5 @@ async def import_annotations(
     return {
         "updated_count": updated_count,
         "execution_id": execution_id,
-        "total_items": len(_review_items),
+        "total_items": len(execution_items),
     }
