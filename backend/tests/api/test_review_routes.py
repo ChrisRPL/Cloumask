@@ -73,6 +73,71 @@ def test_get_local_image_rejects_non_image_extension(
     assert "unsupported image extension" in response.json()["detail"].lower()
 
 
+def test_get_review_items_filters_by_execution_and_project(
+    client: TestClient,
+    tmp_path: Path,
+) -> None:
+    """Should isolate review items by execution_id + project_id query params."""
+    image_path = tmp_path / "sample.png"
+    image_path.write_bytes(_PNG_BYTES)
+
+    review_routes._review_items["item-a"] = ReviewItem(
+        id="item-a",
+        execution_id="exec-1",
+        project_id="project-1",
+        file_path=str(image_path.resolve()),
+        file_name=image_path.name,
+        dimensions=ImageDimensions(width=1, height=1),
+        thumbnail_url="data:image/png;base64,",
+        annotations=[],
+        original_annotations=[],
+        status=ReviewStatus.PENDING,
+        reviewed_at=None,
+        flagged=False,
+        flag_reason=None,
+    )
+    review_routes._review_items["item-b"] = ReviewItem(
+        id="item-b",
+        execution_id="exec-1",
+        project_id="project-2",
+        file_path=str(image_path.resolve()),
+        file_name="sample-b.png",
+        dimensions=ImageDimensions(width=1, height=1),
+        thumbnail_url="data:image/png;base64,",
+        annotations=[],
+        original_annotations=[],
+        status=ReviewStatus.PENDING,
+        reviewed_at=None,
+        flagged=False,
+        flag_reason=None,
+    )
+    review_routes._review_items["item-c"] = ReviewItem(
+        id="item-c",
+        execution_id="exec-2",
+        project_id="project-1",
+        file_path=str(image_path.resolve()),
+        file_name="sample-c.png",
+        dimensions=ImageDimensions(width=1, height=1),
+        thumbnail_url="data:image/png;base64,",
+        annotations=[],
+        original_annotations=[],
+        status=ReviewStatus.PENDING,
+        reviewed_at=None,
+        flagged=False,
+        flag_reason=None,
+    )
+
+    response = client.get(
+        "/api/review/items",
+        params={"execution_id": "exec-1", "project_id": "project-1"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total"] == 1
+    assert [item["id"] for item in payload["items"]] == ["item-a"]
+
+
 def test_import_annotations_reads_nested_yolo_labels_and_yaml_names(
     client: TestClient,
     tmp_path: Path,
@@ -87,6 +152,8 @@ def test_import_annotations_reads_nested_yolo_labels_and_yaml_names(
 
     review_item = ReviewItem(
         id="item-1",
+        execution_id=execution_id,
+        project_id="project-import",
         file_path=str(image_path.resolve()),
         file_name=image_path.name,
         dimensions=ImageDimensions(width=1, height=1),
@@ -149,6 +216,8 @@ def test_hitl_annotation_edit_approve_reject_flow(client: TestClient, tmp_path: 
 
     review_item = ReviewItem(
         id="item-flow",
+        execution_id="exec-flow",
+        project_id="project-flow",
         file_path=str(image_path.resolve()),
         file_name=image_path.name,
         dimensions=ImageDimensions(width=1, height=1),

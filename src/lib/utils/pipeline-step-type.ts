@@ -11,6 +11,18 @@ export function inferStepType(toolName: string): StepType {
 	if (normalized === 'anonymize' || normalized === 'anonymize_3d') return 'anonymization';
 	if (normalized === 'export' || normalized === 'convert_format') return 'export';
 	if (normalized === 'label_qa') return 'classification';
+	if (
+		normalized === 'scan_directory' ||
+		normalized === 'find_duplicates' ||
+		normalized === 'split_dataset' ||
+		normalized === 'review' ||
+		normalized === 'pointcloud_stats' ||
+		normalized === 'process_pointcloud' ||
+		normalized === 'project_3d_to_2d' ||
+		normalized === 'extract_rosbag'
+	) {
+		return 'utility';
+	}
 
 	return 'custom';
 }

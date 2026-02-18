@@ -98,3 +98,4 @@ backend/
 - `pip install -e .` is required for imports to work correctly
 - pyproject.toml uses version ranges, requirements.txt uses pinned versions
 - Use `ruff` for linting and `mypy` for type checking
+- Review queue items are isolated by `execution_id` and optional `project_id` in `/api/review/items`

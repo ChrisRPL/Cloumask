@@ -18,20 +18,22 @@ Blur faces and license plates in images/videos
   - `input_path` (str, required): Path to input files
   - `output_path` (str, required): Path for output files
   - `target` (str, optional): "faces" | "plates" | "all" (default: "all")
+  - `model` (str, optional): "sam3" | "standard" (default: "sam3")
 
 ### detect
-Object detection using YOLO11
+Object detection (SAM3 by default, with YOLO11/YOLO-World/RT-DETR options)
 - **Parameters:**
   - `input_path` (str, required): Path to input files
   - `classes` (list[str], optional): Object classes to detect (only when explicitly requested)
   - `confidence` (float, optional): Confidence threshold (default: 0.5)
+  - `model` (str, optional): "sam3" | "yolo11m" | "yolo-world" | "rt-detr" | "auto" (default: "sam3")
 
 ### segment
 Instance segmentation using SAM3
 - **Parameters:**
   - `input_path` (str, required): Path to input files
   - `prompt` (str, required): Text description of objects to segment
-  - `model` (str, optional): "sam3" | "sam2" (default: "sam3")
+  - `model` (str, optional): "sam3" | "sam2" | "mobilesam" (default: "sam3")
 
 ### export
 Export a dataset with optional filtering, confidence thresholding, and splitting

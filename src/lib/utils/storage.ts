@@ -25,9 +25,9 @@ export interface StorageAdapter<T> {
  *
  * @example
  * ```typescript
- * const themeStorage = createStorageAdapter('cloumask:theme', 'dark');
- * const theme = themeStorage.get(); // 'dark' if not set
- * themeStorage.set('light');
+ * const themeStorage = createStorageAdapter('cloumask:theme', 'light');
+ * const theme = themeStorage.get(); // 'light' if not set
+ * themeStorage.set('dark');
  * ```
  */
 export function createStorageAdapter<T>(

@@ -124,7 +124,7 @@ src/lib/components/ui/
 
 - [x] **Tailwind Configuration**
   - [x] Tailwind v4 configured via `@tailwindcss/vite` plugin
-  - [x] Configure dark mode as default (`darkMode: 'class'`)
+  - [x] Configure class-based dark mode toggle support (`darkMode: 'class'`)
   - [x] Add custom color palette (forest green + cream)
   - [x] Typography configured (JetBrains Mono primary)
   - [x] Set up content paths for Svelte files

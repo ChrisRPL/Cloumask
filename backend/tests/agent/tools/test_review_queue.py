@@ -56,6 +56,7 @@ async def test_review_queue_reads_dataset_root_and_prefixed_yolo_labels(
         source_path=str(source_path),
         image_dir=str(image_dir),
         execution_id="exec_test",
+        project_id="project_test",
     )
 
     assert result.success
@@ -64,6 +65,8 @@ async def test_review_queue_reads_dataset_root_and_prefixed_yolo_labels(
 
     assert len(review_routes._review_items) == 1
     review_item = next(iter(review_routes._review_items.values()))
+    assert review_item.execution_id == "exec_test"
+    assert review_item.project_id == "project_test"
     assert review_item.file_name == image_path.name
     assert len(review_item.annotations) == 1
 

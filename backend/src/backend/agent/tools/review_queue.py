@@ -70,6 +70,13 @@ Reads YOLO-format annotations and creates review items with bounding boxes."""
             required=False,
             default=None,
         ),
+        ToolParameter(
+            name="project_id",
+            type=str,
+            description="Optional project ID to isolate review items",
+            required=False,
+            default=None,
+        ),
     ]
 
     async def execute(
@@ -77,6 +84,7 @@ Reads YOLO-format annotations and creates review items with bounding boxes."""
         source_path: str,
         image_dir: str,
         execution_id: str | None = None,
+        project_id: str | None = None,
     ) -> ToolResult:
         """
         Populate review queue from detection results.
@@ -85,6 +93,7 @@ Reads YOLO-format annotations and creates review items with bounding boxes."""
             source_path: Path to YOLO annotations directory
             image_dir: Path to source images
             execution_id: Optional execution ID for grouping
+            project_id: Optional project ID for grouping
 
         Returns:
             ToolResult with count of items created
@@ -159,6 +168,8 @@ Reads YOLO-format annotations and creates review items with bounding boxes."""
                 # Create review item
                 item = ReviewItem(
                     id=str(uuid.uuid4()),
+                    execution_id=execution_id,
+                    project_id=project_id,
                     file_path=str(img_file.absolute()),
                     file_name=img_file.name,
                     dimensions=ImageDimensions(width=width, height=height),
@@ -193,6 +204,7 @@ Reads YOLO-format annotations and creates review items with bounding boxes."""
             {
                 "created_count": created_count,
                 "execution_id": execution_id,
+                "project_id": project_id,
                 "source_path": str(source_p),
                 "image_dir": str(image_p),
             },

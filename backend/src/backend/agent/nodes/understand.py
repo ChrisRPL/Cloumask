@@ -444,13 +444,19 @@ def _build_fast_understanding(content: str) -> dict[str, Any] | None:
     if len(operations) == 1 and operations[0] == "scan":
         return None
 
+    input_type = _infer_input_type(content, input_path)
+    if input_type == "pointcloud":
+        # Point-cloud requests are more varied (detect_3d/process/projection/rosbag).
+        # Use LLM understanding to avoid forcing image-centric operation mappings.
+        return None
+
     parameters = _extract_parameters(content)
     output_path = _extract_output_path(content)
 
     return {
         "intent": operations[0],
         "input_path": input_path,
-        "input_type": _infer_input_type(content, input_path),
+        "input_type": input_type,
         "operations": operations,
         "parameters": parameters,
         "output_path": output_path,
