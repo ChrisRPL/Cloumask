@@ -13,7 +13,7 @@ Integrate Tailwind CSS with the Cloumask design system colors for consistent sty
 - [ ] Tailwind CSS installed and configured
 - [ ] PostCSS processing works with Vite
 - [ ] Design system colors available as Tailwind utilities
-- [ ] Dark theme is the default
+- [ ] Light theme is the default
 - [ ] Global styles applied correctly
 
 ## Implementation Steps
@@ -215,7 +215,7 @@ npm run dev
 
 ## Notes
 
-- The design system uses a dark theme by default (data tools are used in long sessions)
+- The design system uses a light theme by default with optional dark mode
 - CSS variables are defined for JavaScript access if needed
 - Custom component classes (`card`, `btn-primary`, `input-base`) provide reusable patterns
 - The `darkMode: 'class'` setting allows future light mode toggle support
