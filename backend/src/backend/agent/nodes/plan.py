@@ -379,7 +379,7 @@ def build_rule_based_plan(understanding: dict[str, Any]) -> list[dict[str, Any]]
             if parameters.get("command"):
                 script_params["command"] = parameters["command"]
             if custom_desc:
-                description = custom_desc.capitalize()
+                description = custom_desc
                 script_params["description"] = custom_desc
             else:
                 description = "Execute custom processing script on the data"

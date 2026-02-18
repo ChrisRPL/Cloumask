@@ -96,11 +96,14 @@ QUOTED_PATH_PATTERN = re.compile(r"['\"]((?:/|~|[A-Za-z]:\\)[^'\"]+)['\"]")
 CUSTOM_STEP_PATTERNS = [
     re.compile(
         r"(?:add|include|insert|with|plus)\s+(?:a\s+)?(?:(?:final|last|custom)\s+)?"
-        r"(?:step|stage)\s+(?:for|to)?\s*(.+?)(?=\s*(?:[.,;]|$))"
+        r"(?:step|stage)\s+(?:for|to)?\s*(?P<description>.+?)"
+        r"(?=\s+(?:(?:and|then)\s+(?:export|save|output|write|store|detect|segment|anonymize|anonymise|review|convert|split|label|train|run|execute|scan)\b|(?:in|on|at|into)\s+(?:/|~|[A-Za-z]:\\))|\s*(?:[.,;]|$))",
+        re.IGNORECASE,
     ),
     re.compile(
-        r"(?:as\s+)?(?:a\s+)?(?:final|last)\s+(?:step|stage)\s+(?:for|to)?\s*(.+?)"
-        r"(?=\s*(?:[.,;]|$))"
+        r"(?:as\s+)?(?:a\s+)?(?:final|last)\s+(?:step|stage)\s+(?:for|to)?\s*(?P<description>.+?)"
+        r"(?=\s+(?:(?:and|then)\s+(?:export|save|output|write|store|detect|segment|anonymize|anonymise|review|convert|split|label|train|run|execute|scan)\b|(?:in|on|at|into)\s+(?:/|~|[A-Za-z]:\\))|\s*(?:[.,;]|$))",
+        re.IGNORECASE,
     ),
 ]
 
@@ -156,30 +159,32 @@ def _extract_output_path(content: str) -> str | None:
     return None
 
 
-def _extract_custom_step_description(normalized_content: str) -> str | None:
+def _extract_custom_step_description(content: str) -> str | None:
     for pattern in CUSTOM_STEP_PATTERNS:
-        match = pattern.search(normalized_content)
+        match = pattern.search(content)
         if not match:
             continue
-        description = " ".join(match.group(1).strip().split())
+        description = " ".join(match.group("description").strip().split())
         if description:
             return description
     return None
 
 
-def _extract_segmentation_prompt(normalized_content: str) -> str | None:
+def _extract_segmentation_prompt(content: str) -> str | None:
     segment_patterns = [
         re.compile(
             r"\bsegment(?:ation)?\s+(?:the\s+|all\s+|only\s+|just\s+)?(?P<prompt>[a-z0-9][a-z0-9\-\s/]+?)"
-            r"(?=\s+(?:in|on|from)\s+(?:/|~|[A-Za-z]:\\)|\s*(?:[.,;]|$))"
+            r"(?=\s+(?:(?:and|then)\s+(?:add|include|insert|with|plus|export|save|output|write|store|detect|anonymize|anonymise|review|convert|split|label|train|run|execute)\b|(?:in|on|from)\s+(?:/|~|[A-Za-z]:\\))|\s*(?:[.,;]|$))",
+            re.IGNORECASE,
         ),
         re.compile(
             r"\bsegmentation\s+of\s+(?P<prompt>[a-z0-9][a-z0-9\-\s/]+?)"
-            r"(?=\s+(?:in|on|from)\s+(?:/|~|[A-Za-z]:\\)|\s*(?:[.,;]|$))"
+            r"(?=\s+(?:(?:and|then)\s+(?:add|include|insert|with|plus|export|save|output|write|store|detect|anonymize|anonymise|review|convert|split|label|train|run|execute)\b|(?:in|on|from)\s+(?:/|~|[A-Za-z]:\\))|\s*(?:[.,;]|$))",
+            re.IGNORECASE,
         ),
     ]
     for pattern in segment_patterns:
-        match = pattern.search(normalized_content)
+        match = pattern.search(content)
         if not match:
             continue
         prompt = " ".join(match.group("prompt").strip().split())
@@ -265,7 +270,7 @@ def _extract_operations(content: str) -> list[str]:
 
     # Catch-all: "add step for X" / "include step for X" / "step for X"
     # where X is something not already matched.
-    step_request = _extract_custom_step_description(normalized)
+    step_request = _extract_custom_step_description(content)
     if step_request and "script" not in operations and "train" not in operations:
         operations.append("script")
 
@@ -368,11 +373,11 @@ def _extract_parameters(content: str) -> dict[str, Any]:
         model_name = training_match.group(1)
         parameters["model_type"] = model_name if model_name != "model" else "yolov8"
 
-    step_desc = _extract_custom_step_description(normalized)
+    step_desc = _extract_custom_step_description(content)
     if step_desc:
         parameters["custom_step_description"] = step_desc
 
-    segment_prompt = _extract_segmentation_prompt(normalized)
+    segment_prompt = _extract_segmentation_prompt(content)
     if segment_prompt:
         parameters["prompt"] = segment_prompt
 
