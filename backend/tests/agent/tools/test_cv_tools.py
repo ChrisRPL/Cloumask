@@ -166,6 +166,7 @@ class TestDetectTool:
             result = await tool.run(
                 input_path=str(temp_image),
                 classes=["person", "car"],
+                model="yolo11m",
             )
 
             assert result.success
@@ -198,6 +199,7 @@ class TestDetectTool:
             result = await tool.run(
                 input_path=str(temp_image),
                 classes=["red car", "delivery truck"],  # Non-COCO
+                model="auto",
             )
 
             assert result.success
@@ -219,6 +221,21 @@ class TestDetectTool:
                 classes=["person"],
                 quality=True,
             )
+
+            assert result.success
+            assert result.data["mode"] == "sam3"
+
+    @pytest.mark.asyncio
+    async def test_detect_defaults_to_sam3_model(self, temp_image, mock_segmentation_result):
+        """Default model selection should route detection through SAM3."""
+        with patch("backend.cv.segmentation.get_segmenter") as mock_get:
+            mock_segmenter = MagicMock()
+            mock_segmenter.info.name = "sam3"
+            mock_segmenter.predict.return_value = mock_segmentation_result
+            mock_get.return_value = mock_segmenter
+
+            tool = DetectTool()
+            result = await tool.run(input_path=str(temp_image))
 
             assert result.success
             assert result.data["mode"] == "sam3"
@@ -268,7 +285,9 @@ class TestSegmentTool:
             assert result.success
             assert result.data["prompt_type"] == "text"
             assert result.data["model"] == "sam3"
-            mock_get.assert_called_with(prompt_type="text", prefer_speed=False)
+            mock_get.assert_called_with(
+                prompt_type="text", prefer_speed=False, force_model="sam3"
+            )
 
     @pytest.mark.asyncio
     async def test_segment_point_prompt(self, temp_image, mock_segmentation_result):
@@ -283,11 +302,14 @@ class TestSegmentTool:
             result = await tool.run(
                 input_path=str(temp_image),
                 point=[320, 240],
+                model="sam2",
             )
 
             assert result.success
             assert result.data["prompt_type"] == "point"
-            mock_get.assert_called_with(prompt_type="point", prefer_speed=False)
+            mock_get.assert_called_with(
+                prompt_type="point", prefer_speed=False, force_model="sam2"
+            )
 
     @pytest.mark.asyncio
     async def test_segment_box_prompt(self, temp_image, mock_segmentation_result):
@@ -302,10 +324,14 @@ class TestSegmentTool:
             result = await tool.run(
                 input_path=str(temp_image),
                 box=[100, 100, 400, 300],
+                model="sam2",
             )
 
             assert result.success
             assert result.data["prompt_type"] == "box"
+            mock_get.assert_called_with(
+                prompt_type="box", prefer_speed=False, force_model="sam2"
+            )
 
     @pytest.mark.asyncio
     async def test_segment_no_prompt(self, temp_image):
@@ -400,10 +426,12 @@ class TestAnonymizeTool:
                 input_path=str(temp_image),
                 output_path=str(output),
                 mode="blur",
+                model="standard",
             )
 
             assert result.success
             assert result.data["mode"] == "blur"
+            assert result.data["model"] == "standard"
             mock_pipeline.load.assert_called_once()
             mock_pipeline.unload.assert_called_once()
 
@@ -426,6 +454,29 @@ class TestAnonymizeTool:
 
             assert result.success
             assert result.data["mode"] == "mask"  # Quality mode uses mask
+            assert result.data["model"] == "sam3"
+
+    @pytest.mark.asyncio
+    async def test_anonymize_defaults_to_sam3(
+        self, temp_image, tmp_path, mock_anonymization_result
+    ):
+        """Default anonymization model should use SAM3 mask mode."""
+        output = tmp_path / "output.jpg"
+
+        with patch("backend.cv.anonymization.AnonymizationPipeline") as mock_pipeline_cls:
+            mock_pipeline = MagicMock()
+            mock_pipeline.process.return_value = mock_anonymization_result
+            mock_pipeline_cls.return_value = mock_pipeline
+
+            tool = AnonymizeTool()
+            result = await tool.run(
+                input_path=str(temp_image),
+                output_path=str(output),
+            )
+
+            assert result.success
+            assert result.data["mode"] == "mask"
+            assert result.data["model"] == "sam3"
 
     @pytest.mark.asyncio
     async def test_anonymize_faces_only(self, temp_image, tmp_path, mock_anonymization_result):

@@ -135,6 +135,14 @@ Examples:
             default=False,
         ),
         ToolParameter(
+            name="model",
+            type=str,
+            description='Segmentation model to force: "sam3", "sam2", or "mobilesam"',
+            required=False,
+            default="sam3",
+            enum_values=["sam3", "sam2", "mobilesam"],
+        ),
+        ToolParameter(
             name="prefer_speed",
             type=bool,
             description="Use MobileSAM for faster inference (point prompts only)",
@@ -151,6 +159,7 @@ Examples:
         box: list[int] | None = None,
         confidence: float = 0.25,
         return_masks: bool = False,
+        model: str = "sam3",
         prefer_speed: bool = False,
     ) -> ToolResult:
         """
@@ -163,6 +172,7 @@ Examples:
             box: Box prompt as [x1, y1, x2, y2] pixels.
             confidence: Minimum confidence threshold.
             return_masks: Include mask data in result.
+            model: Segmentation model to force ("sam3", "sam2", "mobilesam").
             prefer_speed: Use MobileSAM for speed (point prompts only).
 
         Returns:
@@ -229,6 +239,7 @@ Examples:
             segmenter = get_segmenter(
                 prompt_type=prompt_type,
                 prefer_speed=prefer_speed,
+                force_model=model,
             )
             segmenter.load()
 

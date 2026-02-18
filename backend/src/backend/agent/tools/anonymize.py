@@ -105,6 +105,17 @@ Examples:
             default=5,
         ),
         ToolParameter(
+            name="model",
+            type=str,
+            description=(
+                'Anonymization model strategy: "sam3" for precise masks '
+                'or "standard" for faster mode-only processing'
+            ),
+            required=False,
+            default="sam3",
+            enum_values=["sam3", "standard"],
+        ),
+        ToolParameter(
             name="quality",
             type=bool,
             description="Use SAM3 for precise masks on ALL modes (~8GB VRAM, slower but best edges)",
@@ -120,6 +131,7 @@ Examples:
         target: str = "all",
         mode: str = "blur",
         blur_strength: int = 5,
+        model: str = "sam3",
         quality: bool = False,
     ) -> ToolResult:
         """
@@ -131,6 +143,7 @@ Examples:
             target: What to anonymize (faces, plates, all).
             mode: Anonymization style (blur, blackbox, pixelate, mask).
             blur_strength: Blur intensity (1-10).
+            model: Model strategy ("sam3" or "standard").
             quality: Use SAM3 for precise masks on all modes.
 
         Returns:
@@ -173,8 +186,9 @@ Examples:
         detect_faces = target in ("faces", "all")
         detect_plates = target in ("plates", "all")
 
-        # If quality=True, use mask mode for precise SAM3 boundaries
-        actual_mode = "mask" if quality else mode
+        # SAM3 model strategy always uses mask mode for precise boundaries.
+        use_sam3 = quality or model == "sam3"
+        actual_mode = "mask" if use_sam3 else mode
 
         # Convert blur_strength to kernel size
         kernel_size = _blur_strength_to_kernel(blur_strength)
@@ -239,7 +253,8 @@ Examples:
                         "output_path": final_output,
                         "mode": actual_mode,
                         "target": target,
-                        "quality": quality,
+                        "quality": use_sam3,
+                        "model": "sam3" if use_sam3 else "standard",
                         "blur_strength": blur_strength,
                         "processing_time_ms": round(total_time_ms, 2),
                     }

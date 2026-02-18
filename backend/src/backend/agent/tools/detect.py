@@ -244,6 +244,14 @@ Examples:
             default=0.5,
         ),
         ToolParameter(
+            name="model",
+            type=str,
+            description='Detection model: "sam3", "yolo11m", "yolo-world", "rt-detr", or "auto"',
+            required=False,
+            default="sam3",
+            enum_values=["sam3", "yolo11m", "yolo-world", "rt-detr", "auto"],
+        ),
+        ToolParameter(
             name="prefer_accuracy",
             type=bool,
             description="Use RT-DETR/GroundingDINO for higher accuracy (slower, more VRAM)",
@@ -281,6 +289,7 @@ Examples:
         input_path: str,
         classes: list[str] | None = None,
         confidence: float = 0.5,
+        model: str = "sam3",
         prefer_accuracy: bool = False,
         quality: bool = False,
         save_annotations: bool = True,
@@ -298,6 +307,7 @@ Examples:
             input_path: Path to input image or directory.
             classes: List of class names to detect.
             confidence: Minimum confidence threshold (0-1).
+            model: Detection model selection ("sam3", "yolo11m", "yolo-world", "rt-detr", "auto").
             prefer_accuracy: Use RT-DETR/GroundingDINO instead of YOLO11/YOLO-World.
             quality: Use SAM3 for superior detection-via-segmentation.
             save_annotations: Whether to save detection annotations.
@@ -324,10 +334,32 @@ Examples:
 
         # Build lowercase COCO classes set for comparison
         coco_lower = {c.lower() for c in COCO_CLASSES}
+        model_normalized = model.strip().lower()
 
         # Determine detection mode
-        use_quality = quality
-        use_openvocab = _needs_openvocab(classes, coco_lower) if not quality else False
+        if model_normalized == "auto":
+            use_quality = quality
+            use_openvocab = _needs_openvocab(classes, coco_lower) if not quality else False
+        elif model_normalized == "sam3":
+            use_quality = True
+            use_openvocab = False
+        elif model_normalized == "yolo-world":
+            use_quality = quality
+            use_openvocab = True if not quality else False
+            prefer_accuracy = False
+        else:
+            use_quality = quality
+            use_openvocab = _needs_openvocab(classes, coco_lower) if not quality else False
+            if model_normalized == "rt-detr":
+                prefer_accuracy = True
+            elif model_normalized == "yolo11m":
+                prefer_accuracy = False
+
+            if use_openvocab:
+                return error_result(
+                    f"Model '{model_normalized}' supports only COCO classes. "
+                    "Use 'yolo-world' or 'sam3' for custom classes."
+                )
 
         try:
             if use_quality:
