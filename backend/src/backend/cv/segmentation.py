@@ -15,6 +15,7 @@ Model Hierarchy:
 
 from __future__ import annotations
 
+import importlib
 import logging
 import time
 from typing import TYPE_CHECKING, Any
@@ -30,6 +31,46 @@ if TYPE_CHECKING:
     from ultralytics import SAM
 
 logger = logging.getLogger(__name__)
+
+_MIN_ULTRALYTICS_SAM3_VERSION = "8.3.237"
+
+
+def _get_ultralytics_version() -> str:
+    """Best-effort version lookup for error messages."""
+    try:
+        ultralytics_module = importlib.import_module("ultralytics")
+    except ImportError:
+        return "not-installed"
+    version = getattr(ultralytics_module, "__version__", None)
+    return str(version) if version is not None else "unknown"
+
+
+def _resolve_sam3_predictor() -> type[Any]:
+    """
+    Resolve Ultralytics SAM3 predictor class.
+
+    Raises:
+        RuntimeError: If ultralytics is missing or too old for SAM3 predictor API.
+    """
+    try:
+        sam_module = importlib.import_module("ultralytics.models.sam")
+    except ImportError as exc:
+        raise RuntimeError(
+            "SAM3 requires ultralytics. Install CV dependencies with: "
+            "pip install -r requirements-cv.txt"
+        ) from exc
+
+    predictor_cls = getattr(sam_module, "SAM3SemanticPredictor", None)
+    if predictor_cls is None:
+        installed = _get_ultralytics_version()
+        raise RuntimeError(
+            "SAM3 requires ultralytics with SAM3SemanticPredictor "
+            f"(minimum {_MIN_ULTRALYTICS_SAM3_VERSION}). "
+            f"Installed: {installed}. Upgrade with: "
+            f"pip install -U 'ultralytics>={_MIN_ULTRALYTICS_SAM3_VERSION}'."
+        )
+
+    return predictor_cls
 
 
 def _convert_sam_masks_to_result(
@@ -136,10 +177,9 @@ class SAM3Wrapper(BaseModelWrapper[SegmentationResult]):
             Set HF_TOKEN environment variable if required.
             Falls back to CPU if GPU runs out of memory.
         """
-        from ultralytics.models.sam import SAM3SemanticPredictor  # type: ignore[attr-defined]
-
         from backend.cv.download import get_model_path
 
+        sam3_predictor_cls = _resolve_sam3_predictor()
         model_path = get_model_path("sam3")
 
         logger.info("Loading SAM3 from %s", model_path)
@@ -156,7 +196,7 @@ class SAM3Wrapper(BaseModelWrapper[SegmentationResult]):
                 "verbose": False,
                 "device": dev if dev != "cuda" else 0,
             }
-            self._predictor = SAM3SemanticPredictor(overrides=overrides)
+            self._predictor = sam3_predictor_cls(overrides=overrides)
             self._model = self._predictor
 
         # Use OOM handler to catch GPU memory errors and fallback to CPU
@@ -668,6 +708,7 @@ def get_segmenter(
 
     # Text prompts require SAM3
     if prompt_type == "text":
+        _resolve_sam3_predictor()
         device_info = get_device_info()
         available = get_available_vram_mb()
 
