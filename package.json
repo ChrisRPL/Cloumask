@@ -15,7 +15,7 @@
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
     "backend:dev": "cd backend && source .venv/bin/activate && uvicorn backend.api.main:app --reload --port 8765",
-    "backend:install": "cd backend && python3 -m venv .venv && source .venv/bin/activate && pip install -e .",
+    "backend:install": "cd backend && python3 -m venv --clear .venv && source .venv/bin/activate && pip install --upgrade pip && pip install -r requirements-agent.txt -r requirements-cv.txt && pip install -e .",
     "test": "vitest",
     "test:e2e": "playwright test"
   },
