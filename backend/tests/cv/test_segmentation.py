@@ -491,6 +491,7 @@ class TestGetSegmenter:
         from backend.cv.segmentation import SAM3Wrapper, get_segmenter
 
         with (
+            patch("backend.cv.segmentation._resolve_sam3_predictor", return_value=MagicMock()),
             patch("backend.cv.device.get_available_vram_mb", return_value=10000),
             patch(
                 "backend.cv.device.get_device_info",
@@ -506,6 +507,7 @@ class TestGetSegmenter:
         from backend.cv.segmentation import get_segmenter
 
         with (
+            patch("backend.cv.segmentation._resolve_sam3_predictor", return_value=MagicMock()),
             patch("backend.cv.device.get_available_vram_mb", return_value=4000),
             patch(
                 "backend.cv.device.get_device_info",
@@ -520,6 +522,7 @@ class TestGetSegmenter:
         from backend.cv.segmentation import SAM3Wrapper, get_segmenter
 
         with (
+            patch("backend.cv.segmentation._resolve_sam3_predictor", return_value=MagicMock()),
             patch("backend.cv.device.get_available_vram_mb", return_value=0),
             patch(
                 "backend.cv.device.get_device_info",
@@ -569,6 +572,57 @@ class TestGetSegmenter:
 
         with pytest.raises(RuntimeError, match="SAM2 requires"):
             get_segmenter(prompt_type="box")
+
+    def test_text_prompt_without_sam3_predictor_raises(self) -> None:
+        """Text prompt should raise with actionable error when SAM3 API is unavailable."""
+        from backend.cv.segmentation import get_segmenter
+
+        with (
+            patch(
+                "backend.cv.segmentation._resolve_sam3_predictor",
+                side_effect=RuntimeError(
+                    "SAM3 requires ultralytics with SAM3SemanticPredictor "
+                    "(minimum 8.3.237). Installed: 8.3.232."
+                ),
+            ),
+            pytest.raises(RuntimeError, match="SAM3SemanticPredictor"),
+        ):
+            get_segmenter(prompt_type="text")
+
+
+class TestSAM3PredictorCompatibility:
+    """Tests for SAM3 predictor compatibility resolution."""
+
+    def test_resolve_sam3_predictor_returns_class_when_available(self) -> None:
+        """Should return predictor class when symbol is present."""
+        from backend.cv.segmentation import _resolve_sam3_predictor
+
+        predictor_cls = type("FakeSAM3Predictor", (), {})
+
+        with patch(
+            "backend.cv.segmentation.importlib.import_module",
+            return_value=SimpleNamespace(SAM3SemanticPredictor=predictor_cls),
+        ):
+            resolved = _resolve_sam3_predictor()
+
+        assert resolved is predictor_cls
+
+    def test_resolve_sam3_predictor_missing_symbol_has_upgrade_message(self) -> None:
+        """Should provide minimum supported ultralytics version in error message."""
+        from backend.cv.segmentation import _resolve_sam3_predictor
+
+        def _import_module(name: str) -> Any:
+            if name == "ultralytics.models.sam":
+                return SimpleNamespace()
+            if name == "ultralytics":
+                return SimpleNamespace(__version__="8.3.232")
+            raise ImportError(name)
+
+        with (
+            patch("backend.cv.segmentation.importlib.import_module", side_effect=_import_module),
+            pytest.raises(RuntimeError, match="minimum 8.3.237"),
+        ):
+            _resolve_sam3_predictor()
 
 
 # -----------------------------------------------------------------------------
