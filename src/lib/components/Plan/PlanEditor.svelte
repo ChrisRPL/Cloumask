@@ -16,14 +16,14 @@
 	import { getUIState } from '$lib/stores/ui.svelte';
 	import { getKeyboardState } from '$lib/stores/keyboard.svelte';
 	import { sendMessage } from '$lib/utils/tauri';
-	import { defaultToolNameForStepType, isPointcloudToolName } from '$lib/utils/pipeline-step-type';
 	import type { PipelineStep, StepType, StepConfig as StepConfigType } from '$lib/types/pipeline';
+	import { createStepDraft, resolveBackendToolName } from './backend-step';
 
 	import PlanHeader from './PlanHeader.svelte';
 	import StepList from './StepList.svelte';
 	import StepConfigPanel from './StepConfig.svelte';
 	import AddStepButton from './AddStepButton.svelte';
-	import { estimatePipelineTime, formatDuration, getDefaultConfig } from './constants';
+	import { estimatePipelineTime, formatDuration } from './constants';
 
 	let {
 		class: className,
@@ -91,16 +91,20 @@
 	}
 
 	function toBackendPlanStep(step: PipelineStep) {
+		const backendToolName = resolveBackendToolName(step);
 		const baseParameters = {
 			...step.config.params,
 			...(step.config.model ? { model: step.config.model } : {}),
 			...(step.config.confidence !== undefined ? { confidence: step.config.confidence } : {})
 		};
-		const customScriptParameters = buildCustomScriptParameters(step, baseParameters);
+		const customScriptParameters =
+			backendToolName === 'custom_script'
+				? buildCustomScriptParameters(step, baseParameters)
+				: null;
 
 		return {
 			id: step.id,
-			tool_name: customScriptParameters ? 'custom_script' : step.toolName,
+			tool_name: backendToolName,
 			description: step.description,
 			critical: step.critical ?? false,
 			status: step.status,
@@ -223,21 +227,12 @@
 
 	// Handle add step
 	function handleAddStep(type: StepType) {
-		const defaultConfig = getDefaultConfig(type);
-		const preferPointcloud = pipeline.steps.some((step) => isPointcloudToolName(step.toolName));
-		const toolName = defaultToolNameForStepType(type, { preferPointcloud });
-
-		pipeline.addStep({
-			toolName,
-			type,
-			description: `${type.charAt(0).toUpperCase() + type.slice(1)} step`,
-			config: {
-				model: defaultConfig.model as string | undefined,
-				confidence: defaultConfig.confidence as number | undefined,
-				params: defaultConfig,
-			},
-			critical: false,
-		});
+		pipeline.addStep(
+			createStepDraft(type, {
+				existingSteps: pipeline.sortedSteps,
+				currentProjectPath: ui.currentProject?.path ?? null,
+			})
+		);
 	}
 
 	// ============================================================================

@@ -65,6 +65,12 @@ class ReviewItem(BaseModel):
     """Single item in the review queue."""
 
     id: str = Field(..., description="Unique review item ID")
+    execution_id: str | None = Field(
+        None, description="Execution ID used for review queue isolation"
+    )
+    project_id: str | None = Field(
+        None, description="Project ID used for review queue isolation"
+    )
     file_path: str = Field(..., description="Absolute path to source image file")
     file_name: str = Field(..., description="Image filename")
     dimensions: ImageDimensions = Field(..., description="Image dimensions")

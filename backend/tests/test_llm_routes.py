@@ -65,6 +65,34 @@ def test_ensure_ready_with_pull_uses_configured_model(monkeypatch) -> None:
     assert post_mock.await_args.kwargs["json"]["name"] == "mistral:7b-instruct"
 
 
+def test_ensure_ready_with_pull_skips_download_when_model_already_available(monkeypatch) -> None:
+    """POST /llm/ensure-ready should not pull when required model is already present."""
+    client = TestClient(app)
+    monkeypatch.setattr(llm_routes.settings, "ollama_model", "qwen3:8b")
+
+    async def fake_status() -> llm_routes.LLMStatus:
+        return _available_status()
+
+    async def fake_exists(model_name: str) -> bool:
+        assert model_name == "qwen3:8b"
+        return True
+
+    post_mock = AsyncMock()
+
+    monkeypatch.setattr(llm_routes, "get_llm_status", fake_status)
+    monkeypatch.setattr(llm_routes, "_check_model_exists", fake_exists)
+    monkeypatch.setattr("httpx.AsyncClient.post", post_mock)
+
+    response = client.post("/llm/ensure-ready")
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["ready"] is True
+    assert data["required_model"] == "qwen3:8b"
+    assert data["model_available"] is True
+    post_mock.assert_not_awaited()
+
+
 def test_check_model_exists_requires_exact_tag(monkeypatch) -> None:
     """Tagged model checks must not pass on family-name-only matches."""
 

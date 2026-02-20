@@ -24,6 +24,8 @@ from backend.agent.nodes.plan import (
 )
 from backend.agent.nodes.understand import understand
 from backend.agent.state import MessageRole, PipelineState, StepStatus
+from backend.agent.tools.base import BaseTool, ToolCategory, ToolParameter, success_result
+from backend.agent.tools.registry import get_tool_registry
 
 
 def _state_with_message(content: str) -> PipelineState:
@@ -80,7 +82,7 @@ class TestValidatePlan:
         plan = [{"tool_name": "scan_directory"}]
         result = validate_plan(plan)
         assert result is not None
-        assert "no parameters" in result.lower()
+        assert "missing required 'path'" in result.lower()
 
     def test_valid_plan_passes(self) -> None:
         """Valid plan should pass validation."""
@@ -113,8 +115,8 @@ class TestValidatePlan:
         assert result is not None
         assert "output_path" in result.lower()
 
-    def test_detect_missing_classes_fails(self) -> None:
-        """detect without classes should fail."""
+    def test_detect_missing_classes_passes(self) -> None:
+        """detect without classes should pass (planner must not invent classes)."""
         plan = [
             {
                 "tool_name": "detect",
@@ -122,8 +124,7 @@ class TestValidatePlan:
             }
         ]
         result = validate_plan(plan)
-        assert result is not None
-        assert "classes" in result.lower()
+        assert result is None
 
     def test_segment_missing_prompt_fails(self) -> None:
         """segment without prompt should fail."""
@@ -197,6 +198,41 @@ class TestValidatePlan:
         assert result is not None
         assert "output_path" in result.lower()
 
+    def test_run_script_generated_code_without_script_path_passes(self) -> None:
+        """run_script should accept generated_code-only planner output."""
+        plan = [
+            {
+                "tool_name": "run_script",
+                "parameters": {"input_path": "/data"},
+                "generated_code": "print('hello')",
+            }
+        ]
+        result = validate_plan(plan)
+        assert result is None
+
+    def test_registry_registered_tool_is_accepted(self) -> None:
+        """Validation should accept dynamically registered custom tools."""
+
+        class _AdhocTool(BaseTool):
+            name = "adhoc_plan_test_tool"
+            description = "Adhoc planner validation test tool"
+            category = ToolCategory.UTILITY
+            parameters = [ToolParameter("input_path", str, "Input path", required=True)]
+
+            async def execute(self, **kwargs: object):  # type: ignore[override]
+                return success_result({"ok": True})
+
+        registry = get_tool_registry()
+        tool = _AdhocTool()
+        registry.register(tool)
+        try:
+            result = validate_plan(
+                [{"tool_name": tool.name, "parameters": {"input_path": "/data"}}]
+            )
+            assert result is None
+        finally:
+            registry.unregister(tool.name)
+
     def test_all_tools_can_pass(self) -> None:
         """All valid tools should be able to pass validation."""
         for tool in VALID_TOOLS:
@@ -237,6 +273,28 @@ class TestValidatePlan:
             plan = [{"tool_name": tool, "parameters": params}]
             result = validate_plan(plan)
             assert result is None, f"Tool {tool} failed validation: {result}"
+
+
+# -----------------------------------------------------------------------------
+# build_rule_based_plan() tests
+# -----------------------------------------------------------------------------
+
+
+class TestBuildRuleBasedPlan:
+    """Tests for deterministic plan building."""
+
+    def test_pointcloud_understanding_uses_llm_path(self) -> None:
+        """Point-cloud requests should bypass image-centric rule-based planner."""
+        understanding = {
+            "intent": "detect",
+            "input_path": "/data/scene.pcd",
+            "input_type": "pointcloud",
+            "operations": ["detect"],
+            "parameters": {},
+            "output_path": None,
+        }
+
+        assert build_rule_based_plan(understanding) is None
 
 
 # -----------------------------------------------------------------------------
@@ -462,6 +520,34 @@ class TestUnderstandNode:
         assert "export" in understanding["operations"]
 
     @pytest.mark.asyncio
+    async def test_pointcloud_request_skips_fast_path(self) -> None:
+        """Point-cloud requests should use LLM understanding, not regex fast-path."""
+        state = _state_with_message("detect cars in /tmp/scan.pcd")
+
+        mock_response = MagicMock()
+        mock_response.content = json.dumps({
+            "intent": "detect_3d",
+            "input_path": "/tmp/scan.pcd",
+            "input_type": "pointcloud",
+            "operations": ["pointcloud_stats", "detect_3d"],
+            "parameters": {"classes": ["Car"]},
+            "output_path": None,
+            "clarification_needed": None,
+        })
+
+        with patch("backend.agent.nodes.understand.get_llm") as mock_get_llm:
+            mock_llm = AsyncMock()
+            mock_llm.ainvoke.return_value = mock_response
+            mock_get_llm.return_value = mock_llm
+
+            result = await understand(state)
+            mock_get_llm.assert_called_once()
+
+        understanding = result["metadata"]["understanding"]
+        assert understanding["input_type"] == "pointcloud"
+        assert understanding["operations"] == ["pointcloud_stats", "detect_3d"]
+
+    @pytest.mark.asyncio
     async def test_fast_path_detect_classes_excludes_anonymization_targets(self) -> None:
         """Detection classes should not be polluted by anonymization targets."""
         state = _state_with_message(
@@ -546,6 +632,83 @@ class TestUnderstandNode:
 
         understanding = result["metadata"]["understanding"]
         assert understanding["input_path"] == "/Users/krzysztof/Documents/data"
+
+    @pytest.mark.asyncio
+    async def test_fast_path_keeps_segment_target_and_custom_final_step(self) -> None:
+        """Segment target + custom final step should stay specific in the generated plan."""
+        state = _state_with_message(
+            "Segment roads in /data/urban and add a final step for RF-DETR training from Roboflow."
+        )
+
+        with patch("backend.agent.nodes.understand.get_llm") as mock_get_llm:
+            result = await understand(state)
+            mock_get_llm.assert_not_called()
+
+        understanding = result["metadata"]["understanding"]
+        assert understanding["parameters"]["prompt"] == "roads"
+        assert understanding["parameters"]["custom_step_description"] == "RF-DETR training from Roboflow"
+        assert "segment" in understanding["operations"]
+        assert "script" in understanding["operations"]
+
+        plan = build_rule_based_plan(understanding)
+        assert plan is not None
+        tool_names = [step["tool_name"] for step in plan]
+        assert "segment" in tool_names
+        assert tool_names[-1] == "run_script"
+
+        segment_step = next(step for step in plan if step["tool_name"] == "segment")
+        script_step = next(step for step in plan if step["tool_name"] == "run_script")
+        assert segment_step["parameters"]["prompt"] == "roads"
+        assert script_step["description"] == "RF-DETR training from Roboflow"
+
+    @pytest.mark.asyncio
+    async def test_fast_path_segment_prompt_ignores_followup_custom_step(self) -> None:
+        """Segmentation prompt extraction should stop before follow-up workflow clauses."""
+        state = _state_with_message(
+            "Segment roads and add a final step for RF-DETR training from Roboflow in /data/urban."
+        )
+
+        with patch("backend.agent.nodes.understand.get_llm") as mock_get_llm:
+            result = await understand(state)
+            mock_get_llm.assert_not_called()
+
+        understanding = result["metadata"]["understanding"]
+        assert understanding["parameters"]["prompt"] == "roads"
+        assert understanding["parameters"]["custom_step_description"] == "RF-DETR training from Roboflow"
+
+    @pytest.mark.asyncio
+    async def test_fast_path_custom_step_ignores_trailing_instructions(self) -> None:
+        """Custom final-step extraction should stop before trailing pipeline commands."""
+        state = _state_with_message(
+            "Detect objects in /data/site and add a final step for RF-DETR training from Roboflow and export yolo."
+        )
+
+        with patch("backend.agent.nodes.understand.get_llm") as mock_get_llm:
+            result = await understand(state)
+            mock_get_llm.assert_not_called()
+
+        understanding = result["metadata"]["understanding"]
+        assert understanding["parameters"]["custom_step_description"] == "RF-DETR training from Roboflow"
+
+    @pytest.mark.asyncio
+    async def test_fast_path_custom_step_detect_does_not_default_classes(self) -> None:
+        """Custom-step detect flow should not inject person/car classes by default."""
+        state = _state_with_message(
+            "Detect objects in /data/site and add a final step for Roboflow RF-DETR training."
+        )
+
+        with patch("backend.agent.nodes.understand.get_llm") as mock_get_llm:
+            result = await understand(state)
+            mock_get_llm.assert_not_called()
+
+        understanding = result["metadata"]["understanding"]
+        plan = build_rule_based_plan(understanding)
+        assert plan is not None
+
+        detect_step = next(step for step in plan if step["tool_name"] == "detect")
+        script_step = next(step for step in plan if step["tool_name"] == "run_script")
+        assert "classes" not in detect_step["parameters"]
+        assert script_step["description"] == "Roboflow RF-DETR training"
 
 
 # -----------------------------------------------------------------------------

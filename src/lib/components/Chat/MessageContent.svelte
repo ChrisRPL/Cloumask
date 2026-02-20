@@ -6,6 +6,7 @@
 
 	export interface MessageContentProps {
 		messageId?: string;
+		messageTimestamp?: string;
 		content: string;
 		role: MessageRole;
 		isStreaming?: boolean;
@@ -16,6 +17,7 @@
 <script lang="ts">
 	let {
 		messageId = '',
+		messageTimestamp = '',
 		content,
 		role,
 		isStreaming = false,
@@ -24,7 +26,7 @@
 
 	let renderedContent = $state('');
 	let isAnimating = $state(false);
-	let animatedMessageId = $state<string | null>(null);
+	let animatedTurnKey = $state<string | null>(null);
 
 	// Configure marked for inline rendering (no wrapping <p> tags)
 	marked.use({ breaks: true, gfm: true });
@@ -49,8 +51,14 @@
 		return Math.max(1, Math.ceil(textLength / frames));
 	}
 
+	function resolveTurnKey(id: string, timestamp: string): string {
+		if (id && timestamp) return `${id}:${timestamp}`;
+		return id;
+	}
+
 	$effect(() => {
 		const trimmed = content.trim();
+		const turnKey = resolveTurnKey(messageId, messageTimestamp);
 
 		if (!trimmed) {
 			renderedContent = '';
@@ -61,14 +69,14 @@
 		const shouldAnimate =
 			role === 'assistant' &&
 			shouldAnimateMessage(trimmed) &&
-			messageId !== '' &&
-			animatedMessageId !== messageId;
+			turnKey !== '' &&
+			animatedTurnKey !== turnKey;
 
 		if (!shouldAnimate) {
 			renderedContent = trimmed;
 			isAnimating = false;
-			if (messageId && role === 'assistant') {
-				animatedMessageId = messageId;
+			if (turnKey && role === 'assistant') {
+				animatedTurnKey = turnKey;
 			}
 			return;
 		}
@@ -83,7 +91,7 @@
 			if (cursor >= trimmed.length) {
 				clearInterval(timer);
 				isAnimating = false;
-				animatedMessageId = messageId;
+				animatedTurnKey = turnKey;
 			}
 		}, 24);
 

@@ -6,6 +6,7 @@
 //! Provides both blocking and async HTTP methods for communicating with the sidecar.
 
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -98,6 +99,9 @@ pub struct HealthResponse {
     pub timestamp: String,
     /// Status of individual components.
     pub components: HashMap<String, String>,
+    /// Absolute backend/src path reported by the sidecar.
+    #[serde(default)]
+    pub backend_src_path: Option<String>,
 }
 
 /// Readiness check response from Python sidecar.
@@ -109,6 +113,9 @@ pub struct ReadyResponse {
     pub ready: bool,
     /// Individual readiness checks.
     pub checks: HashMap<String, bool>,
+    /// Absolute backend/src path reported by the sidecar.
+    #[serde(default)]
+    pub backend_src_path: Option<String>,
 }
 
 // ============================================================================
@@ -126,10 +133,44 @@ pub struct SidecarManager {
 }
 
 impl SidecarManager {
+    fn normalize_path(path: &str) -> String {
+        Path::new(path)
+            .canonicalize()
+            .unwrap_or_else(|_| PathBuf::from(path))
+            .to_string_lossy()
+            .to_string()
+    }
+
+    fn expected_backend_src_path(&self) -> String {
+        Self::normalize_path(&self.config.backend_src_path)
+    }
+
+    fn backend_src_path_matches(&self, reported_path: Option<&str>) -> bool {
+        let Some(path) = reported_path else {
+            return false;
+        };
+        Self::normalize_path(path) == self.expected_backend_src_path()
+    }
+
+    fn unexpected_backend_error(
+        &self,
+        endpoint: &str,
+        reported_path: Option<&str>,
+    ) -> SidecarError {
+        SidecarError::HttpError(format!(
+            "Unexpected sidecar instance at {} (expected backend/src '{}', got '{}')",
+            endpoint,
+            self.expected_backend_src_path(),
+            reported_path.unwrap_or("<missing>")
+        ))
+    }
+
     /// Create a new sidecar manager with the given configuration.
     pub fn new(config: SidecarConfig) -> Self {
         let client = Client::builder()
             .timeout(Duration::from_secs(config.request_timeout_secs))
+            // Avoid macOS system proxy resolution panics in sandboxed/test envs.
+            .no_proxy()
             .build()
             .expect("Failed to create HTTP client");
 
@@ -160,8 +201,11 @@ impl SidecarManager {
             let _ = existing.wait();
         }
 
-        // Build the uvicorn command
-        let child = Command::new(&self.config.python_path)
+        // Build the uvicorn command.
+        // Use backend workdir to ensure env-file resolution and imports are tied
+        // to this repository, not whatever cwd/path the parent process had.
+        let mut command = Command::new(&self.config.python_path);
+        command
             .args([
                 "-m",
                 "uvicorn",
@@ -174,10 +218,17 @@ impl SidecarManager {
                 "info",
             ])
             .env("PYTHONPATH", &self.config.backend_src_path)
+            // Enable lightweight 3D detection fallback when OpenPCDet weights are missing.
+            .env("CLOUMASK_ENABLE_3D_HEURISTIC_FALLBACK", "1")
             // Avoid pipe backpressure deadlocks when no reader is attached.
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()?;
+            .stderr(Stdio::null());
+
+        if let Some(workdir) = Path::new(&self.config.backend_src_path).parent() {
+            command.current_dir(workdir);
+        }
+
+        let child = command.spawn()?;
 
         log::info!("Sidecar spawned with PID: {}", child.id());
 
@@ -282,6 +333,8 @@ impl SidecarManager {
         // Use blocking reqwest client since we're in sync context
         let client = reqwest::blocking::Client::builder()
             .timeout(Duration::from_secs(5))
+            // Match async client behavior and avoid platform proxy lookup side effects.
+            .no_proxy()
             .build()
             .map_err(|e| SidecarError::SpawnError(std::io::Error::other(e.to_string())))?;
 
@@ -303,8 +356,15 @@ impl SidecarManager {
                 Ok(response) if response.status().is_success() => {
                     if let Ok(json) = response.json::<serde_json::Value>() {
                         if json.get("status") == Some(&serde_json::json!("healthy")) {
-                            log::info!("Sidecar is healthy and ready");
-                            return Ok(());
+                            let reported_path = json.get("backend_src_path").and_then(|v| v.as_str());
+                            if self.backend_src_path_matches(reported_path) {
+                                log::info!("Sidecar is healthy and ready");
+                                return Ok(());
+                            }
+                            log::warn!(
+                                "{}",
+                                self.unexpected_backend_error("/health", reported_path)
+                            );
                         }
                     }
                 }
@@ -423,14 +483,30 @@ impl SidecarManager {
     ///
     /// Returns the full health response from the sidecar.
     pub async fn health_check_async(&self) -> Result<HealthResponse, SidecarError> {
-        self.get_async::<HealthResponse>("/health").await
+        let response = self.get_async::<HealthResponse>("/health").await?;
+        if self.backend_src_path_matches(response.backend_src_path.as_deref()) {
+            Ok(response)
+        } else {
+            Err(self.unexpected_backend_error(
+                "/health",
+                response.backend_src_path.as_deref(),
+            ))
+        }
     }
 
     /// Async readiness check - calls /ready endpoint.
     ///
     /// Returns the readiness response from the sidecar.
     pub async fn ready_check_async(&self) -> Result<ReadyResponse, SidecarError> {
-        self.get_async::<ReadyResponse>("/ready").await
+        let response = self.get_async::<ReadyResponse>("/ready").await?;
+        if self.backend_src_path_matches(response.backend_src_path.as_deref()) {
+            Ok(response)
+        } else {
+            Err(self.unexpected_backend_error(
+                "/ready",
+                response.backend_src_path.as_deref(),
+            ))
+        }
     }
 
     /// Wait for the sidecar to become ready by polling /health endpoint (async version).
@@ -545,6 +621,7 @@ mod tests {
             response.components.get("agent"),
             Some(&"not_loaded".to_string())
         );
+        assert_eq!(response.backend_src_path, None);
     }
 
     #[test]
@@ -558,6 +635,7 @@ mod tests {
         assert!(response.ready);
         assert_eq!(response.checks.get("api_running"), Some(&true));
         assert_eq!(response.checks.get("routes_loaded"), Some(&true));
+        assert_eq!(response.backend_src_path, None);
     }
 
     #[test]
@@ -570,10 +648,21 @@ mod tests {
             version: "0.1.0".to_string(),
             timestamp: "2025-01-11T12:00:00Z".to_string(),
             components,
+            backend_src_path: Some("/tmp/backend/src".to_string()),
         };
 
         let json = serde_json::to_string(&response).unwrap();
         assert!(json.contains("\"status\":\"healthy\""));
         assert!(json.contains("\"version\":\"0.1.0\""));
+        assert!(json.contains("\"backend_src_path\":\"/tmp/backend/src\""));
+    }
+
+    #[test]
+    fn test_backend_src_path_matching() {
+        let manager = SidecarManager::with_defaults();
+        let expected = SidecarManager::normalize_path(&manager.config.backend_src_path);
+        assert!(manager.backend_src_path_matches(Some(expected.as_str())));
+        assert!(!manager.backend_src_path_matches(Some("/tmp/other-backend/src")));
+        assert!(!manager.backend_src_path_matches(None));
     }
 }

@@ -11,7 +11,6 @@ import type {
 	ConnectionState,
 	SSEEvent,
 	MessageEventData,
-	ThinkingEventData,
 	PlanEventData,
 	ToolProgressEventData,
 	ToolResultEventData,
@@ -182,11 +181,10 @@ function routeEventToStores(
 			break;
 		}
 
-		case 'thinking': {
-			const data = event.data as ThinkingEventData;
-			agent.setPhase('understanding');
-			agent.setStreaming(true);
-			// Could update a thinking message here if needed
+			case 'thinking': {
+				agent.setPhase('understanding');
+				agent.setStreaming(true);
+				// Could update a thinking message here if needed
 			break;
 		}
 
@@ -394,6 +392,10 @@ function numberFromResult(value: unknown): number | null {
 	return null;
 }
 
+function clamp01(value: number): number {
+	return Math.max(0, Math.min(1, value));
+}
+
 const IMAGE_EXTENSIONS = new Set([
 	'.jpg',
 	'.jpeg',
@@ -459,8 +461,22 @@ function collectPreviewPaths(result: Record<string, unknown>): string[] {
 		}
 	}
 
+	const previewRows = result.preview_items;
+	if (Array.isArray(previewRows)) {
+		for (const row of previewRows) {
+			if (typeof row !== 'object' || !row) continue;
+			const candidate = (row as Record<string, unknown>).image_path;
+			maybePush(candidate);
+		}
+	}
+
 	return Array.from(new Set(paths));
 }
+
+type PreviewAnnotation = import('$lib/types/execution').PreviewAnnotation;
+type PreviewItem = import('$lib/types/execution').PreviewItem;
+type PreviewStatus = PreviewItem['status'];
+type PointcloudPreviewAnnotation = import('$lib/types/execution').PointcloudPreviewAnnotation;
 
 function extractPointcloudPreviewPath(result: Record<string, unknown>): string | null {
 	const candidates = [result.pointcloud_path, result.output_path, result.input_path];
@@ -495,10 +511,10 @@ function parseVector3FromObject(value: unknown): [number, number, number] | null
 
 function parsePointcloudDetections(
 	detections: unknown
-): import('$lib/types/execution').PointcloudPreviewAnnotation[] {
+): PointcloudPreviewAnnotation[] {
 	if (!Array.isArray(detections)) return [];
 
-	const parsed: import('$lib/types/execution').PointcloudPreviewAnnotation[] = [];
+	const parsed: PointcloudPreviewAnnotation[] = [];
 	for (let index = 0; index < detections.length; index += 1) {
 		const row = detections[index] as PointcloudDetectionRow;
 		if (!row || typeof row !== 'object') continue;
@@ -528,41 +544,168 @@ function parsePointcloudDetections(
 	return parsed;
 }
 
-function extractPreviewItems(data: ToolResultEventData): import('$lib/types/execution').PreviewItem[] {
+function normalizeBBox(
+	raw: unknown,
+	options: { assumeCenter?: boolean } = {}
+): PreviewAnnotation['bbox'] | null {
+	if (typeof raw !== 'object' || raw === null) return null;
+	const record = raw as Record<string, unknown>;
+
+	const x1 = numberFromResult(record.x1);
+	const y1 = numberFromResult(record.y1);
+	const x2 = numberFromResult(record.x2);
+	const y2 = numberFromResult(record.y2);
+	if (x1 !== null && y1 !== null && x2 !== null && y2 !== null) {
+		const x = clamp01(Math.min(x1, x2));
+		const y = clamp01(Math.min(y1, y2));
+		const width = clamp01(Math.abs(x2 - x1));
+		const height = clamp01(Math.abs(y2 - y1));
+		return {
+			x,
+			y,
+			width: Math.min(width, 1 - x),
+			height: Math.min(height, 1 - y)
+		};
+	}
+
+	const width = clamp01(numberFromResult(record.width) ?? numberFromResult(record.w) ?? 0);
+	const height = clamp01(numberFromResult(record.height) ?? numberFromResult(record.h) ?? 0);
+	if (width <= 0 || height <= 0) return null;
+
+	const hasCenterKeys = record.cx !== undefined || record.cy !== undefined;
+	const assumeCenter = options.assumeCenter === true || hasCenterKeys;
+
+	const rawX =
+		numberFromResult(record.x) ?? numberFromResult(record.cx) ?? (assumeCenter ? 0.5 : 0.0);
+	const rawY =
+		numberFromResult(record.y) ?? numberFromResult(record.cy) ?? (assumeCenter ? 0.5 : 0.0);
+
+	const x = assumeCenter ? rawX - width / 2 : rawX;
+	const y = assumeCenter ? rawY - height / 2 : rawY;
+	const clampedX = clamp01(x);
+	const clampedY = clamp01(y);
+
+	return {
+		x: clampedX,
+		y: clampedY,
+		width: Math.min(width, 1 - clampedX),
+		height: Math.min(height, 1 - clampedY)
+	};
+}
+
+function normalizeAnnotation(raw: unknown, options: { assumeCenterBBox?: boolean } = {}): PreviewAnnotation | null {
+	if (typeof raw !== 'object' || raw === null) return null;
+	const record = raw as Record<string, unknown>;
+	const label = (typeof record.label === 'string' ? record.label : record.class_name) ?? 'object';
+	const confidence = clamp01(numberFromResult(record.confidence) ?? 1);
+	const bbox = normalizeBBox(record.bbox ?? record, { assumeCenter: options.assumeCenterBBox });
+	if (!bbox) return null;
+
+	return {
+		label: String(label),
+		confidence,
+		bbox
+	};
+}
+
+function getPreviewStatus(result: Record<string, unknown>): PreviewStatus {
+	const faces = numberFromResult(result.faces_anonymized) ?? numberFromResult(result.faces_blurred) ?? 0;
+	const plates =
+		numberFromResult(result.plates_anonymized) ?? numberFromResult(result.plates_blurred) ?? 0;
+	return faces + plates > 0 ? 'flagged' : 'processed';
+}
+
+function previewItem(
+	data: ToolResultEventData,
+	imagePath: string,
+	index: number,
+	status: PreviewStatus,
+	annotations: PreviewAnnotation[]
+): PreviewItem {
+	return {
+		id: `${data.tool_name}-${data.step_index}-${index}-${imagePath}`,
+		imagePath,
+		thumbnailUrl: imagePath,
+		annotations,
+		status
+	};
+}
+
+function extractAnnotationsFromRow(row: Record<string, unknown>): PreviewAnnotation[] {
+	const annotations: PreviewAnnotation[] = [];
+
+	const explicitAnnotations = row.annotations;
+	if (Array.isArray(explicitAnnotations)) {
+		for (const raw of explicitAnnotations) {
+			const parsed = normalizeAnnotation(raw);
+			if (parsed) annotations.push(parsed);
+		}
+	}
+
+	if (annotations.length === 0 && Array.isArray(row.detections)) {
+		for (const raw of row.detections) {
+			const parsed = normalizeAnnotation(raw, { assumeCenterBBox: true });
+			if (parsed) annotations.push(parsed);
+		}
+	}
+
+	return annotations;
+}
+
+export function extractPreviewItems(data: ToolResultEventData): PreviewItem[] {
 	const result = data.result ?? {};
 	const pointcloudPath = extractPointcloudPreviewPath(result);
 	if (pointcloudPath) {
 		const pointcloudAnnotations = parsePointcloudDetections(result.detections);
-		const status: 'processed' | 'flagged' | 'error' =
+		const pointcloudStatus: PreviewStatus =
 			pointcloudAnnotations.length > 0 ? 'flagged' : 'processed';
 		return [
 			{
-				id: `${data.tool_name}-${data.step_index}-${pointcloudPath}`,
+				id: `${data.tool_name}-${data.step_index}-0-${pointcloudPath}`,
 				imagePath: pointcloudPath,
 				thumbnailUrl: pointcloudPath,
 				annotations: [],
 				assetType: 'pointcloud',
 				pointcloudAnnotations,
-				status
+				status: pointcloudStatus
 			}
 		];
+	}
+
+	const status = getPreviewStatus(result);
+
+	const previewRows = result.preview_items;
+	if (Array.isArray(previewRows)) {
+		const items: PreviewItem[] = [];
+		for (const row of previewRows.slice(0, 6)) {
+			if (typeof row !== 'object' || row === null) continue;
+			const record = row as Record<string, unknown>;
+			const imagePath = typeof record.image_path === 'string' ? record.image_path : null;
+			if (!imagePath || !isImagePath(imagePath)) continue;
+			const annotations = extractAnnotationsFromRow(record);
+			items.push(previewItem(data, imagePath, items.length, status, annotations));
+		}
+		if (items.length > 0) return items;
+	}
+
+	const rowAnnotationsByPath = new Map<string, PreviewAnnotation[]>();
+	const resultRows = result.results;
+	if (Array.isArray(resultRows)) {
+		for (const row of resultRows) {
+			if (typeof row !== 'object' || row === null) continue;
+			const record = row as Record<string, unknown>;
+			const imagePath = typeof record.image_path === 'string' ? record.image_path : null;
+			if (!imagePath) continue;
+			rowAnnotationsByPath.set(imagePath, extractAnnotationsFromRow(record));
+		}
 	}
 
 	const imagePaths = collectPreviewPaths(result);
 	if (imagePaths.length === 0) return [];
 
-	const faces = numberFromResult(result.faces_anonymized) ?? numberFromResult(result.faces_blurred) ?? 0;
-	const plates =
-		numberFromResult(result.plates_anonymized) ?? numberFromResult(result.plates_blurred) ?? 0;
-	const status: 'processed' | 'flagged' | 'error' = faces + plates > 0 ? 'flagged' : 'processed';
-
-	return imagePaths.slice(0, 6).map((imagePath, index) => ({
-		id: `${data.tool_name}-${data.step_index}-${index}-${imagePath}`,
-		imagePath,
-		thumbnailUrl: imagePath,
-		annotations: [],
-		status
-	}));
+	return imagePaths.slice(0, 6).map((imagePath, index) =>
+		previewItem(data, imagePath, index, status, rowAnnotationsByPath.get(imagePath) ?? [])
+	);
 }
 
 // ============================================================================

@@ -62,6 +62,33 @@ fn resolve_backend_src_path() -> String {
     }
 }
 
+/// Resolve the Python executable for the sidecar.
+///
+/// Prefers the repository-local backend venv to avoid inheriting
+/// unrelated virtual environments from the parent process PATH.
+fn resolve_python_path() -> String {
+    if cfg!(debug_assertions) {
+        let mut candidates: Vec<PathBuf> = vec![PathBuf::from("backend/.venv/bin/python3")];
+
+        if let Ok(cwd) = env::current_dir() {
+            candidates.push(cwd.join("backend/.venv/bin/python3"));
+            candidates.push(cwd.join("../backend/.venv/bin/python3"));
+        }
+
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        candidates.push(manifest_dir.join("../backend/.venv/bin/python3"));
+
+        for candidate in &candidates {
+            if let Ok(abs_path) = candidate.canonicalize() {
+                log::info!("Using sidecar python: {:?}", abs_path);
+                return abs_path.to_string_lossy().to_string();
+            }
+        }
+    }
+
+    "python3".to_string()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Initialize logger for development
@@ -78,6 +105,7 @@ pub fn run() {
             // Configure sidecar with resolved backend path
             let config = SidecarConfig {
                 backend_src_path: resolve_backend_src_path(),
+                python_path: resolve_python_path(),
                 ..Default::default()
             };
 

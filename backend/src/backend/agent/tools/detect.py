@@ -32,6 +32,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+MAX_PREVIEW_ITEMS = 6
+MAX_PREVIEW_ANNOTATIONS = 50
+
 
 def _is_mps_runtime_error(error: Exception) -> bool:
     """Return True when inference fails due to known Apple MPS runtime issues."""
@@ -108,6 +111,98 @@ def _masks_to_detections(
     return detections, class_counts
 
 
+def _clamp_unit(value: float) -> float:
+    """Clamp numeric values to [0, 1] for normalized geometry payloads."""
+    return max(0.0, min(1.0, value))
+
+
+def _center_bbox_to_top_left(
+    bbox: dict[str, Any] | None,
+) -> dict[str, float]:
+    """
+    Convert normalized center-format bbox to normalized top-left format.
+
+    Input keys are expected as:
+    - x: center x
+    - y: center y
+    - width: box width
+    - height: box height
+    """
+    if not isinstance(bbox, dict):
+        return {"x": 0.0, "y": 0.0, "width": 0.0, "height": 0.0}
+
+    cx = _clamp_unit(float(bbox.get("x", 0.0)))
+    cy = _clamp_unit(float(bbox.get("y", 0.0)))
+    width = _clamp_unit(float(bbox.get("width", 0.0)))
+    height = _clamp_unit(float(bbox.get("height", 0.0)))
+
+    x = _clamp_unit(cx - width / 2.0)
+    y = _clamp_unit(cy - height / 2.0)
+
+    width = min(width, 1.0 - x)
+    height = min(height, 1.0 - y)
+
+    return {
+        "x": round(x, 6),
+        "y": round(y, 6),
+        "width": round(max(0.0, width), 6),
+        "height": round(max(0.0, height), 6),
+    }
+
+
+def _build_preview_items_from_results(results: list[Any]) -> list[dict[str, Any]]:
+    """Build compact preview payload for frontend overlay rendering."""
+    preview_items: list[dict[str, Any]] = []
+
+    for result in results[:MAX_PREVIEW_ITEMS]:
+        annotations: list[dict[str, Any]] = []
+        detections = getattr(result, "detections", []) or []
+
+        for detection in detections[:MAX_PREVIEW_ANNOTATIONS]:
+            annotations.append({
+                "label": str(getattr(detection, "class_name", "object")),
+                "confidence": round(float(getattr(detection, "confidence", 1.0)), 4),
+                "bbox": _center_bbox_to_top_left({
+                    "x": getattr(getattr(detection, "bbox", None), "x", 0.0),
+                    "y": getattr(getattr(detection, "bbox", None), "y", 0.0),
+                    "width": getattr(getattr(detection, "bbox", None), "width", 0.0),
+                    "height": getattr(getattr(detection, "bbox", None), "height", 0.0),
+                }),
+            })
+
+        preview_items.append({
+            "image_path": str(getattr(result, "image_path", "")),
+            "annotations": annotations,
+        })
+
+    return preview_items
+
+
+def _build_preview_items_from_annotation_records(
+    records: list[tuple[str, list[dict[str, Any]]]],
+) -> list[dict[str, Any]]:
+    """Build preview payload from detection-like annotation records."""
+    preview_items: list[dict[str, Any]] = []
+
+    for image_path, detections in records[:MAX_PREVIEW_ITEMS]:
+        annotations: list[dict[str, Any]] = []
+        for detection in detections[:MAX_PREVIEW_ANNOTATIONS]:
+            confidence_raw = detection.get("confidence", 1.0)
+            confidence = float(confidence_raw) if isinstance(confidence_raw, int | float) else 1.0
+            annotations.append({
+                "label": str(detection.get("class_name", "object")),
+                "confidence": round(_clamp_unit(confidence), 4),
+                "bbox": _center_bbox_to_top_left(detection.get("bbox")),  # type: ignore[arg-type]
+            })
+
+        preview_items.append({
+            "image_path": str(image_path),
+            "annotations": annotations,
+        })
+
+    return preview_items
+
+
 @register_tool
 class DetectTool(BaseTool):
     """Detect objects in images using YOLO11, YOLO-World, or SAM3."""
@@ -149,6 +244,14 @@ Examples:
             default=0.5,
         ),
         ToolParameter(
+            name="model",
+            type=str,
+            description='Detection model: "sam3", "yolo11m", "yolo-world", "rt-detr", or "auto"',
+            required=False,
+            default="sam3",
+            enum_values=["sam3", "yolo11m", "yolo-world", "rt-detr", "auto"],
+        ),
+        ToolParameter(
             name="prefer_accuracy",
             type=bool,
             description="Use RT-DETR/GroundingDINO for higher accuracy (slower, more VRAM)",
@@ -186,6 +289,7 @@ Examples:
         input_path: str,
         classes: list[str] | None = None,
         confidence: float = 0.5,
+        model: str = "sam3",
         prefer_accuracy: bool = False,
         quality: bool = False,
         save_annotations: bool = True,
@@ -203,6 +307,7 @@ Examples:
             input_path: Path to input image or directory.
             classes: List of class names to detect.
             confidence: Minimum confidence threshold (0-1).
+            model: Detection model selection ("sam3", "yolo11m", "yolo-world", "rt-detr", "auto").
             prefer_accuracy: Use RT-DETR/GroundingDINO instead of YOLO11/YOLO-World.
             quality: Use SAM3 for superior detection-via-segmentation.
             save_annotations: Whether to save detection annotations.
@@ -229,10 +334,32 @@ Examples:
 
         # Build lowercase COCO classes set for comparison
         coco_lower = {c.lower() for c in COCO_CLASSES}
+        model_normalized = model.strip().lower()
 
         # Determine detection mode
-        use_quality = quality
-        use_openvocab = _needs_openvocab(classes, coco_lower) if not quality else False
+        if model_normalized == "auto":
+            use_quality = quality
+            use_openvocab = _needs_openvocab(classes, coco_lower) if not quality else False
+        elif model_normalized == "sam3":
+            use_quality = True
+            use_openvocab = False
+        elif model_normalized == "yolo-world":
+            use_quality = quality
+            use_openvocab = True if not quality else False
+            prefer_accuracy = False
+        else:
+            use_quality = quality
+            use_openvocab = _needs_openvocab(classes, coco_lower) if not quality else False
+            if model_normalized == "rt-detr":
+                prefer_accuracy = True
+            elif model_normalized == "yolo11m":
+                prefer_accuracy = False
+
+            if use_openvocab:
+                return error_result(
+                    f"Model '{model_normalized}' supports only COCO classes. "
+                    "Use 'yolo-world' or 'sam3' for custom classes."
+                )
 
         try:
             if use_quality:
@@ -353,6 +480,7 @@ Examples:
 
             avg_confidence = total_confidence / total_detections if total_detections > 0 else 0.0
 
+            preview_items = _build_preview_items_from_results(results)
             annotations_path: str | None = None
             if save_annotations:
                 annotations_root = self._resolve_annotations_output_path(input_path, output_path)
@@ -382,6 +510,7 @@ Examples:
                     "count": total_detections,
                     "classes": class_counts,
                     "sample_images": image_paths[:6],
+                    "preview_items": preview_items,
                     "confidence_threshold": confidence,
                     "confidence": round(avg_confidence, 3),
                     "model": detector.info.name,
@@ -457,6 +586,7 @@ Examples:
 
             avg_confidence = total_confidence / total_detections if total_detections > 0 else 0.0
 
+            preview_items = _build_preview_items_from_results(results)
             annotations_path: str | None = None
             if save_annotations:
                 annotations_root = self._resolve_annotations_output_path(input_path, output_path)
@@ -486,6 +616,7 @@ Examples:
                     "count": total_detections,
                     "classes": class_counts,
                     "sample_images": image_paths[:6],
+                    "preview_items": preview_items,
                     "confidence_threshold": confidence,
                     "confidence": round(avg_confidence, 3),
                     "model": detector.info.name,
@@ -544,6 +675,7 @@ Examples:
 
             avg_confidence = total_confidence / total_detections if total_detections > 0 else 0.0
 
+            preview_items = _build_preview_items_from_annotation_records(annotation_records)
             annotations_path: str | None = None
             if save_annotations:
                 annotations_root = self._resolve_annotations_output_path(input_path, output_path)
@@ -555,6 +687,7 @@ Examples:
                     "count": total_detections,
                     "classes": class_counts,
                     "sample_images": image_paths[:6],
+                    "preview_items": preview_items,
                     "confidence_threshold": confidence,
                     "confidence": round(avg_confidence, 3),
                     "model": segmenter.info.name,

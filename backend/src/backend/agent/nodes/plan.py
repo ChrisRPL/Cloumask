@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -18,8 +18,13 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from backend.agent.llm import SimpleLLMConfig, get_llm
 from backend.agent.prompts import load_prompt
 from backend.agent.state import MessageRole, PipelineState, StepStatus
+from backend.agent.tools.discovery import initialize_tools
+from backend.agent.tools.registry import get_tool_registry
 from backend.agent.utils import extract_json_array
 from backend.api.config import settings
+
+if TYPE_CHECKING:
+    from backend.agent.tools.base import BaseTool
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +80,86 @@ VALID_3D_CLASSES = {"Car", "Pedestrian", "Cyclist"}
 DEFAULT_3D_CLASSES = ["Car", "Pedestrian"]
 
 
+def _get_registered_tools() -> dict[str, BaseTool]:
+    """Return registered tools, initializing discovery if needed."""
+    registry = get_tool_registry()
+    if len(registry) == 0:
+        initialize_tools()
+    return {tool.name: tool for tool in registry.get_all()}
+
+
+def _validate_core_step_parameters(
+    step_num: int,
+    tool_name: str,
+    parameters: dict[str, Any],
+) -> str | None:
+    """
+    Validate required parameters for core planner tools.
+
+    This preserves backwards-compatible behavior for runtime environments where
+    registry discovery may not expose every core tool.
+    """
+    if tool_name == "scan_directory":
+        if "path" not in parameters:
+            return f"Step {step_num} (scan_directory) missing required 'path' parameter"
+
+    elif tool_name == "anonymize":
+        if "input_path" not in parameters:
+            return f"Step {step_num} (anonymize) missing required 'input_path' parameter"
+        if "output_path" not in parameters:
+            return f"Step {step_num} (anonymize) missing required 'output_path' parameter"
+
+    elif tool_name == "detect":
+        if "input_path" not in parameters:
+            return f"Step {step_num} (detect) missing required 'input_path' parameter"
+
+    elif tool_name == "segment":
+        if "input_path" not in parameters:
+            return f"Step {step_num} (segment) missing required 'input_path' parameter"
+        if "prompt" not in parameters:
+            return f"Step {step_num} (segment) missing required 'prompt' parameter"
+
+    elif tool_name == "export":
+        if "source_path" not in parameters:
+            return f"Step {step_num} (export) missing required 'source_path' parameter"
+        if "output_path" not in parameters:
+            return f"Step {step_num} (export) missing required 'output_path' parameter"
+        if "output_format" not in parameters:
+            return f"Step {step_num} (export) missing required 'output_format' parameter"
+
+    elif tool_name == "convert_format":
+        if "source_path" not in parameters:
+            return f"Step {step_num} (convert_format) missing required 'source_path' parameter"
+        if "output_path" not in parameters:
+            return f"Step {step_num} (convert_format) missing required 'output_path' parameter"
+        if "target_format" not in parameters:
+            return f"Step {step_num} (convert_format) missing required 'target_format' parameter"
+
+    elif tool_name == "find_duplicates" and "path" not in parameters:
+        return f"Step {step_num} (find_duplicates) missing required 'path' parameter"
+
+    elif tool_name == "label_qa" and "path" not in parameters:
+        return f"Step {step_num} (label_qa) missing required 'path' parameter"
+
+    elif tool_name == "split_dataset":
+        if "path" not in parameters:
+            return f"Step {step_num} (split_dataset) missing required 'path' parameter"
+        if "output_path" not in parameters:
+            return f"Step {step_num} (split_dataset) missing required 'output_path' parameter"
+
+    elif tool_name in {"run_script", "custom_script"}:
+        if "input_path" not in parameters:
+            return f"Step {step_num} ({tool_name}) missing required 'input_path' parameter"
+
+    elif tool_name == "review":
+        if "source_path" not in parameters:
+            return f"Step {step_num} (review) missing required 'source_path' parameter"
+        if "image_dir" not in parameters:
+            return f"Step {step_num} (review) missing required 'image_dir' parameter"
+
+    return None
+
+
 def _normalize_classes(value: Any) -> list[str]:
     if isinstance(value, list):
         classes = [str(item).strip() for item in value if str(item).strip()]
@@ -83,7 +168,6 @@ def _normalize_classes(value: Any) -> list[str]:
         classes = [part.strip() for part in value.split(",") if part.strip()]
         return classes
     return []
-
 
 def _normalize_3d_classes(value: Any) -> list[str]:
     """Normalize class labels for 3D detection tools."""
@@ -240,6 +324,71 @@ def _build_pointcloud_rule_based_plan(
     return plan if plan else None
 
 
+def _looks_like_inline_python_script(value: Any) -> bool:
+    """Heuristic for distinguishing inline code from script file paths."""
+    if not isinstance(value, str):
+        return False
+
+    content = value.strip()
+    if not content:
+        return False
+
+    if "\n" in content:
+        return True
+
+    if content.lower().startswith("#!/usr/bin/env python"):
+        return True
+
+    python_markers = ("def process(", "import ", "from ", "class ", "return ")
+    if any(marker in content for marker in python_markers):
+        return True
+
+    return False
+
+
+def _normalize_run_script_step(step: dict[str, Any]) -> dict[str, Any]:
+    """Move inline run_script code into step-level generated_code."""
+    normalized = dict(step)
+    if normalized.get("tool_name") != "run_script":
+        return normalized
+
+    parameters = dict(normalized.get("parameters", {}))
+    generated_code = normalized.get("generated_code")
+    if not isinstance(generated_code, str) or not generated_code.strip():
+        script_value = parameters.get("script")
+        if _looks_like_inline_python_script(script_value):
+            generated_code = str(script_value).strip()
+            parameters.pop("script", None)
+
+    if isinstance(generated_code, str) and generated_code.strip():
+        normalized["generated_code"] = generated_code.strip()
+
+    normalized["parameters"] = parameters
+    return normalized
+
+
+def _to_pipeline_step(step: dict[str, Any], step_index: int) -> dict[str, Any]:
+    """Normalize planner output into persisted pipeline step shape."""
+    normalized = _normalize_run_script_step(step)
+    pipeline_step: dict[str, Any] = {
+        "id": f"step-{uuid4().hex[:8]}",
+        "tool_name": normalized.get("tool_name", "unknown"),
+        "parameters": normalized.get("parameters", {}),
+        "description": normalized.get("description", f"Step {step_index + 1}"),
+        "status": StepStatus.PENDING.value,
+        "result": None,
+        "error": None,
+        "started_at": None,
+        "completed_at": None,
+    }
+
+    generated_code = normalized.get("generated_code")
+    if isinstance(generated_code, str) and generated_code.strip():
+        pipeline_step["generated_code"] = generated_code.strip()
+
+    return pipeline_step
+
+
 def _generate_training_script(
     model_type: str,
     data_dir: str,
@@ -322,17 +471,20 @@ def build_rule_based_plan(understanding: dict[str, Any]) -> list[dict[str, Any]]
     Returns None if request is too ambiguous and should fall back to LLM planning.
     """
     input_path = understanding.get("input_path")
+    input_type_raw = understanding.get("input_type")
+    input_type = str(input_type_raw or "").lower()
     operations = [
         str(op).strip().lower() for op in understanding.get("operations", []) if str(op).strip()
     ]
     parameters = dict(understanding.get("parameters", {}))
     output_path = understanding.get("output_path")
-    input_type = understanding.get("input_type")
-
     if not input_path or not operations:
         return None
 
-    if _is_pointcloud_request(input_path=input_path, input_type=input_type, operations=operations):
+    if input_type == "pointcloud" and operations and all(op == "detect" for op in operations):
+        return None
+
+    if _is_pointcloud_request(input_path=input_path, input_type=input_type_raw, operations=operations):
         return _build_pointcloud_rule_based_plan(
             input_path=input_path,
             operations=operations,
@@ -391,19 +543,21 @@ def build_rule_based_plan(understanding: dict[str, Any]) -> list[dict[str, Any]]
     if "detect" in operations:
         classes = _normalize_classes(parameters.get("classes"))
         if not classes:
-            classes = ["person", "car"]
+            classes = []
         confidence = float(parameters.get("confidence", 0.5))
         detection_annotations_path = f"{working_path}_detections_yolo"
+        detect_parameters: dict[str, Any] = {
+            "input_path": working_path,
+            "confidence": confidence,
+            "save_annotations": True,
+            "output_path": detection_annotations_path,
+        }
+        if classes:
+            detect_parameters["classes"] = classes
         plan.append(
             {
                 "tool_name": "detect",
-                "parameters": {
-                    "input_path": working_path,
-                    "classes": classes,
-                    "confidence": confidence,
-                    "save_annotations": True,
-                    "output_path": detection_annotations_path,
-                },
+                "parameters": detect_parameters,
                 "description": "Detect target objects in the input dataset",
             }
         )
@@ -477,6 +631,7 @@ def build_rule_based_plan(understanding: dict[str, Any]) -> list[dict[str, Any]]
         script_params: dict[str, Any] = {
             "input_path": working_path,
         }
+        generated_code: str | None = None
         if output_path:
             script_params["output_path"] = output_path
 
@@ -487,8 +642,7 @@ def build_rule_based_plan(understanding: dict[str, Any]) -> list[dict[str, Any]]
         if is_training:
             # Build a training script for the detected model architecture.
             data_dir = working_path
-            script_content = _generate_training_script(model_type, data_dir, parameters)
-            script_params["script"] = script_content
+            generated_code = _generate_training_script(model_type, data_dir, parameters)
             script_params["description"] = (
                 f"Train {model_type} model on the prepared dataset"
             )
@@ -498,23 +652,27 @@ def build_rule_based_plan(understanding: dict[str, Any]) -> list[dict[str, Any]]
             # any explicit script/command parameters.
             custom_desc = parameters.get("custom_step_description", "")
             if parameters.get("script"):
-                script_params["script"] = parameters["script"]
+                script_value = str(parameters["script"])
+                if _looks_like_inline_python_script(script_value):
+                    generated_code = script_value.strip()
+                else:
+                    script_params["script"] = script_value
             if parameters.get("command"):
                 script_params["command"] = parameters["command"]
             if custom_desc:
-                description = custom_desc.capitalize()
+                description = custom_desc
                 script_params["description"] = custom_desc
             else:
                 description = "Execute custom processing script on the data"
 
-        plan.append(
-            {
-                "tool_name": "run_script",
-                "parameters": script_params,
-                "description": description,
-            }
-        )
-
+        script_step: dict[str, Any] = {
+            "tool_name": "run_script",
+            "parameters": script_params,
+            "description": description,
+        }
+        if generated_code:
+            script_step["generated_code"] = generated_code
+        plan.append(script_step)
 
     if "review" in operations:
         review_source = detection_annotations_path or working_path
@@ -598,6 +756,9 @@ def validate_plan(plan: list[dict[str, Any]]) -> str | None:
     if not plan:
         return "Plan is empty"
 
+    registered_tools = _get_registered_tools()
+    valid_tools = set(VALID_TOOLS) | set(registered_tools)
+
     for i, step in enumerate(plan):
         step_num = i + 1
 
@@ -606,76 +767,38 @@ def validate_plan(plan: list[dict[str, Any]]) -> str | None:
         if not tool_name:
             return f"Step {step_num} has no tool_name"
 
-        if tool_name not in VALID_TOOLS:
+        if tool_name not in valid_tools:
             return f"Step {step_num} uses unknown tool: {tool_name}"
 
-        # Check parameters exist
+        # Check parameters shape
         parameters = step.get("parameters")
-        if not parameters:
-            return f"Step {step_num} ({tool_name}) has no parameters"
+        if parameters is None:
+            parameters = {}
+        if not isinstance(parameters, dict):
+            return f"Step {step_num} ({tool_name}) parameters must be an object"
 
-        # Tool-specific validation
-        if tool_name == "scan_directory":
-            if "path" not in parameters:
-                return f"Step {step_num} (scan_directory) missing required 'path' parameter"
+        # Validate core planner expectations first for backwards compatibility.
+        validation_error = _validate_core_step_parameters(step_num, tool_name, parameters)
+        if validation_error:
+            return validation_error
 
-        elif tool_name == "anonymize":
-            if "input_path" not in parameters:
-                return f"Step {step_num} (anonymize) missing required 'input_path' parameter"
-            if "output_path" not in parameters:
-                return f"Step {step_num} (anonymize) missing required 'output_path' parameter"
+        # Keep compatibility for run_script/custom_script planning conventions.
+        if tool_name in {"run_script", "custom_script"}:
+            continue
 
-        elif tool_name == "detect":
-            if "input_path" not in parameters:
-                return f"Step {step_num} (detect) missing required 'input_path' parameter"
-            if "classes" not in parameters:
-                return f"Step {step_num} (detect) missing required 'classes' parameter"
+        # Validate required parameters from registered tool metadata when available.
+        tool = registered_tools.get(tool_name)
+        if tool is not None:
+            for param in getattr(tool, "parameters", []):
+                if param.required and param.default is None and param.name not in parameters:
+                    return (
+                        f"Step {step_num} ({tool_name}) missing required "
+                        f"'{param.name}' parameter"
+                    )
+            continue
 
-        elif tool_name == "segment":
-            if "input_path" not in parameters:
-                return f"Step {step_num} (segment) missing required 'input_path' parameter"
-            if "prompt" not in parameters:
-                return f"Step {step_num} (segment) missing required 'prompt' parameter"
-
-        elif tool_name == "export":
-            if "source_path" not in parameters:
-                return f"Step {step_num} (export) missing required 'source_path' parameter"
-            if "output_path" not in parameters:
-                return f"Step {step_num} (export) missing required 'output_path' parameter"
-            if "output_format" not in parameters:
-                return f"Step {step_num} (export) missing required 'output_format' parameter"
-
-        elif tool_name == "convert_format":
-            if "source_path" not in parameters:
-                return f"Step {step_num} (convert_format) missing required 'source_path' parameter"
-            if "output_path" not in parameters:
-                return f"Step {step_num} (convert_format) missing required 'output_path' parameter"
-            if "target_format" not in parameters:
-                return (
-                    f"Step {step_num} (convert_format) missing required 'target_format' parameter"
-                )
-
-        elif tool_name == "find_duplicates" and "path" not in parameters:
-            return f"Step {step_num} (find_duplicates) missing required 'path' parameter"
-
-        elif tool_name == "label_qa" and "path" not in parameters:
-            return f"Step {step_num} (label_qa) missing required 'path' parameter"
-
-        elif tool_name == "split_dataset":
-            if "path" not in parameters:
-                return f"Step {step_num} (split_dataset) missing required 'path' parameter"
-            if "output_path" not in parameters:
-                return f"Step {step_num} (split_dataset) missing required 'output_path' parameter"
-
-        elif tool_name == "run_script":
-            if "input_path" not in parameters:
-                return f"Step {step_num} (run_script) missing required 'input_path' parameter"
-
-        elif tool_name == "review":
-            if "source_path" not in parameters:
-                return f"Step {step_num} (review) missing required 'source_path' parameter"
-            if "image_dir" not in parameters:
-                return f"Step {step_num} (review) missing required 'image_dir' parameter"
+        # Unknown runtime tool but known to planner constants: keep permissive.
+        continue
 
     return None
 
@@ -721,6 +844,8 @@ def format_plan_for_display(plan: list[dict[str, Any]]) -> str:
                 v_str = ", ".join(str(item) for item in v) if isinstance(v, list) else str(v)
                 param_items.append(f"{k}={v_str}")
             lines.append(f"    Parameters: {', '.join(param_items)}")
+        if step.get("generated_code"):
+            lines.append("    Generated code: attached")
 
         lines.append("")  # Blank line between steps
 
@@ -757,21 +882,7 @@ async def generate_plan(state: PipelineState) -> dict[str, Any]:
     # Fast-path deterministic planning for clear multi-operation workflows.
     rule_based_steps = build_rule_based_plan(understanding)
     if rule_based_steps is not None:
-        plan: list[dict[str, Any]] = []
-        for i, step in enumerate(rule_based_steps):
-            plan.append(
-                {
-                    "id": f"step-{uuid4().hex[:8]}",
-                    "tool_name": step.get("tool_name", "unknown"),
-                    "parameters": step.get("parameters", {}),
-                    "description": step.get("description", f"Step {i + 1}"),
-                    "status": StepStatus.PENDING.value,
-                    "result": None,
-                    "error": None,
-                    "started_at": None,
-                    "completed_at": None,
-                }
-            )
+        plan = [_to_pipeline_step(step, i) for i, step in enumerate(rule_based_steps)]
 
         validation_error = validate_plan(plan)
         if validation_error is None:
@@ -850,21 +961,7 @@ Generate a JSON array of steps to accomplish this."""
                 continue
 
             # Convert to PipelineStep format
-            plan: list[dict[str, Any]] = []
-            for i, step in enumerate(steps_raw):
-                plan.append(
-                    {
-                        "id": f"step-{uuid4().hex[:8]}",
-                        "tool_name": step.get("tool_name", "unknown"),
-                        "parameters": step.get("parameters", {}),
-                        "description": step.get("description", f"Step {i + 1}"),
-                        "status": StepStatus.PENDING.value,
-                        "result": None,
-                        "error": None,
-                        "started_at": None,
-                        "completed_at": None,
-                    }
-                )
+            plan = [_to_pipeline_step(step, i) for i, step in enumerate(steps_raw)]
 
             # Validate the plan
             validation_error = validate_plan(plan)

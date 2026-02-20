@@ -28,12 +28,12 @@ export const STEP_TYPE_CONFIGS: Record<StepType, StepTypeConfig> = {
         label: "Model",
         type: "select",
         options: [
+          { value: "sam3", label: "SAM3 (highest quality)" },
           { value: "yolo11m", label: "YOLO11m (fast)" },
           { value: "yolo-world", label: "YOLO-World (open-vocab)" },
           { value: "rt-detr", label: "RT-DETR (accurate)" },
-          { value: "scrfd", label: "SCRFD (faces)" },
         ],
-        default: "yolo11m",
+        default: "sam3",
         description: "Detection model to use",
       },
       {
@@ -66,11 +66,11 @@ export const STEP_TYPE_CONFIGS: Record<StepType, StepTypeConfig> = {
         label: "Model",
         type: "select",
         options: [
-          { value: "sam2", label: "SAM2 (point prompt)" },
           { value: "sam3", label: "SAM3 (text prompt)" },
-          { value: "mobile-sam", label: "MobileSAM (fast)" },
+          { value: "sam2", label: "SAM2 (point/box prompt)" },
+          { value: "mobilesam", label: "MobileSAM (fast)" },
         ],
-        default: "sam2",
+        default: "sam3",
         description: "Segmentation model to use",
       },
       {
@@ -104,6 +104,17 @@ export const STEP_TYPE_CONFIGS: Record<StepType, StepTypeConfig> = {
     icon: "EyeOff",
     prefix: "[A]",
     configSchema: [
+      {
+        key: "model",
+        label: "Model",
+        type: "select",
+        options: [
+          { value: "sam3", label: "SAM3 (precise masks)" },
+          { value: "standard", label: "Standard (faster)" },
+        ],
+        default: "sam3",
+        description: "Anonymization model strategy",
+      },
       {
         key: "method",
         label: "Method",
@@ -207,6 +218,13 @@ export const STEP_TYPE_CONFIGS: Record<StepType, StepTypeConfig> = {
       },
     ],
   },
+  utility: {
+    type: "utility",
+    label: "Utility",
+    icon: "Wrench",
+    prefix: "[U]",
+    configSchema: [],
+  },
   custom: {
     type: "custom",
     label: "Custom",
@@ -254,6 +272,7 @@ export const TIME_FACTORS: Record<StepType, TimeFactors> = {
   anonymization: { baseMs: 20, modelMultiplier: 1.0, gpuSpeedup: 5 },
   classification: { baseMs: 30, modelMultiplier: 1.0, gpuSpeedup: 8 },
   export: { baseMs: 10, modelMultiplier: 1.0, gpuSpeedup: 1 },
+  utility: { baseMs: 20, modelMultiplier: 1.0, gpuSpeedup: 1 },
   custom: { baseMs: 100, modelMultiplier: 1.0, gpuSpeedup: 1 },
 };
 

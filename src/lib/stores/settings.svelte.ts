@@ -30,7 +30,7 @@ const SETTINGS_STATE_KEY = Symbol("settings-state");
 const STORAGE_KEY = "cloumask:settings";
 
 export const DEFAULT_SETTINGS: Settings = {
-  theme: "dark",
+  theme: "light",
   keyboardShortcuts: {
     toggleSidebar: "Ctrl+B",
     nextView: "Ctrl+]",

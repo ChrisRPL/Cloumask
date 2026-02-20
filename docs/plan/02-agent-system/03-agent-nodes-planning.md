@@ -9,6 +9,12 @@
 
 Implement the `understand` and `plan` nodes that process user input and generate execution plans. These nodes use the LLM (Qwen3 via Ollama) to interpret natural language requests and create structured pipeline steps.
 
+## Current Implementation Notes
+
+- Rule-based fast-path planning is intentionally scoped to common image/video workflows.
+- Point-cloud requests (`input_type=pointcloud`) now bypass regex/rule-based planning and use LLM understanding + planning so step/tool selection can include 3D-specific tools.
+- Plan validation accepts tools registered at runtime from the tool registry (not only a fixed allow-list), while preserving core compatibility checks for legacy planner outputs.
+
 ## Goals
 
 - [ ] `understand` node: Parse user intent and extract parameters

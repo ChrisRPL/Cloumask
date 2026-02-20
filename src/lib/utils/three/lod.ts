@@ -132,7 +132,6 @@ export class PointCloudOctree {
 		const childData = this.partitionPoints(
 			positions,
 			bounds,
-			childBounds,
 			colors,
 			intensities,
 			classifications,
@@ -198,7 +197,6 @@ export class PointCloudOctree {
 	private partitionPoints(
 		positions: Float32Array,
 		parentBounds: OctreeBounds,
-		childBounds: OctreeBounds[],
 		colors?: Float32Array,
 		intensities?: Float32Array,
 		classifications?: Uint8Array,

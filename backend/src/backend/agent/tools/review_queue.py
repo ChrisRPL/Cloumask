@@ -29,154 +29,15 @@ from backend.api.models.review import (
     ReviewStatus,
 )
 from backend.cv.utils.thumbnail import generate_thumbnail, get_image_dimensions
+from backend.data.yolo_annotations import (
+    build_annotation_index,
+    find_annotation_for_image,
+    find_yolo_labels_dir,
+    load_yolo_class_names,
+    parse_yolo_annotation_file,
+)
 
 logger = logging.getLogger(__name__)
-
-
-def parse_yolo_annotation(annotation_path: Path, img_width: int, img_height: int) -> list[dict]:
-    """
-    Parse YOLO format annotation file.
-
-    YOLO format: <class_id> <x_center> <y_center> <width> <height>
-    All values are normalized (0-1).
-
-    Args:
-        annotation_path: Path to .txt annotation file
-        img_width: Image width in pixels
-        img_height: Image height in pixels
-
-    Returns:
-        List of annotation dicts with normalized coordinates
-    """
-    annotations = []
-
-    # Default COCO classes - in production this should be configurable
-    coco_classes = [
-        "person",
-        "bicycle",
-        "car",
-        "motorcycle",
-        "airplane",
-        "bus",
-        "train",
-        "truck",
-        "boat",
-        "traffic light",
-        "fire hydrant",
-        "stop sign",
-        "parking meter",
-        "bench",
-        "bird",
-        "cat",
-        "dog",
-        "horse",
-        "sheep",
-        "cow",
-        "elephant",
-        "bear",
-        "zebra",
-        "giraffe",
-        "backpack",
-        "umbrella",
-        "handbag",
-        "tie",
-        "suitcase",
-        "frisbee",
-        "skis",
-        "snowboard",
-        "sports ball",
-        "kite",
-        "baseball bat",
-        "baseball glove",
-        "skateboard",
-        "surfboard",
-        "tennis racket",
-        "bottle",
-        "wine glass",
-        "cup",
-        "fork",
-        "knife",
-        "spoon",
-        "bowl",
-        "banana",
-        "apple",
-        "sandwich",
-        "orange",
-        "broccoli",
-        "carrot",
-        "hot dog",
-        "pizza",
-        "donut",
-        "cake",
-        "chair",
-        "couch",
-        "potted plant",
-        "bed",
-        "dining table",
-        "toilet",
-        "tv",
-        "laptop",
-        "mouse",
-        "remote",
-        "keyboard",
-        "cell phone",
-        "microwave",
-        "oven",
-        "toaster",
-        "sink",
-        "refrigerator",
-        "book",
-        "clock",
-        "vase",
-        "scissors",
-        "teddy bear",
-        "hair drier",
-        "toothbrush",
-    ]
-
-    try:
-        with annotation_path.open() as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-
-                parts = line.split()
-                if len(parts) < 5:
-                    continue
-
-                class_id = int(parts[0])
-                x_center = float(parts[1])
-                y_center = float(parts[2])
-                width = float(parts[3])
-                height = float(parts[4])
-                confidence = float(parts[5]) if len(parts) > 5 else 1.0
-
-                # Convert from center to top-left
-                x = x_center - (width / 2)
-                y = y_center - (height / 2)
-
-                # Get class name
-                class_name = (
-                    coco_classes[class_id] if class_id < len(coco_classes) else f"class_{class_id}"
-                )
-
-                annotations.append(
-                    {
-                        "label": class_name,
-                        "confidence": confidence,
-                        "bbox": {
-                            "x": max(0, min(1, x)),
-                            "y": max(0, min(1, y)),
-                            "width": max(0, min(1, width)),
-                            "height": max(0, min(1, height)),
-                        },
-                    }
-                )
-    except Exception as e:
-        logger.error(f"Error parsing annotation file {annotation_path}: {e}")
-
-    return annotations
 
 
 @register_tool
@@ -209,6 +70,13 @@ Reads YOLO-format annotations and creates review items with bounding boxes."""
             required=False,
             default=None,
         ),
+        ToolParameter(
+            name="project_id",
+            type=str,
+            description="Optional project ID to isolate review items",
+            required=False,
+            default=None,
+        ),
     ]
 
     async def execute(
@@ -216,6 +84,7 @@ Reads YOLO-format annotations and creates review items with bounding boxes."""
         source_path: str,
         image_dir: str,
         execution_id: str | None = None,
+        project_id: str | None = None,
     ) -> ToolResult:
         """
         Populate review queue from detection results.
@@ -224,6 +93,7 @@ Reads YOLO-format annotations and creates review items with bounding boxes."""
             source_path: Path to YOLO annotations directory
             image_dir: Path to source images
             execution_id: Optional execution ID for grouping
+            project_id: Optional project ID for grouping
 
         Returns:
             ToolResult with count of items created
@@ -237,12 +107,24 @@ Reads YOLO-format annotations and creates review items with bounding boxes."""
         if not image_p.exists():
             return error_result(f"Image directory not found: {image_dir}")
 
+        labels_dir = find_yolo_labels_dir(source_p)
+        if labels_dir is None:
+            return error_result(f"No YOLO labels found under source path: {source_path}")
+
+        class_names = load_yolo_class_names(source_p)
+        exact_index, normalized_index = build_annotation_index(labels_dir)
+
         # Generate execution ID if not provided
         if execution_id is None:
             execution_id = f"exec_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"
 
         created_count = 0
         valid_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}
+        images = sorted(
+            img_file
+            for img_file in image_p.rglob("*")
+            if img_file.is_file() and img_file.suffix.lower() in valid_extensions
+        )
 
         # Import here to avoid circular dependency
         from backend.api.routes.review import _review_items, _save_to_disk
@@ -250,13 +132,15 @@ Reads YOLO-format annotations and creates review items with bounding boxes."""
         self.report_progress(0, 100, "Scanning for images and annotations...")
 
         # Find all images and their corresponding annotations
-        for img_file in image_p.glob("*"):
-            if img_file.suffix.lower() not in valid_extensions:
-                continue
-
+        total_images = max(len(images), 1)
+        for index, img_file in enumerate(images, start=1):
             try:
                 # Look for corresponding annotation file
-                annotation_file = source_p / f"{img_file.stem}.txt"
+                annotation_file = find_annotation_for_image(
+                    img_file,
+                    exact_index,
+                    normalized_index,
+                )
 
                 # Get image dimensions
                 width, height = get_image_dimensions(img_file)
@@ -266,8 +150,8 @@ Reads YOLO-format annotations and creates review items with bounding boxes."""
 
                 # Parse annotations if they exist
                 annotations = []
-                if annotation_file.exists():
-                    yolo_annots = parse_yolo_annotation(annotation_file, width, height)
+                if annotation_file and annotation_file.exists():
+                    yolo_annots = parse_yolo_annotation_file(annotation_file, class_names)
 
                     for annot in yolo_annots:
                         annotation = Annotation(
@@ -284,6 +168,8 @@ Reads YOLO-format annotations and creates review items with bounding boxes."""
                 # Create review item
                 item = ReviewItem(
                     id=str(uuid.uuid4()),
+                    execution_id=execution_id,
+                    project_id=project_id,
                     file_path=str(img_file.absolute()),
                     file_name=img_file.name,
                     dimensions=ImageDimensions(width=width, height=height),
@@ -300,8 +186,8 @@ Reads YOLO-format annotations and creates review items with bounding boxes."""
                 created_count += 1
 
                 self.report_progress(
-                    created_count,
-                    created_count + 10,  # Approximate total
+                    index,
+                    total_images,
                     f"Created review item for {img_file.name} with {len(annotations)} annotations",
                 )
 
@@ -318,6 +204,7 @@ Reads YOLO-format annotations and creates review items with bounding boxes."""
             {
                 "created_count": created_count,
                 "execution_id": execution_id,
+                "project_id": project_id,
                 "source_path": str(source_p),
                 "image_dir": str(image_p),
             },

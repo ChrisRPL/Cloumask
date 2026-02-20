@@ -1,6 +1,7 @@
 <script lang="ts" module>
 	export interface ReviewQueueProps {
 		executionId?: string;
+		projectId?: string | null;
 		onDone?: () => void;
 		class?: string;
 	}
@@ -28,7 +29,8 @@
 	import AnnotationDetails from './details/AnnotationDetails.svelte';
 	import ActionBar from './actions/ActionBar.svelte';
 
-	let { executionId = 'current', onDone, class: className }: ReviewQueueProps = $props();
+	let { executionId = 'current', projectId = null, onDone, class: className }: ReviewQueueProps =
+		$props();
 
 	const isDesktopTauri = isTauri();
 	const safeConvertFileSrc: ((path: string) => string) | null =
@@ -147,6 +149,10 @@
 		}
 		// Browser mode: route local files through backend image endpoint.
 		return toLocalImageUrl(currentItem.filePath || currentItem.thumbnailUrl);
+	});
+	const fallbackImageUrl = $derived.by(() => {
+		if (!currentItem) return '';
+		return toLocalImageUrl(currentItem.thumbnailUrl);
 	});
 
 	// Keep selection valid when filters hide the current item.
@@ -681,34 +687,90 @@
 	// ============================================================================
 	// Data Loading
 	// ============================================================================
-	let lastLoadedExecutionId = $state<string | null>(null);
+	let lastLoadedContextKey = $state<string | null>(null);
+	let loadRequestSequence = 0;
 
-	async function loadReviewItems() {
+	function getContextKey(): string | null {
+		const execId = executionId?.trim();
+		if (!execId) return null;
+		const activeProjectId = projectId?.trim() ?? '__default__';
+		return `${activeProjectId}:${execId}`;
+	}
+
+	function resetReviewViewStateForContextSwitch() {
+		if (saveTimeout) {
+			clearTimeout(saveTimeout);
+			saveTimeout = null;
+		}
+		lastSavedAnnotations = '';
+		isEditMode = false;
+		drawingTool = 'select';
+		selectedAnnotationId = null;
+		zoom = 1;
+		undoStack = [];
+		redoStack = [];
+	}
+
+	async function loadReviewItems(expectedContextKey: string | null = getContextKey()) {
+		const execId = executionId?.trim();
+		if (!execId || !expectedContextKey) {
+			if (expectedContextKey === lastLoadedContextKey) {
+				reviewState.loadItems([]);
+				reviewState.setLoading(false);
+			}
+			return;
+		}
+
+		const requestSequence = ++loadRequestSequence;
 		reviewState.setLoading(true);
 		try {
-			const response = await fetch(
-				`http://localhost:8765/api/review/items?execution_id=${executionId}`
-			);
+			const params = new URLSearchParams({ execution_id: execId });
+			const activeProjectId = projectId?.trim();
+			if (activeProjectId) {
+				params.set('project_id', activeProjectId);
+			}
+
+			const response = await fetch(`http://localhost:8765/api/review/items?${params.toString()}`);
 			if (!response.ok) {
 				throw new Error(`Failed to load review items: ${response.statusText}`);
 			}
 			const data = await response.json();
 			const items = Array.isArray(data.items) ? (data.items as BackendReviewItem[]) : [];
+			if (requestSequence !== loadRequestSequence || expectedContextKey !== lastLoadedContextKey) {
+				return;
+			}
 			reviewState.loadItems(items.map(normalizeItem));
 		} catch (error) {
+			if (requestSequence !== loadRequestSequence || expectedContextKey !== lastLoadedContextKey) {
+				return;
+			}
 			console.error('Error loading review items:', error);
 			// TODO: Show error toast
 		} finally {
-			reviewState.setLoading(false);
+			if (requestSequence === loadRequestSequence && expectedContextKey === lastLoadedContextKey) {
+				reviewState.setLoading(false);
+			}
 		}
 	}
 
 	// Reload whenever execution context changes.
 	$effect(() => {
-		const execId = executionId?.trim();
-		if (!execId || execId === lastLoadedExecutionId) return;
-		lastLoadedExecutionId = execId;
-		void loadReviewItems();
+		const contextKey = getContextKey();
+		if (!contextKey) {
+			lastLoadedContextKey = null;
+			resetReviewViewStateForContextSwitch();
+			reviewState.loadItems([]);
+			reviewState.setLoading(false);
+			return;
+		}
+
+		if (contextKey === lastLoadedContextKey) return;
+
+		lastLoadedContextKey = contextKey;
+		resetReviewViewStateForContextSwitch();
+		reviewState.loadItems([]);
+		reviewState.setLoading(true);
+		void loadReviewItems(contextKey);
 	});
 
 	// Polling: Auto-refresh items during active execution
@@ -799,6 +861,7 @@
 					{#if currentItem}
 						<AnnotationCanvas
 							{imageUrl}
+							{fallbackImageUrl}
 							annotations={currentItem.annotations}
 							{selectedAnnotationId}
 							{isEditMode}

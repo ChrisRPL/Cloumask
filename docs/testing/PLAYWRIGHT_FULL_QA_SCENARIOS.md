@@ -97,6 +97,12 @@ This scenario suite covers:
 | G3 | State messaging | Trigger loading/offline/error states | Messaging is actionable and non-blocking where possible |
 | G4 | Visual consistency | Review typography, spacing, contrast, affordances | UI is coherent and readable across all main views |
 
+### H. Runtime Parity (Desktop vs Web)
+
+| ID | Scenario | Steps | Expected |
+|---|---|---|---|
+| H1 | Core flow parity across runtimes | Run once in Tauri (`npm run tauri:dev`) and once in Web+backend (`npm run backend:dev` + `npm run dev`) -> create thread -> send task -> review generated plan | Chat/planning flow works in both modes; runtime-specific limitations are explicit (not silent failure) |
+
 ## Latest Run Results (2026-02-11)
 
 ### Passed

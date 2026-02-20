@@ -1,6 +1,7 @@
 <script lang="ts" module>
 	export interface AnnotationCanvasProps {
 		imageUrl: string;
+		fallbackImageUrl?: string;
 		annotations: import('$lib/types/review').Annotation[];
 		selectedAnnotationId?: string | null;
 		isEditMode?: boolean;
@@ -15,7 +16,7 @@
 </script>
 
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
+	import { onDestroy } from 'svelte';
 	import { createImageAnnotator, type ImageAnnotator } from '@annotorious/annotorious';
 	import '@annotorious/annotorious/annotorious.css';
 	import { cn } from '$lib/utils.js';
@@ -23,6 +24,7 @@
 
 	let {
 		imageUrl,
+		fallbackImageUrl = '',
 		annotations = [],
 		selectedAnnotationId = null,
 		isEditMode = false,
@@ -40,6 +42,8 @@
 	let annotator: ImageAnnotator | null = $state(null);
 	let imageDimensions = $state({ width: 0, height: 0 });
 	let isImageLoaded = $state(false);
+	let hasImageError = $state(false);
+	let activeImageUrl = $state('');
 
 	// Convert our annotation format to W3C Web Annotation format
 	function toW3CAnnotation(ann: Annotation): object | null {
@@ -219,6 +223,15 @@
 		});
 	}
 
+	function resetCanvasState() {
+		if (annotator) {
+			annotator.destroy();
+			annotator = null;
+		}
+		imageDimensions = { width: 0, height: 0 };
+		isImageLoaded = false;
+	}
+
 	// Handle image load
 	function handleImageLoad() {
 		if (imageRef) {
@@ -230,6 +243,29 @@
 			initAnnotator();
 		}
 	}
+
+	function handleImageError() {
+		const fallback = fallbackImageUrl?.trim();
+		if (fallback && activeImageUrl !== fallback) {
+			activeImageUrl = fallback;
+			isImageLoaded = false;
+			hasImageError = false;
+			return;
+		}
+
+		hasImageError = true;
+		resetCanvasState();
+	}
+
+	// Reset image state when source changes.
+	$effect(() => {
+		imageUrl;
+		fallbackImageUrl;
+
+		hasImageError = false;
+		activeImageUrl = imageUrl;
+		resetCanvasState();
+	});
 
 	// Sync edit mode
 	$effect(() => {
@@ -257,10 +293,7 @@
 
 	// Cleanup
 	onDestroy(() => {
-		if (annotator) {
-			annotator.destroy();
-			annotator = null;
-		}
+		resetCanvasState();
 	});
 
 	// Handle keyboard shortcuts for canvas
@@ -289,7 +322,7 @@
 	aria-label="Annotation canvas"
 	onkeydown={handleKeydown}
 >
-	{#if !isImageLoaded}
+	{#if !isImageLoaded && !hasImageError}
 		<div class="absolute inset-0 flex items-center justify-center">
 			<div class="flex flex-col items-center gap-3 text-muted-foreground">
 				<div
@@ -300,16 +333,26 @@
 		</div>
 	{/if}
 
+	{#if hasImageError}
+		<div class="absolute inset-0 flex items-center justify-center">
+			<div class="flex flex-col items-center gap-2 text-muted-foreground">
+				<span class="text-sm font-mono">Failed to load image</span>
+				<span class="text-xs">Try selecting another review item</span>
+			</div>
+		</div>
+	{/if}
+
 	<div
 		class="flex items-center justify-center w-full h-full overflow-auto"
 		style="transform: scale({zoom}); transform-origin: center;"
 	>
 		<img
 			bind:this={imageRef}
-			src={imageUrl}
+			src={activeImageUrl}
 			alt="Annotation target"
 			class={cn('max-w-full max-h-full object-contain', !isImageLoaded && 'opacity-0')}
 			onload={handleImageLoad}
+			onerror={handleImageError}
 		/>
 	</div>
 
