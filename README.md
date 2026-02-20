@@ -43,6 +43,7 @@ tests/               Playwright end-to-end tests
 
 ```bash
 npm install
+# Creates backend/.venv and installs core + agent + CV Python dependencies
 npm run backend:install
 ```
 
