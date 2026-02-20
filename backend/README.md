@@ -23,14 +23,14 @@ source .venv/bin/activate  # Linux/macOS
 # Upgrade pip
 pip install --upgrade pip
 
-# Install runtime dependencies
-pip install -r requirements.txt
-
-# OR install with development tools
-pip install -r requirements-dev.txt
+# Install sidecar runtime dependencies (core + agent + CV)
+pip install -r requirements-agent.txt -r requirements-cv.txt
 
 # Install the package itself (for imports)
 pip install -e .
+
+# Optional: development tooling (pytest, ruff, mypy)
+pip install -r requirements-dev.txt
 ```
 
 ## Running the Server
