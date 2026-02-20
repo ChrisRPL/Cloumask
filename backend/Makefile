@@ -1,8 +1,8 @@
 .PHONY: install dev test lint type-check format run clean
 
-# Install runtime dependencies
+# Install sidecar runtime dependencies (core + agent + CV)
 install:
-	pip install -r requirements.txt
+	pip install -r requirements-agent.txt -r requirements-cv.txt
 	pip install -e .
 
 # Install development dependencies
