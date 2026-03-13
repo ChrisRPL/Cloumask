@@ -15,6 +15,7 @@
 	import { getUIState } from '$lib/stores/ui.svelte';
 	import {
 		createThread,
+		listThreads,
 		sendMessage,
 		closeThread,
 		checkLLMReady,
@@ -228,10 +229,17 @@
 
 			let threadId = agent.threadId;
 
-			// Create new thread if needed
+			// Prefer the latest resumable backend thread before creating a new one.
+			if (!threadId) {
+				const existingThreads = await listThreads(1).catch(() => []);
+				threadId = existingThreads[0]?.thread_id ?? null;
+			}
+
 			if (!threadId) {
 				const thread = await createThread();
 				threadId = thread.thread_id;
+				agent.setThreadId(threadId);
+			} else {
 				agent.setThreadId(threadId);
 			}
 
