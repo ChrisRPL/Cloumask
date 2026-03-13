@@ -13,14 +13,17 @@ import asyncio
 import contextlib
 import json
 import logging
+import os
 import time
 import uuid
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 from sse_starlette.sse import EventSourceResponse
 
+from backend.agent.checkpoints import CheckpointManager
 from backend.agent.graph import compile_agent, run_agent
 from backend.agent.state import (
     PipelineState,
@@ -56,6 +59,7 @@ router = APIRouter(prefix="/api/chat", tags=["streaming"])
 THREAD_TIMEOUT_SECONDS = 3600  # 1 hour TTL for idle threads
 CLEANUP_INTERVAL_SECONDS = 300  # Run cleanup every 5 minutes
 MAX_CONNECTIONS_PER_THREAD = 1  # Only allow one SSE connection per thread
+CHECKPOINT_DB_PATH = os.getenv("CLOUMASK_CHECKPOINT_DB", str(Path("data") / "checkpoints.db"))
 
 
 class ThreadState:
@@ -88,11 +92,79 @@ class ThreadState:
 # Thread storage with proper encapsulation
 _threads: dict[str, ThreadState] = {}
 _cleanup_task: asyncio.Task[None] | None = None
+_checkpoint_manager: CheckpointManager | None = None
+
+
+def _get_checkpoint_db_path() -> str:
+    """Return the configured checkpoint database path."""
+    if CHECKPOINT_DB_PATH == ":memory:":
+        return CHECKPOINT_DB_PATH
+
+    db_path = Path(CHECKPOINT_DB_PATH)
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    return str(db_path)
+
+
+def _get_checkpoint_manager() -> CheckpointManager:
+    """Return a lazily constructed checkpoint manager."""
+    global _checkpoint_manager
+    if _checkpoint_manager is None:
+        _checkpoint_manager = CheckpointManager(_get_checkpoint_db_path())
+    return _checkpoint_manager
+
+
+def _extract_persisted_state(thread_id: str) -> dict[str, Any]:
+    """Load the latest persisted pipeline state for a thread."""
+    snapshot = _get_checkpoint_manager().get_snapshot(thread_id)
+    if not snapshot:
+        return {}
+
+    checkpoint_data = snapshot.get("checkpoint_data")
+    if not isinstance(checkpoint_data, dict):
+        return {}
+
+    channel_values = checkpoint_data.get("channel_values")
+    if isinstance(channel_values, dict):
+        return dict(channel_values)
+
+    return dict(checkpoint_data)
+
+
+def _rehydrate_thread(thread_id: str) -> ThreadState | None:
+    """Rebuild in-memory thread state from persisted metadata/checkpoints."""
+    manager = _get_checkpoint_manager()
+    if not manager.saver.get_thread(thread_id):
+        return None
+
+    thread = ThreadState(thread_id)
+    thread.pipeline_state = _extract_persisted_state(thread_id)
+    _threads[thread_id] = thread
+    _sync_legacy_exports()
+    return thread
+
+
+def _persist_thread_state(
+    thread_id: str,
+    state: dict[str, Any],
+    *,
+    metadata: dict[str, Any] | None = None,
+) -> None:
+    """Save the latest thread state for restart-safe resume."""
+    manager = _get_checkpoint_manager()
+    manager.create_thread(thread_id)
+    manager.save_snapshot(
+        thread_id,
+        f"state-{uuid.uuid4()}",
+        {"channel_values": state},
+        metadata=metadata,
+    )
 
 
 def _get_thread(thread_id: str) -> ThreadState | None:
     """Get thread state, returning None if not found."""
     thread = _threads.get(thread_id)
+    if thread is None:
+        thread = _rehydrate_thread(thread_id)
     if thread:
         thread.touch()
     return thread
@@ -107,13 +179,16 @@ def _get_or_create_thread(thread_id: str) -> ThreadState:
     return thread
 
 
-def _delete_thread(thread_id: str) -> None:
-    """Delete thread and cancel any active task."""
+def _delete_thread(thread_id: str, *, delete_persisted: bool = False) -> None:
+    """Delete in-memory thread state and optionally purge persisted data."""
     thread = _threads.pop(thread_id, None)
     if thread:
         thread.cancel_event.set()
         if thread.active_task and not thread.active_task.done():
             thread.active_task.cancel()
+    if delete_persisted:
+        _get_checkpoint_manager().delete_thread(thread_id)
+    _sync_legacy_exports()
 
 
 async def _cleanup_expired_threads() -> None:
@@ -123,7 +198,7 @@ async def _cleanup_expired_threads() -> None:
         expired = [tid for tid, thread in _threads.items() if thread.is_expired()]
         for tid in expired:
             logger.info(f"Cleaning up expired thread {tid}")
-            _delete_thread(tid)
+            _delete_thread(tid, delete_persisted=False)
 
 
 def _ensure_cleanup_task() -> None:
@@ -316,6 +391,7 @@ async def create_thread() -> ThreadInfo:
     _ensure_cleanup_task()
 
     thread_id = str(uuid.uuid4())
+    _get_checkpoint_manager().create_thread(thread_id)
     _get_or_create_thread(thread_id)
 
     # Sync legacy exports for tests
@@ -368,7 +444,7 @@ async def close_thread(thread_id: str) -> dict[str, str]:
     Returns:
         Confirmation message.
     """
-    _delete_thread(thread_id)
+    _delete_thread(thread_id, delete_persisted=True)
 
     # Sync legacy exports for tests
     _sync_legacy_exports()
@@ -433,6 +509,7 @@ async def process_agent_request(
 
     queue = thread.queue
     batcher = EventBatcher(batch_window_ms=100)
+    manager = _get_checkpoint_manager()
 
     try:
         # Emit thinking event
@@ -454,6 +531,16 @@ async def process_agent_request(
                     }
                 )
             )
+            if thread.pipeline_state:
+                _persist_thread_state(
+                    thread_id,
+                    {
+                        **thread.pipeline_state,
+                        "awaiting_user": False,
+                    },
+                    metadata={"status": "cancelled"},
+                )
+            manager.mark_cancelled(thread_id)
             # Reset thread state for new requests
             thread.pipeline_state = {}
             thread.last_emitted_message_count = 0
@@ -469,6 +556,7 @@ async def process_agent_request(
             initial_state = dict(thread.pipeline_state)  # type: ignore[assignment]
             # Update state with user decision
             _apply_user_decision(initial_state, decision, content, plan_edits)
+            thread.pipeline_state = dict(initial_state)
         else:
             # New request - create initial state
             pipeline_id = str(uuid.uuid4())
@@ -481,8 +569,11 @@ async def process_agent_request(
             thread.last_emitted_checkpoint_id = None
             thread.plan_approved_emitted = False
 
+        manager.create_thread(thread_id)
+        _persist_thread_state(thread_id, thread.pipeline_state)
+
         # Run agent and stream events
-        async with compile_agent(":memory:") as compiled:
+        async with compile_agent(_get_checkpoint_db_path()) as compiled:
             async for state_update in run_agent(compiled, initial_state, thread_id):
                 # Merge partial updates into full thread state so resume/approval
                 # decisions retain plan + metadata across node outputs.
@@ -490,6 +581,7 @@ async def process_agent_request(
                     **thread.pipeline_state,
                     **state_update,
                 }
+                _persist_thread_state(thread_id, thread.pipeline_state)
 
                 # Convert state updates to SSE events with deduplication
                 events = state_to_events(thread.pipeline_state, thread_id, thread)
@@ -505,7 +597,11 @@ async def process_agent_request(
 
                 # Check if we should pause for user input
                 if thread.pipeline_state.get("awaiting_user", False):
+                    manager.mark_active(thread_id)
                     break
+
+            else:
+                manager.mark_completed(thread_id)
 
     except asyncio.CancelledError:
         logger.info(f"Agent request cancelled for thread {thread_id}")
