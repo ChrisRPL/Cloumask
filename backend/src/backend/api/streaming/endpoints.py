@@ -262,6 +262,26 @@ class ThreadInfo(BaseModel):
     total_steps: int = 0
 
 
+class ThreadSummary(BaseModel):
+    """Summary of a resumable chat thread."""
+
+    thread_id: str
+    title: str | None = None
+    status: str
+    awaiting_user: bool = False
+    current_step: int = 0
+    total_steps: int = 0
+    last_message: str = ""
+    updated_at: str | None = None
+    created_at: str | None = None
+
+
+class ThreadListResponse(BaseModel):
+    """List of resumable chat threads."""
+
+    threads: list[ThreadSummary]
+
+
 @router.get("/stream/{thread_id}")
 async def stream_chat(
     thread_id: str,
@@ -400,6 +420,27 @@ async def create_thread() -> ThreadInfo:
     return ThreadInfo(
         thread_id=thread_id,
         created=True,
+    )
+
+
+@router.get("/threads")
+async def list_threads(limit: int = 20) -> ThreadListResponse:
+    """
+    List active resumable chat threads.
+
+    Args:
+        limit: Maximum number of threads to return.
+
+    Returns:
+        Ordered list of active resumable thread summaries.
+    """
+    manager = _get_checkpoint_manager()
+    threads = manager.list_active_threads()
+    if limit > 0:
+        threads = threads[:limit]
+
+    return ThreadListResponse(
+        threads=[ThreadSummary.model_validate(thread) for thread in threads],
     )
 
 
