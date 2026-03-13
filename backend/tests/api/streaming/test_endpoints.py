@@ -94,7 +94,6 @@ class TestGetThreadInfo:
         assert data["thread_id"] == thread_id
         assert data["created"] is False  # Not a new thread
 
-    @pytest.mark.xfail(reason="thread info only lives in memory today")
     def test_get_thread_info_restores_persisted_state_after_memory_reset(
         self,
         client: TestClient,
@@ -671,6 +670,69 @@ class TestThreadState:
 
 class TestProcessAgentRequestStatePersistence:
     """Regression tests for state persistence across approval/resume."""
+
+    @pytest.mark.asyncio
+    async def test_resume_rehydrates_persisted_state_after_memory_reset(
+        self,
+        checkpoint_manager: CheckpointManager,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Approval resume should load persisted state even after in-memory reset."""
+        thread_id = "thread-rehydrate-resume"
+        checkpoint_manager.create_thread(thread_id, title="Resume thread")
+        checkpoint_manager.save_snapshot(
+            thread_id,
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "messages": [{"role": "assistant", "content": "Approve this plan"}],
+                    "plan": [{"id": "step-1", "tool_name": "scan_directory"}],
+                    "plan_approved": False,
+                    "current_step": 0,
+                    "checkpoints": [],
+                    "awaiting_user": True,
+                    "metadata": {"pipeline_id": "pipe-rehydrate"},
+                }
+            },
+        )
+
+        _event_queues.clear()
+        _thread_states.clear()
+        _threads.clear()
+
+        captured_resume_initial: dict[str, object] = {}
+
+        @asynccontextmanager
+        async def fake_compile_agent(_db_path: str):
+            yield object()
+
+        async def fake_run_agent_resume(_compiled, initial_state, _thread_id):
+            captured_resume_initial.update(initial_state)
+            yield {
+                "plan_approved": True,
+                "awaiting_user": False,
+                "current_step": 0,
+                "plan": initial_state.get("plan", []),
+            }
+
+        monkeypatch.setattr(
+            "backend.api.streaming.endpoints.compile_agent",
+            fake_compile_agent,
+        )
+        monkeypatch.setattr(
+            "backend.api.streaming.endpoints.run_agent",
+            fake_run_agent_resume,
+        )
+
+        await process_agent_request(
+            thread_id,
+            "Approved",
+            decision=UserDecision.APPROVE,
+        )
+
+        assert captured_resume_initial.get("plan")
+        assert captured_resume_initial.get("plan_approved") is True
+        assert captured_resume_initial.get("awaiting_user") is False
 
     @pytest.mark.asyncio
     async def test_resume_keeps_plan_after_partial_updates(self, monkeypatch) -> None:
