@@ -14,10 +14,17 @@ function createFetchMock(options?: {
 	llmReady?: boolean;
 	llmReadyAfterPull?: boolean;
 	failThreadCreate?: boolean;
+	threadList?: Array<{
+		thread_id: string;
+		awaiting_user?: boolean;
+		current_step?: number;
+		total_steps?: number;
+	}>;
 }) {
 	const llmReady = options?.llmReady ?? true;
 	const llmReadyAfterPull = options?.llmReadyAfterPull ?? llmReady;
 	const failThreadCreate = options?.failThreadCreate ?? false;
+	const threadList = options?.threadList ?? [];
 	let modelPulled = false;
 
 	return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -73,6 +80,22 @@ function createFetchMock(options?: {
 				awaiting_user: false,
 				current_step: 0,
 				total_steps: 0,
+			});
+		}
+
+		if (url.endsWith('/api/chat/threads') && method === 'GET') {
+			return jsonResponse({
+				threads: threadList.map((thread) => ({
+					title: null,
+					status: 'active',
+					last_message: '',
+					updated_at: '2026-03-13T12:00:00.000Z',
+					created_at: '2026-03-13T12:00:00.000Z',
+					awaiting_user: false,
+					current_step: 0,
+					total_steps: 0,
+					...thread,
+				})),
 			});
 		}
 
@@ -195,5 +218,41 @@ describe('App user flows', () => {
 		const input = screen.getByLabelText('Message input') as HTMLTextAreaElement;
 		expect(input.disabled).toBe(false);
 		expect(input.placeholder).toContain('Reconnecting');
+	});
+
+	it.fails('reuses latest resumable backend thread before creating a new one', async () => {
+		localStorage.setItem('cloumask:setup', 'complete');
+		const fetchMock = createFetchMock({
+			threadList: [
+				{
+					thread_id: 'thread-existing-1',
+					awaiting_user: true,
+					current_step: 1,
+					total_steps: 3,
+				},
+			],
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		render(AppTestHost);
+
+		await waitFor(() => {
+			expect(screen.getAllByText('Chat').length).toBeGreaterThan(0);
+		});
+
+		const createdThreadCalls = fetchMock.mock.calls.filter(([url, init]) => {
+			const requestUrl = typeof url === 'string' ? url : url.toString();
+			const method = (init?.method ?? 'GET').toUpperCase();
+			return requestUrl.endsWith('/api/chat/threads') && method === 'POST';
+		});
+
+		const listedThreadCalls = fetchMock.mock.calls.filter(([url, init]) => {
+			const requestUrl = typeof url === 'string' ? url : url.toString();
+			const method = (init?.method ?? 'GET').toUpperCase();
+			return requestUrl.endsWith('/api/chat/threads') && method === 'GET';
+		});
+
+		expect(listedThreadCalls.length).toBeGreaterThan(0);
+		expect(createdThreadCalls).toHaveLength(0);
 	});
 });
