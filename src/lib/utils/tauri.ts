@@ -274,6 +274,19 @@ export interface ThreadInfo {
 	total_steps: number;
 }
 
+/** Summary of a resumable chat thread. */
+export interface ThreadSummary {
+	thread_id: string;
+	title: string | null;
+	status: string;
+	awaiting_user: boolean;
+	current_step: number;
+	total_steps: number;
+	last_message: string;
+	updated_at: string | null;
+	created_at: string | null;
+}
+
 /** User decision for plan approval or checkpoint */
 export type UserDecision = 'approve' | 'edit' | 'cancel' | 'retry';
 
@@ -399,6 +412,20 @@ export async function createThread(): Promise<ThreadInfo> {
 	}
 
 	return response.json();
+}
+
+/**
+ * List resumable chat threads, newest first.
+ */
+export async function listThreads(limit = 20): Promise<ThreadSummary[]> {
+	const response = await fetch(`${SIDECAR_URL}/api/chat/threads?limit=${limit}`);
+
+	if (!response.ok) {
+		throw new Error(`Failed to list threads: ${response.statusText}`);
+	}
+
+	const data = (await response.json()) as { threads?: ThreadSummary[] };
+	return Array.isArray(data.threads) ? data.threads : [];
 }
 
 /**
