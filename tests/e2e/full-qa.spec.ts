@@ -51,39 +51,26 @@ test.describe('A. Setup Wizard & Onboarding', () => {
     test('T-001: App loads and shows SetupWizard on fresh start', async ({ page }) => {
         await clearStorage(page);
         await page.goto('/');
-        await page.waitForTimeout(1500);
+        await expect(page.getByRole('heading', { name: 'Setting up Cloumask' })).toBeVisible();
+        await expect(page.getByText('Preparing your desktop app. No CLI configuration required.')).toBeVisible();
+        await expect(page.getByRole('button', { name: /skip setup/i })).toBeVisible();
         await snap(page, 'T-001-setup-wizard-visible');
-
-        // Check for setup wizard heading
-        const heading = page.locator('h1');
-        await expect(heading).toBeVisible();
-        const headingText = await heading.textContent();
-        console.log(`[T-001] Heading text: "${headingText}"`);
-        await snap(page, 'T-001-heading-check');
     });
 
     test('T-002: Skip setup in dev mode', async ({ page }) => {
         await clearStorage(page);
         await page.goto('/');
-        await page.waitForTimeout(2000);
+        const skipBtn = page.getByRole('button', { name: /skip setup/i });
+        await expect(skipBtn).toBeVisible();
         await snap(page, 'T-002-before-skip');
 
-        // Look for skip button
-        const skipBtn = page.locator('button', { hasText: /skip setup/i });
-        const skipVisible = await skipBtn.isVisible().catch(() => false);
-        console.log(`[T-002] Skip button visible: ${skipVisible}`);
-        await snap(page, 'T-002-skip-btn-state');
-
-        if (skipVisible) {
-            await skipBtn.click();
-            await page.waitForTimeout(1000);
-            await snap(page, 'T-002-after-skip');
-
-            // Should see sidebar / main app
-            const sidebar = page.locator('[class*="sidebar"], nav, [role="navigation"]').first();
-            const sidebarVisible = await sidebar.isVisible().catch(() => false);
-            console.log(`[T-002] Sidebar visible after skip: ${sidebarVisible}`);
-        }
+        await skipBtn.click();
+        await expect(page.getByRole('heading', { name: 'Setting up Cloumask' })).toBeHidden();
+        await expect(page.getByRole('heading', { name: 'Chat' })).toBeVisible();
+        await expect(page.getByLabel('Chat messages')).toBeVisible();
+        await expect(page.getByLabel('Message input')).toBeVisible();
+        await expect(page.getByRole('button', { name: /select project/i })).toBeVisible();
+        await snap(page, 'T-002-after-skip');
         await snap(page, 'T-002-final');
     });
 
@@ -227,19 +214,14 @@ test.describe('C. Chat View', () => {
     });
 
     test('T-010: Chat view renders correctly', async ({ page }) => {
+        await expect(page.getByRole('heading', { name: 'Chat' })).toBeVisible();
+        await expect(page.getByText(/connected|disconnected/i)).toBeVisible();
+        await expect(page.getByLabel('Chat messages')).toBeVisible();
+        await expect(page.getByText('No messages yet')).toBeVisible();
+        await expect(page.getByLabel('Message input')).toBeEditable();
+        await expect(page.getByRole('button', { name: 'Send message' })).toBeDisabled();
+        await expect(page.getByRole('button', { name: 'Clear' })).toBeVisible();
         await snap(page, 'T-010-chat-view');
-
-        // Check for input field
-        const input = page.locator('input[type="text"], textarea, [contenteditable]').first();
-        const inputVisible = await input.isVisible().catch(() => false);
-        console.log(`[T-010] Chat input visible: ${inputVisible}`);
-
-        // Check for any message area
-        const messageArea = page.locator('[class*="message"], [class*="chat"], [class*="conversation"]').first();
-        const msgAreaVisible = await messageArea.isVisible().catch(() => false);
-        console.log(`[T-010] Message area visible: ${msgAreaVisible}`);
-
-        await snap(page, 'T-010-chat-elements');
     });
 
     test('T-012: LLM status display', async ({ page }) => {
@@ -814,17 +796,25 @@ test.describe('J. UI/UX Quality', () => {
     test('T-100: Project selector', async ({ page }) => {
         await skipSetup(page);
         await page.goto('/');
-        await page.waitForTimeout(1500);
+        const projectSelector = page.getByRole('button', { name: /select project/i });
+        await expect(projectSelector).toBeVisible();
         await snap(page, 'T-100-project-selector-before');
 
-        // Look for project selector
-        const projectSelector = page.locator('[class*="project"], [class*="Project"]').first();
-        const selectorVisible = await projectSelector.isVisible().catch(() => false);
-        console.log(`[T-100] Project selector visible: ${selectorVisible}`);
-        if (selectorVisible) {
-            await projectSelector.click();
-            await page.waitForTimeout(500);
-            await snap(page, 'T-100-project-selector-open');
-        }
+        await projectSelector.click();
+        await expect(page.getByText('New Project...')).toBeVisible();
+        await snap(page, 'T-100-project-selector-open');
+
+        await page.getByText('New Project...').click();
+        await expect(page.getByRole('heading', { name: 'New Project' })).toBeVisible();
+
+        const nameInput = page.getByLabel('Project Name');
+        const pathInput = page.getByLabel('Project Path');
+
+        await nameInput.fill('Street Anonymization');
+        await expect(pathInput).toHaveValue('/data/street-anonymization');
+        await page.getByRole('button', { name: 'Create Project' }).click();
+
+        await expect(page.getByRole('heading', { name: 'New Project' })).toBeHidden();
+        await expect(page.getByRole('button', { name: /street anonymization/i })).toBeVisible();
     });
 });
