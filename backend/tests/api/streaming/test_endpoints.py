@@ -1,12 +1,15 @@
 """Tests for SSE streaming endpoints."""
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
+from backend.agent.checkpoints import CheckpointManager
 from backend.agent.state import UserDecision
 from backend.api.main import app
+from backend.api.streaming import endpoints as streaming_endpoints
 from backend.api.streaming.endpoints import (
     ThreadState,
     process_agent_request,
@@ -33,6 +36,16 @@ def cleanup_state() -> None:
     _event_queues.clear()
     _thread_states.clear()
     _threads.clear()
+
+
+@pytest.fixture
+def checkpoint_manager(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> CheckpointManager:
+    """Provide an isolated checkpoint manager for endpoint persistence tests."""
+    db_path = tmp_path / "streaming-endpoints.db"
+    manager = CheckpointManager(str(db_path))
+    monkeypatch.setattr(streaming_endpoints, "CHECKPOINT_DB_PATH", str(db_path), raising=False)
+    monkeypatch.setattr(streaming_endpoints, "_checkpoint_manager", manager, raising=False)
+    return manager
 
 
 class TestCreateThread:
@@ -80,6 +93,45 @@ class TestGetThreadInfo:
         assert response.status_code == 200
         assert data["thread_id"] == thread_id
         assert data["created"] is False  # Not a new thread
+
+    @pytest.mark.xfail(reason="thread info only lives in memory today")
+    def test_get_thread_info_restores_persisted_state_after_memory_reset(
+        self,
+        client: TestClient,
+        checkpoint_manager: CheckpointManager,
+    ) -> None:
+        """Thread info should rehydrate from persisted checkpoint state after restart."""
+        create_response = client.post("/api/chat/threads")
+        thread_id = create_response.json()["thread_id"]
+
+        checkpoint_manager.create_thread(thread_id, title="Persisted thread")
+        checkpoint_manager.save_snapshot(
+            thread_id,
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "plan": [
+                        {"id": "step-1", "tool_name": "scan_directory", "status": "pending"},
+                    ],
+                    "current_step": 0,
+                    "awaiting_user": True,
+                    "metadata": {"pipeline_id": "pipe-persisted"},
+                }
+            },
+        )
+
+        _event_queues.clear()
+        _thread_states.clear()
+        _threads.clear()
+
+        response = client.get(f"/api/chat/threads/{thread_id}")
+        data = response.json()
+
+        assert response.status_code == 200
+        assert data["thread_id"] == thread_id
+        assert data["awaiting_user"] is True
+        assert data["current_step"] == 0
+        assert data["total_steps"] == 1
 
 
 class TestCloseThread:
