@@ -133,6 +133,59 @@ class TestGetThreadInfo:
         assert data["total_steps"] == 1
 
 
+class TestListThreads:
+    """Tests for thread listing endpoint."""
+
+    @pytest.mark.xfail(reason="thread listing endpoint not implemented yet")
+    def test_list_threads_returns_resumable_threads(
+        self,
+        client: TestClient,
+        checkpoint_manager: CheckpointManager,
+    ) -> None:
+        """List threads should return active resumable threads ordered by recency."""
+        checkpoint_manager.create_thread("thread-older", title="Older")
+        checkpoint_manager.save_snapshot(
+            "thread-older",
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "plan": [{"id": "step-1", "tool_name": "scan_directory", "status": "completed"}],
+                    "current_step": 1,
+                    "awaiting_user": False,
+                    "messages": [{"role": "assistant", "content": "Older thread"}],
+                }
+            },
+        )
+
+        checkpoint_manager.create_thread("thread-latest", title="Latest")
+        checkpoint_manager.save_snapshot(
+            "thread-latest",
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "plan": [{"id": "step-2", "tool_name": "detect", "status": "pending"}],
+                    "current_step": 0,
+                    "awaiting_user": True,
+                    "messages": [{"role": "assistant", "content": "Latest thread"}],
+                }
+            },
+        )
+
+        checkpoint_manager.create_thread("thread-empty", title="No snapshot")
+        checkpoint_manager.mark_completed("thread-older")
+
+        _event_queues.clear()
+        _thread_states.clear()
+        _threads.clear()
+
+        response = client.get("/api/chat/threads")
+        data = response.json()
+
+        assert response.status_code == 200
+        assert [thread["thread_id"] for thread in data["threads"]] == ["thread-latest"]
+        assert data["threads"][0]["awaiting_user"] is True
+        assert data["threads"][0]["total_steps"] == 1
+
 class TestCloseThread:
     """Tests for thread close endpoint."""
 
