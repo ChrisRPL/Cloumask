@@ -136,7 +136,6 @@ class TestGetThreadInfo:
 class TestListThreads:
     """Tests for thread listing endpoint."""
 
-    @pytest.mark.xfail(reason="thread listing endpoint not implemented yet")
     def test_list_threads_returns_resumable_threads(
         self,
         client: TestClient,
