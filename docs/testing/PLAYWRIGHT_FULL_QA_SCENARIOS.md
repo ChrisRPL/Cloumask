@@ -1,23 +1,36 @@
 # Cloumask Full QA Scenarios (Playwright Manual Runbook)
 
-Last updated: 2026-02-11
+Last updated: 2026-03-13
 
 ## Scope
 
-This scenario suite covers:
-- creating new projects
-- chatting with the agent and validating plan output
-- editing plans (including custom script steps)
-- executing plans and validating runtime behavior
-- review queue workflows (preview, approve, reject, edit)
-- point cloud viewer workflows and file flow
-- UX/UI quality checks
+This file is the manual QA target, not a claim that all flows are fully automated today.
+
+Current automated Playwright coverage is still smoke-level for many browser flows:
+- setup/onboarding visibility and skip path
+- keyboard navigation shell checks
+- chat shell rendering and basic input presence
+- review seeding/load smoke
+- settings shell smoke
+- project selector creation path
+- backend API smoke checks
+
+These flows still require manual verification before release because the current browser suite does not yet prove end-user success end-to-end:
+- project persistence after reload
+- chat -> plan generation -> approval transitions
+- plan editing correctness and execution parity
+- review editing/undo/redo fidelity
+- point cloud load/export behavior
+- responsive/runtime parity across Tauri and web
 
 ## Environment
 
 - frontend: `http://127.0.0.1:5173`
 - backend: `http://127.0.0.1:8765`
 - browser: Chromium (headed)
+- Playwright projects:
+  - `chromium`: browser UX smoke
+  - `api`: backend-only HTTP smoke
 - clear localStorage before first run
 - reset setup state between major flows as needed
 
