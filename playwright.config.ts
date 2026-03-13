@@ -1,5 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const apiSuitePattern = /\bI\. Backend API\b/;
+
 export default defineConfig({
     testDir: './tests/e2e',
     fullyParallel: false,
@@ -20,7 +22,12 @@ export default defineConfig({
     projects: [
         {
             name: 'chromium',
+            grepInvert: apiSuitePattern,
             use: { ...devices['Desktop Chrome'] },
+        },
+        {
+            name: 'api',
+            grep: apiSuitePattern,
         },
     ],
 });
