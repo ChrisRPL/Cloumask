@@ -14,6 +14,7 @@ function createFetchMock(options?: {
 	llmReady?: boolean;
 	llmReadyAfterPull?: boolean;
 	failThreadCreate?: boolean;
+	threadStateDelayMs?: number;
 	threadList?: Array<{
 		thread_id: string;
 		awaiting_user?: boolean;
@@ -25,6 +26,7 @@ function createFetchMock(options?: {
 	const llmReady = options?.llmReady ?? true;
 	const llmReadyAfterPull = options?.llmReadyAfterPull ?? llmReady;
 	const failThreadCreate = options?.failThreadCreate ?? false;
+	const threadStateDelayMs = options?.threadStateDelayMs ?? 0;
 	const threadList = options?.threadList ?? [];
 	const threadStates = options?.threadStates ?? {};
 	let modelPulled = false;
@@ -103,6 +105,9 @@ function createFetchMock(options?: {
 
 		if (url.includes('/api/chat/threads/') && url.endsWith('/state') && method === 'GET') {
 			const threadId = url.split('/api/chat/threads/')[1]?.replace('/state', '') ?? '';
+			if (threadStateDelayMs > 0) {
+				await new Promise((resolve) => setTimeout(resolve, threadStateDelayMs));
+			}
 			return jsonResponse({
 				thread_id: threadId,
 				state: threadStates[threadId] ?? {},
@@ -636,6 +641,74 @@ describe('App user flows', () => {
 			expect(screen.getByText('Pick up where you left off.')).toBeTruthy();
 		});
 		expect(screen.getAllByText(resumeMessage)).toHaveLength(1);
+
+		view.unmount();
+	});
+
+	it('shows a temporary auto-resume note while loading the selected thread', async () => {
+		localStorage.setItem('cloumask:setup', 'complete');
+		const fetchMock = createFetchMock({
+			threadStateDelayMs: 200,
+			threadList: [
+				{
+					thread_id: 'thread-loading-note',
+					awaiting_user: true,
+					current_step: 1,
+					total_steps: 3,
+				},
+			],
+			threadStates: {
+				'thread-loading-note': {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Thread hydration finished.',
+							timestamp: '2026-03-14T12:45:00.000Z',
+						},
+					],
+					plan: [
+						{
+							id: 'step-1',
+							tool_name: 'scan_directory',
+							description: 'Scan inbox',
+							parameters: { path: '/data/inbox' },
+							status: 'completed',
+						},
+						{
+							id: 'step-2',
+							tool_name: 'detect',
+							description: 'Detect people',
+							parameters: { classes: ['person'] },
+							status: 'pending',
+						},
+						{
+							id: 'step-3',
+							tool_name: 'export',
+							description: 'Export labels',
+							parameters: { output_path: '/data/out' },
+							status: 'pending',
+						},
+					],
+					plan_approved: false,
+					awaiting_user: true,
+					current_step: 1,
+				},
+			},
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		const view = render(AppTestHost);
+		const note = 'Resuming thread-loading-note: awaiting review (1/3 steps)';
+
+		await waitFor(() => {
+			expect(screen.getByText(note)).toBeTruthy();
+		});
+		await waitFor(() => {
+			expect(screen.getByText('Thread hydration finished.')).toBeTruthy();
+		});
+		await waitFor(() => {
+			expect(screen.queryByText(note)).toBeNull();
+		});
 
 		view.unmount();
 	});
