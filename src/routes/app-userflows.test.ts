@@ -235,6 +235,107 @@ describe('App user flows', () => {
 		expect(input.placeholder).toContain('Reconnecting');
 	});
 
+	it('restores unresolved checkpoint details when resuming the latest thread', async () => {
+		localStorage.setItem('cloumask:setup', 'complete');
+		const fetchMock = createFetchMock({
+			threadList: [
+				{
+					thread_id: 'thread-checkpoint-1',
+					awaiting_user: true,
+					current_step: 1,
+					total_steps: 2,
+				},
+			],
+			threadStates: {
+				'thread-checkpoint-1': {
+					messages: [
+						{
+							role: 'user',
+							content: 'resume processing',
+							timestamp: '2026-03-14T10:00:00.000Z',
+						},
+						{
+							role: 'assistant',
+							content: 'Quality dip detected after batch 12.',
+							timestamp: '2026-03-14T10:00:05.000Z',
+						},
+					],
+					plan: [
+						{
+							id: 'step-1',
+							tool_name: 'scan_directory',
+							description: 'Scan input',
+							parameters: { path: '/data/input' },
+							status: 'completed',
+						},
+						{
+							id: 'step-2',
+							tool_name: 'detect',
+							description: 'Detect people',
+							parameters: { classes: ['person'] },
+							status: 'running',
+						},
+					],
+					plan_approved: true,
+					awaiting_user: true,
+					current_step: 1,
+					metadata: {
+						pipeline_id: 'pipe-checkpoint-1',
+						progress_percent: 50,
+						processed_files: 24,
+					},
+					checkpoints: [
+						{
+							id: 'ckpt-1',
+							step_index: 1,
+							trigger_reason: 'percentage',
+							progress_percent: 50,
+							quality_metrics: {
+								average_confidence: 0.64,
+								error_count: 2,
+								total_processed: 24,
+							},
+							created_at: '2026-03-14T10:00:05.000Z',
+							resolved_at: null,
+						},
+					],
+				},
+			},
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		const view = render(AppTestHost);
+
+		await waitFor(() => {
+			expect(screen.getAllByText('Chat').length).toBeGreaterThan(0);
+		});
+		await waitFor(() => {
+			expect(screen.getByText('Resume from the saved checkpoint when you are ready.')).toBeTruthy();
+		});
+
+		await fireEvent.keyDown(window, { key: '3' });
+		await waitFor(() => {
+			expect(screen.getByText('[CHECKPOINT]')).toBeTruthy();
+		});
+
+		expect(screen.getByText('Progress milestone reached')).toBeTruthy();
+		expect(screen.getAllByText('Quality dip detected after batch 12.').length).toBeGreaterThan(0);
+		expect(screen.getByRole('button', { name: 'Continue' })).toBeTruthy();
+		expect(screen.getAllByText('50%').length).toBeGreaterThan(0);
+		expect(screen.getByText('64%')).toBeTruthy();
+		expect(screen.getAllByText('24').length).toBeGreaterThan(0);
+		expect(screen.getAllByText('2').length).toBeGreaterThan(0);
+
+		const createdThreadCalls = fetchMock.mock.calls.filter(([url, init]) => {
+			const requestUrl = typeof url === 'string' ? url : url.toString();
+			const method = (init?.method ?? 'GET').toUpperCase();
+			return requestUrl.endsWith('/api/chat/threads') && method === 'POST';
+		});
+
+		expect(createdThreadCalls).toHaveLength(0);
+		view.unmount();
+	});
+
 	it('reuses latest resumable backend thread before creating a new one', async () => {
 		localStorage.setItem('cloumask:setup', 'complete');
 		const fetchMock = createFetchMock({
