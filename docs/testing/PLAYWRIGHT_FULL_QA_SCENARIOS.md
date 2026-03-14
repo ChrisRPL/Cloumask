@@ -1,6 +1,6 @@
 # Cloumask Full QA Scenarios (Playwright Manual Runbook)
 
-Last updated: 2026-03-13
+Last updated: 2026-03-14
 
 ## Scope
 
@@ -15,10 +15,18 @@ Current automated Playwright coverage is still smoke-level for many browser flow
 - project selector creation path
 - backend API smoke checks
 
+Separate non-Playwright app-userflow automation now covers these resume/hydration paths in the Svelte test harness:
+- latest thread auto-resume selection priority (`awaiting review` before `in progress` before completed)
+- visible resumed-thread breadcrumb with backend thread id, status, and step progress
+- checkpoint resume hydration after startup
+- completed execution hydration after startup, including stats and preview tiles
+
 These flows still require manual verification before release because the current browser suite does not yet prove end-user success end-to-end:
 - project persistence after reload
 - chat -> plan generation -> approval transitions
 - plan editing correctness and execution parity
+- real-browser reload/remount behavior for auto-resume breadcrumb and thread selection
+- real-browser checkpoint/completed resume parity after full page refresh
 - review editing/undo/redo fidelity
 - point cloud load/export behavior
 - responsive/runtime parity across Tauri and web
