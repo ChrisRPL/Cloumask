@@ -336,6 +336,121 @@ describe('App user flows', () => {
 		view.unmount();
 	});
 
+	it('restores completed execution stats and previews when resuming the latest thread', async () => {
+		localStorage.setItem('cloumask:setup', 'complete');
+		const fetchMock = createFetchMock({
+			threadList: [
+				{
+					thread_id: 'thread-complete-1',
+					awaiting_user: false,
+					current_step: 2,
+					total_steps: 2,
+				},
+			],
+			threadStates: {
+				'thread-complete-1': {
+					messages: [
+						{
+							role: 'user',
+							content: 'finish processing this batch',
+							timestamp: '2026-03-14T11:00:00.000Z',
+						},
+						{
+							role: 'assistant',
+							content: 'Pipeline finished successfully.',
+							timestamp: '2026-03-14T11:00:08.000Z',
+						},
+					],
+					plan: [
+						{
+							id: 'step-1',
+							tool_name: 'scan_directory',
+							description: 'Scan input',
+							parameters: { path: '/data/input' },
+							status: 'completed',
+						},
+						{
+							id: 'step-2',
+							tool_name: 'detect',
+							description: 'Detect people',
+							parameters: { classes: ['person'] },
+							status: 'completed',
+						},
+					],
+					plan_approved: true,
+					awaiting_user: false,
+					current_step: 2,
+					metadata: {
+						pipeline_id: 'pipe-complete-1',
+						created_at: '2026-03-14T11:00:00.000Z',
+					},
+					checkpoints: [],
+					execution_results: {
+						'step-1': {
+							total_files: 12,
+						},
+						'step-2': {
+							count: 4,
+							preview_items: [
+								{
+									image_path: '/tmp/frame-001.jpg',
+									annotations: [
+										{
+											label: 'person',
+											confidence: 0.92,
+											bbox: { x: 0.1, y: 0.2, width: 0.3, height: 0.4 },
+										},
+									],
+								},
+								{
+									image_path: '/tmp/frame-002.jpg',
+									annotations: [
+										{
+											label: 'person',
+											confidence: 0.88,
+											bbox: { x: 0.2, y: 0.25, width: 0.25, height: 0.35 },
+										},
+									],
+								},
+							],
+						},
+					},
+				},
+			},
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		const view = render(AppTestHost);
+
+		await waitFor(() => {
+			expect(screen.getAllByText('Chat').length).toBeGreaterThan(0);
+		});
+		await waitFor(() => {
+			expect(screen.getByText('Pipeline finished successfully.')).toBeTruthy();
+		});
+
+		await fireEvent.keyDown(window, { key: '3' });
+		await waitFor(() => {
+			expect(screen.getByText('<complete>')).toBeTruthy();
+		});
+
+		expect(screen.queryByText('[CHECKPOINT]')).toBeNull();
+		expect(screen.getByText('Step 2/2')).toBeTruthy();
+		expect(screen.getByText('Detect people')).toBeTruthy();
+		expect(screen.getByText('2 recent')).toBeTruthy();
+		expect(screen.getByText('Processed').parentElement?.textContent).toContain('12');
+		expect(screen.getByText('Detected').parentElement?.textContent).toContain('4');
+
+		const createdThreadCalls = fetchMock.mock.calls.filter(([url, init]) => {
+			const requestUrl = typeof url === 'string' ? url : url.toString();
+			const method = (init?.method ?? 'GET').toUpperCase();
+			return requestUrl.endsWith('/api/chat/threads') && method === 'POST';
+		});
+
+		expect(createdThreadCalls).toHaveLength(0);
+		view.unmount();
+	});
+
 	it('reuses latest resumable backend thread before creating a new one', async () => {
 		localStorage.setItem('cloumask:setup', 'complete');
 		const fetchMock = createFetchMock({
