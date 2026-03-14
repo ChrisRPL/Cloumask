@@ -272,6 +272,7 @@ class ThreadSummary(BaseModel):
     current_step: int = 0
     total_steps: int = 0
     last_message: str = ""
+    summary: str = ""
     updated_at: str | None = None
     created_at: str | None = None
 
@@ -287,6 +288,33 @@ class ThreadStateResponse(BaseModel):
 
     thread_id: str
     state: dict[str, Any]
+
+
+def _get_thread_resume_status(thread: dict[str, Any]) -> str:
+    """Return the user-facing resume status for a persisted thread."""
+    if thread.get("awaiting_user"):
+        return "awaiting review"
+
+    total_steps = max(0, int(thread.get("total_steps", 0) or 0))
+    current_step = max(0, int(thread.get("current_step", 0) or 0))
+
+    if total_steps > 0 and current_step >= total_steps:
+        return "completed"
+    if total_steps > 0:
+        return "in progress"
+    return "ready"
+
+
+def _build_thread_resume_summary(thread: dict[str, Any]) -> str:
+    """Build the compact summary string used by resume UI."""
+    status = _get_thread_resume_status(thread)
+    total_steps = max(0, int(thread.get("total_steps", 0) or 0))
+
+    if total_steps <= 0:
+        return f"{status}."
+
+    completed_steps = max(0, min(int(thread.get("current_step", 0) or 0), total_steps))
+    return f"{status}. Progress: {completed_steps}/{total_steps} steps."
 
 
 @router.get("/stream/{thread_id}")
@@ -447,7 +475,15 @@ async def list_threads(limit: int = 20) -> ThreadListResponse:
         threads = threads[:limit]
 
     return ThreadListResponse(
-        threads=[ThreadSummary.model_validate(thread) for thread in threads],
+        threads=[
+            ThreadSummary.model_validate(
+                {
+                    **thread,
+                    "summary": _build_thread_resume_summary(thread),
+                }
+            )
+            for thread in threads
+        ],
     )
 
 
