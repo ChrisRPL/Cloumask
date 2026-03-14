@@ -189,7 +189,6 @@ class TestListThreads:
 class TestGetThreadState:
     """Tests for thread state hydration endpoint."""
 
-    @pytest.mark.xfail(reason="thread state hydration endpoint not implemented yet")
     def test_get_thread_state_returns_persisted_snapshot(
         self,
         client: TestClient,
