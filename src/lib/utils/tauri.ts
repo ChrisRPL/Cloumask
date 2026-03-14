@@ -287,6 +287,37 @@ export interface ThreadSummary {
 	created_at: string | null;
 }
 
+export interface PersistedThreadMessage {
+	role: string;
+	content: string;
+	timestamp?: string;
+	tool_calls?: unknown[];
+	tool_call_id?: string | null;
+}
+
+export interface PersistedThreadPlanStep {
+	id: string;
+	tool_name: string;
+	description: string;
+	parameters?: Record<string, unknown>;
+	status?: string;
+	result?: Record<string, unknown> | null;
+	error?: string | null;
+	started_at?: string | null;
+	completed_at?: string | null;
+}
+
+export interface PersistedThreadState {
+	messages?: PersistedThreadMessage[];
+	plan?: PersistedThreadPlanStep[];
+	plan_approved?: boolean;
+	current_step?: number;
+	awaiting_user?: boolean;
+	metadata?: Record<string, unknown>;
+	checkpoints?: Array<Record<string, unknown>>;
+	execution_results?: Record<string, Record<string, unknown>>;
+}
+
 /** User decision for plan approval or checkpoint */
 export type UserDecision = 'approve' | 'edit' | 'cancel' | 'retry';
 
@@ -426,6 +457,24 @@ export async function listThreads(limit = 20): Promise<ThreadSummary[]> {
 
 	const data = (await response.json()) as { threads?: ThreadSummary[] };
 	return Array.isArray(data.threads) ? data.threads : [];
+}
+
+/**
+ * Get the persisted state payload for a chat thread.
+ */
+export async function getThreadState(threadId: string): Promise<PersistedThreadState> {
+	if (!threadId) {
+		throw new Error('Invalid thread ID');
+	}
+
+	const response = await fetch(`${SIDECAR_URL}/api/chat/threads/${threadId}/state`);
+
+	if (!response.ok) {
+		throw new Error(`Failed to get thread state: ${response.statusText}`);
+	}
+
+	const data = (await response.json()) as { state?: PersistedThreadState };
+	return data.state ?? {};
 }
 
 /**
