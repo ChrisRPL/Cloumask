@@ -255,6 +255,23 @@
 		};
 	}
 
+	function buildHydratedExecutionStats(
+		state: PersistedThreadState,
+		checkpoint: CheckpointInfo | null
+	) {
+		return {
+			processed:
+				checkpoint?.qualityMetrics.totalProcessed ||
+				toFiniteNumber(state.metadata?.processed_files) ||
+				0,
+			detected: toFiniteNumber(state.metadata?.total_items) || 0,
+			flagged: 0,
+			errors: checkpoint?.qualityMetrics.errorCount ?? 0,
+			startedAt: typeof state.metadata?.created_at === 'string' ? state.metadata.created_at : null,
+			estimatedCompletion: null
+		};
+	}
+
 	function buildResumeClarification(awaitingUser: boolean, planApproved: boolean): ClarificationRequest | null {
 		if (!awaitingUser) return null;
 		if (planApproved) {
@@ -331,20 +348,11 @@
 			steps.length > 0 ? Math.max(0, Math.min(currentStep, steps.length)) : 0;
 		const hydratedStepIndex =
 			steps.length > 0 ? Math.max(0, Math.min(currentStep, steps.length - 1)) : -1;
-		const checkpointProcessed = hydratedCheckpoint?.qualityMetrics.totalProcessed ?? 0;
-		const checkpointErrors = hydratedCheckpoint?.qualityMetrics.errorCount ?? 0;
 
 		pipeline.setPipelineId(pipelineId);
 		pipeline.setSteps(steps);
 		execution.updateProgress(boundedProgressCurrent, steps.length);
-		execution.updateStats({
-			processed: checkpointProcessed || toFiniteNumber(state.metadata?.processed_files) || 0,
-			detected: toFiniteNumber(state.metadata?.total_items) || 0,
-			flagged: 0,
-			errors: checkpointErrors,
-			startedAt: typeof state.metadata?.created_at === 'string' ? state.metadata.created_at : null,
-			estimatedCompletion: null
-		});
+		execution.updateStats(buildHydratedExecutionStats(state, hydratedCheckpoint));
 		execution.setCurrentStep(hydratedStepIndex >= 0 ? steps[hydratedStepIndex]?.id ?? null : null);
 		execution.setCheckpoint(hydratedCheckpoint);
 
