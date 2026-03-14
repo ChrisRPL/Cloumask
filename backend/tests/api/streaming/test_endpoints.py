@@ -185,6 +185,86 @@ class TestListThreads:
         assert data["threads"][0]["awaiting_user"] is True
         assert data["threads"][0]["total_steps"] == 1
 
+    def test_list_threads_keeps_recency_order_and_summary_fields(
+        self,
+        client: TestClient,
+        checkpoint_manager: CheckpointManager,
+    ) -> None:
+        """List threads should expose truthful summary fields while staying recency-ordered."""
+        checkpoint_manager.create_thread("thread-review", title="Needs review")
+        checkpoint_manager.save_snapshot(
+            "thread-review",
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "plan": [
+                        {"id": "step-1", "tool_name": "scan_directory", "status": "completed"},
+                        {"id": "step-2", "tool_name": "detect", "status": "pending"},
+                    ],
+                    "current_step": 1,
+                    "awaiting_user": True,
+                    "messages": [{"role": "assistant", "content": "Review this run"}],
+                }
+            },
+        )
+
+        checkpoint_manager.create_thread("thread-progress", title="Still running")
+        checkpoint_manager.save_snapshot(
+            "thread-progress",
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "plan": [
+                        {"id": "step-1", "tool_name": "scan_directory", "status": "completed"},
+                        {"id": "step-2", "tool_name": "detect", "status": "completed"},
+                        {"id": "step-3", "tool_name": "export", "status": "pending"},
+                    ],
+                    "current_step": 2,
+                    "awaiting_user": False,
+                    "messages": [{"role": "assistant", "content": "Continuing export"}],
+                }
+            },
+        )
+
+        with checkpoint_manager.saver._get_conn() as conn:
+            conn.execute(
+                "UPDATE threads SET updated_at = ? WHERE thread_id = ?",
+                ("2026-03-14 10:00:00", "thread-review"),
+            )
+            conn.execute(
+                "UPDATE threads SET updated_at = ? WHERE thread_id = ?",
+                ("2026-03-14 11:00:00", "thread-progress"),
+            )
+
+        _event_queues.clear()
+        _thread_states.clear()
+        _threads.clear()
+
+        response = client.get("/api/chat/threads")
+        data = response.json()
+
+        assert response.status_code == 200
+        assert [thread["thread_id"] for thread in data["threads"]] == [
+            "thread-progress",
+            "thread-review",
+        ]
+
+        latest = data["threads"][0]
+        assert latest["title"] == "Still running"
+        assert latest["status"] == "active"
+        assert latest["awaiting_user"] is False
+        assert latest["current_step"] == 2
+        assert latest["total_steps"] == 3
+        assert latest["last_message"] == "Continuing export"
+
+        review = data["threads"][1]
+        assert review["title"] == "Needs review"
+        assert review["status"] == "active"
+        assert review["awaiting_user"] is True
+        assert review["current_step"] == 1
+        assert review["total_steps"] == 2
+        assert review["last_message"] == "Review this run"
+
 
 class TestGetThreadState:
     """Tests for thread state hydration endpoint."""
