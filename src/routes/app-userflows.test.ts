@@ -83,7 +83,7 @@ function createFetchMock(options?: {
 			});
 		}
 
-		if (url.endsWith('/api/chat/threads') && method === 'GET') {
+		if (url.includes('/api/chat/threads') && !url.includes('/api/chat/threads/') && method === 'GET') {
 			return jsonResponse({
 				threads: threadList.map((thread) => ({
 					title: null,
@@ -220,7 +220,7 @@ describe('App user flows', () => {
 		expect(input.placeholder).toContain('Reconnecting');
 	});
 
-	it.fails('reuses latest resumable backend thread before creating a new one', async () => {
+	it('reuses latest resumable backend thread before creating a new one', async () => {
 		localStorage.setItem('cloumask:setup', 'complete');
 		const fetchMock = createFetchMock({
 			threadList: [
@@ -234,7 +234,7 @@ describe('App user flows', () => {
 		});
 		vi.stubGlobal('fetch', fetchMock);
 
-		render(AppTestHost);
+		const view = render(AppTestHost);
 
 		await waitFor(() => {
 			expect(screen.getAllByText('Chat').length).toBeGreaterThan(0);
@@ -249,10 +249,14 @@ describe('App user flows', () => {
 		const listedThreadCalls = fetchMock.mock.calls.filter(([url, init]) => {
 			const requestUrl = typeof url === 'string' ? url : url.toString();
 			const method = (init?.method ?? 'GET').toUpperCase();
-			return requestUrl.endsWith('/api/chat/threads') && method === 'GET';
+			return requestUrl.includes('/api/chat/threads') &&
+				!requestUrl.includes('/api/chat/threads/') &&
+				method === 'GET';
 		});
 
 		expect(listedThreadCalls.length).toBeGreaterThan(0);
 		expect(createdThreadCalls).toHaveLength(0);
+
+		view.unmount();
 	});
 });
