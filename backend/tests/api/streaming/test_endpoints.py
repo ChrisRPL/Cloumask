@@ -184,6 +184,7 @@ class TestListThreads:
         assert [thread["thread_id"] for thread in data["threads"]] == ["thread-latest"]
         assert data["threads"][0]["awaiting_user"] is True
         assert data["threads"][0]["total_steps"] == 1
+        assert data["threads"][0]["summary"] == "awaiting review. Progress: 0/1 steps."
 
     def test_list_threads_keeps_recency_order_and_summary_fields(
         self,
@@ -256,6 +257,7 @@ class TestListThreads:
         assert latest["current_step"] == 2
         assert latest["total_steps"] == 3
         assert latest["last_message"] == "Continuing export"
+        assert latest["summary"] == "in progress. Progress: 2/3 steps."
 
         review = data["threads"][1]
         assert review["title"] == "Needs review"
@@ -264,6 +266,7 @@ class TestListThreads:
         assert review["current_step"] == 1
         assert review["total_steps"] == 2
         assert review["last_message"] == "Review this run"
+        assert review["summary"] == "awaiting review. Progress: 1/2 steps."
 
 
 class TestGetThreadState:
