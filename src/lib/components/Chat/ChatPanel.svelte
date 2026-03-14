@@ -9,7 +9,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { getAgentState } from '$lib/stores/agent.svelte';
-	import { getSSEState } from '$lib/stores/sse.svelte';
+	import { extractPreviewItems, getSSEState } from '$lib/stores/sse.svelte';
 	import { getPipelineState } from '$lib/stores/pipeline.svelte';
 	import { getExecutionState } from '$lib/stores/execution.svelte';
 	import { getUIState } from '$lib/stores/ui.svelte';
@@ -38,6 +38,7 @@
 	import type { LLMReadyResponse } from '$lib/types/commands';
 	import type { MessageRole, ClarificationRequest } from '$lib/types/agent';
 	import type { CheckpointInfo } from '$lib/types/execution';
+	import type { ToolResultEventData } from '$lib/types/sse';
 
 	import ChatHeader from './ChatHeader.svelte';
 	import MessageList from './MessageList.svelte';
@@ -289,6 +290,81 @@
 		};
 	}
 
+	function buildPersistedToolResult(
+		toolName: string,
+		stepIndex: number,
+		result: Record<string, unknown>,
+		success: boolean
+	): ToolResultEventData {
+		return {
+			tool_name: toolName,
+			step_index: stepIndex,
+			success,
+			result,
+			error: typeof result.error === 'string' ? result.error : undefined,
+			duration_seconds: 0
+		};
+	}
+
+	function replayPersistedExecutionResults(
+		steps: Array<{ id: string; toolName: string; status: string }>,
+		state: PersistedThreadState
+	) {
+		const executionResults = state.execution_results;
+		if (!executionResults) return;
+
+		for (const [index, step] of steps.entries()) {
+			const rawResult = executionResults[step.id];
+			if (typeof rawResult !== 'object' || rawResult === null) continue;
+			const result = rawResult as Record<string, unknown>;
+
+			if (step.status === 'failed') {
+				execution.addError({
+					stepId: step.id,
+					message: typeof result.error === 'string' ? result.error : 'Tool execution failed',
+					recoverable: true
+				});
+				continue;
+			}
+
+			const filesProcessed = toFiniteNumber(result.files_processed) ?? toFiniteNumber(result.total_files);
+			if (filesProcessed !== null && filesProcessed > 0) {
+				execution.updateStats({
+					processed: Math.max(execution.stats.processed, filesProcessed)
+				});
+			}
+
+			const detectedCount = toFiniteNumber(result.count);
+			if (
+				detectedCount !== null &&
+				detectedCount > 0 &&
+				(step.toolName === 'detect' || step.toolName === 'detect_3d')
+			) {
+				execution.updateStats({
+					detected: Math.max(execution.stats.detected, detectedCount)
+				});
+			}
+
+			const faces =
+				toFiniteNumber(result.faces_anonymized) ?? toFiniteNumber(result.faces_blurred) ?? 0;
+			const plates =
+				toFiniteNumber(result.plates_anonymized) ?? toFiniteNumber(result.plates_blurred) ?? 0;
+			const anonymized = faces + plates;
+			if (anonymized > 0) {
+				execution.updateStats({
+					flagged: Math.max(execution.stats.flagged, anonymized)
+				});
+			}
+
+			const previews = extractPreviewItems(
+				buildPersistedToolResult(step.toolName, index, result, true)
+			);
+			if (previews.length > 0) {
+				execution.appendPreviews(previews);
+			}
+		}
+	}
+
 	function hydratePersistedThread(threadId: string, state: Awaited<ReturnType<typeof getThreadState>>) {
 		const messages = Array.isArray(state.messages) ? state.messages : [];
 		const plan = Array.isArray(state.plan) ? state.plan : [];
@@ -355,6 +431,9 @@
 		execution.updateStats(buildHydratedExecutionStats(state, hydratedCheckpoint));
 		execution.setCurrentStep(hydratedStepIndex >= 0 ? steps[hydratedStepIndex]?.id ?? null : null);
 		execution.setCheckpoint(hydratedCheckpoint);
+		if (!hydratedCheckpoint) {
+			replayPersistedExecutionResults(steps, state);
+		}
 
 		const clarification = buildResumeClarification(awaitingUser, planApproved);
 		if (clarification) {
