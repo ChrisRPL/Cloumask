@@ -312,6 +312,16 @@
 		return `Resumed backend thread ${thread.thread_id}. Status: ${getThreadResumeStatus(thread)}.${progressText}`;
 	}
 
+	function hasSystemMessage(
+		messages: PersistedThreadState['messages'],
+		content: string
+	): boolean {
+		if (!Array.isArray(messages)) return false;
+		return messages.some(
+			(message) => normalizeMessageRole(message.role) === 'system' && message.content === content
+		);
+	}
+
 	function buildResumeClarification(awaitingUser: boolean, planApproved: boolean): ClarificationRequest | null {
 		if (!awaitingUser) return null;
 		if (planApproved) {
@@ -436,10 +446,11 @@
 				agent.updateMessage(created.id, { timestamp: message.timestamp });
 			}
 		}
-		if (threadSummary) {
+		const resumeMessage = threadSummary ? buildResumedThreadMessage(threadSummary) : null;
+		if (resumeMessage && !hasSystemMessage(messages, resumeMessage)) {
 			agent.addMessage({
 				role: 'system',
-				content: buildResumedThreadMessage(threadSummary)
+				content: resumeMessage
 			});
 		}
 
