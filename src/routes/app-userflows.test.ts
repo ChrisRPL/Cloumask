@@ -579,6 +579,67 @@ describe('App user flows', () => {
 		view.unmount();
 	});
 
+	it('does not duplicate an existing resumed thread breadcrumb on hydration', async () => {
+		localStorage.setItem('cloumask:setup', 'complete');
+		const resumeMessage =
+			'Resumed backend thread thread-deduped. Status: awaiting review. Progress: 1/2 steps.';
+		const fetchMock = createFetchMock({
+			threadList: [
+				{
+					thread_id: 'thread-deduped',
+					awaiting_user: true,
+					current_step: 1,
+					total_steps: 2,
+				},
+			],
+			threadStates: {
+				'thread-deduped': {
+					messages: [
+						{
+							role: 'system',
+							content: resumeMessage,
+							timestamp: '2026-03-14T12:30:00.000Z',
+						},
+						{
+							role: 'assistant',
+							content: 'Pick up where you left off.',
+							timestamp: '2026-03-14T12:30:01.000Z',
+						},
+					],
+					plan: [
+						{
+							id: 'step-1',
+							tool_name: 'scan_directory',
+							description: 'Scan inbox',
+							parameters: { path: '/data/inbox' },
+							status: 'completed',
+						},
+						{
+							id: 'step-2',
+							tool_name: 'detect',
+							description: 'Detect objects',
+							parameters: { classes: ['person'] },
+							status: 'pending',
+						},
+					],
+					plan_approved: false,
+					awaiting_user: true,
+					current_step: 1,
+				},
+			},
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		const view = render(AppTestHost);
+
+		await waitFor(() => {
+			expect(screen.getByText('Pick up where you left off.')).toBeTruthy();
+		});
+		expect(screen.getAllByText(resumeMessage)).toHaveLength(1);
+
+		view.unmount();
+	});
+
 	it('reuses latest resumable backend thread before creating a new one', async () => {
 		localStorage.setItem('cloumask:setup', 'complete');
 		const fetchMock = createFetchMock({
