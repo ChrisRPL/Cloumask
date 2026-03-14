@@ -295,6 +295,23 @@
 		return bestThread;
 	}
 
+	function getThreadResumeStatus(thread: ThreadSummary): string {
+		if (thread.awaiting_user) return 'awaiting review';
+		if (thread.total_steps > 0 && thread.current_step >= thread.total_steps) return 'completed';
+		if (thread.total_steps > 0) return 'in progress';
+		return 'ready';
+	}
+
+	function buildResumedThreadMessage(thread: ThreadSummary): string {
+		const completedSteps =
+			thread.total_steps > 0 ? Math.max(0, Math.min(thread.current_step, thread.total_steps)) : 0;
+		const progressText =
+			thread.total_steps > 0
+				? ` Progress: ${completedSteps}/${thread.total_steps} steps.`
+				: '';
+		return `Resumed backend thread ${thread.thread_id}. Status: ${getThreadResumeStatus(thread)}.${progressText}`;
+	}
+
 	function buildResumeClarification(awaitingUser: boolean, planApproved: boolean): ClarificationRequest | null {
 		if (!awaitingUser) return null;
 		if (planApproved) {
@@ -387,7 +404,11 @@
 		}
 	}
 
-	function hydratePersistedThread(threadId: string, state: Awaited<ReturnType<typeof getThreadState>>) {
+	function hydratePersistedThread(
+		threadId: string,
+		state: Awaited<ReturnType<typeof getThreadState>>,
+		threadSummary: ThreadSummary | null = null
+	) {
 		const messages = Array.isArray(state.messages) ? state.messages : [];
 		const plan = Array.isArray(state.plan) ? state.plan : [];
 		const currentStep =
@@ -414,6 +435,12 @@
 			if (typeof message.timestamp === 'string' && message.timestamp) {
 				agent.updateMessage(created.id, { timestamp: message.timestamp });
 			}
+		}
+		if (threadSummary) {
+			agent.addMessage({
+				role: 'system',
+				content: buildResumedThreadMessage(threadSummary)
+			});
 		}
 
 		const steps = plan
@@ -556,11 +583,12 @@
 			// Prefer the latest resumable backend thread before creating a new one.
 			if (!threadId) {
 				const existingThreads = await listThreads(20).catch(() => []);
-				threadId = selectThreadToResume(existingThreads)?.thread_id ?? null;
+				const threadToResume = selectThreadToResume(existingThreads);
+				threadId = threadToResume?.thread_id ?? null;
 				if (threadId) {
 					const persistedState = await getThreadState(threadId).catch(() => null);
 					if (persistedState) {
-						hydratePersistedThread(threadId, persistedState);
+						hydratePersistedThread(threadId, persistedState, threadToResume);
 					}
 				}
 			}
