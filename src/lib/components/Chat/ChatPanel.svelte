@@ -32,7 +32,8 @@
 	import type {
 		PersistedThreadCheckpoint,
 		PersistedThreadCheckpointQualityMetrics,
-		PersistedThreadState
+		PersistedThreadState,
+		ThreadSummary
 	} from '$lib/utils/tauri';
 	import type { UserDecision } from '$lib/types/agent';
 	import type { LLMReadyResponse } from '$lib/types/commands';
@@ -271,6 +272,27 @@
 			startedAt: typeof state.metadata?.created_at === 'string' ? state.metadata.created_at : null,
 			estimatedCompletion: null
 		};
+	}
+
+	function getThreadResumePriority(thread: ThreadSummary): number {
+		if (thread.awaiting_user) return 0;
+		if (thread.total_steps > 0 && thread.current_step < thread.total_steps) return 1;
+		return 2;
+	}
+
+	function selectThreadToResume(threads: ThreadSummary[]): ThreadSummary | null {
+		let bestThread: ThreadSummary | null = null;
+		let bestPriority = Number.POSITIVE_INFINITY;
+
+		for (const thread of threads) {
+			const priority = getThreadResumePriority(thread);
+			if (priority < bestPriority) {
+				bestThread = thread;
+				bestPriority = priority;
+			}
+		}
+
+		return bestThread;
 	}
 
 	function buildResumeClarification(awaitingUser: boolean, planApproved: boolean): ClarificationRequest | null {
@@ -533,8 +555,8 @@
 
 			// Prefer the latest resumable backend thread before creating a new one.
 			if (!threadId) {
-				const existingThreads = await listThreads(1).catch(() => []);
-				threadId = existingThreads[0]?.thread_id ?? null;
+				const existingThreads = await listThreads(20).catch(() => []);
+				threadId = selectThreadToResume(existingThreads)?.thread_id ?? null;
 				if (threadId) {
 					const persistedState = await getThreadState(threadId).catch(() => null);
 					if (persistedState) {
