@@ -282,6 +282,13 @@ class ThreadListResponse(BaseModel):
     threads: list[ThreadSummary]
 
 
+class ThreadStateResponse(BaseModel):
+    """Persisted thread state for frontend hydration."""
+
+    thread_id: str
+    state: dict[str, Any]
+
+
 @router.get("/stream/{thread_id}")
 async def stream_chat(
     thread_id: str,
@@ -441,6 +448,30 @@ async def list_threads(limit: int = 20) -> ThreadListResponse:
 
     return ThreadListResponse(
         threads=[ThreadSummary.model_validate(thread) for thread in threads],
+    )
+
+
+@router.get("/threads/{thread_id}/state")
+async def get_thread_state(thread_id: str) -> ThreadStateResponse:
+    """
+    Get the persisted state payload for a chat thread.
+
+    Args:
+        thread_id: Thread identifier.
+
+    Returns:
+        Persisted channel values for frontend hydration.
+
+    Raises:
+        HTTPException: If thread not found.
+    """
+    manager = _get_checkpoint_manager()
+    if not manager.saver.get_thread(thread_id):
+        raise HTTPException(status_code=404, detail="Thread not found")
+
+    return ThreadStateResponse(
+        thread_id=thread_id,
+        state=_extract_persisted_state(thread_id),
     )
 
 
