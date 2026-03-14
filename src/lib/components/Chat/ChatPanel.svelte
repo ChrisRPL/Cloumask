@@ -303,22 +303,35 @@
 		return 'ready';
 	}
 
-	function buildResumedThreadMessage(thread: ThreadSummary): string {
+	function getThreadResumeSummary(thread: ThreadSummary): string {
+		const summary = (thread as ThreadSummary & { summary?: string | null }).summary;
+		if (typeof summary === 'string' && summary.trim().length > 0) {
+			return summary.trim();
+		}
+
 		const completedSteps =
 			thread.total_steps > 0 ? Math.max(0, Math.min(thread.current_step, thread.total_steps)) : 0;
-		const progressText =
-			thread.total_steps > 0
-				? ` Progress: ${completedSteps}/${thread.total_steps} steps.`
-				: '';
-		return `Resumed backend thread ${thread.thread_id}. Status: ${getThreadResumeStatus(thread)}.${progressText}`;
+		if (thread.total_steps > 0) {
+			return `${getThreadResumeStatus(thread)}. Progress: ${completedSteps}/${thread.total_steps} steps.`;
+		}
+		return `${getThreadResumeStatus(thread)}.`;
+	}
+
+	function getPendingResumeSummary(thread: ThreadSummary): string {
+		const summary = getThreadResumeSummary(thread);
+		const progressMatch = /^(.*)\. Progress: (\d+)\/(\d+) steps\.$/.exec(summary);
+		if (progressMatch) {
+			return `${progressMatch[1]} (${progressMatch[2]}/${progressMatch[3]} steps)`;
+		}
+		return summary.endsWith('.') ? summary.slice(0, -1) : summary;
+	}
+
+	function buildResumedThreadMessage(thread: ThreadSummary): string {
+		return `Resumed backend thread ${thread.thread_id}. Status: ${getThreadResumeSummary(thread)}`;
 	}
 
 	function buildPendingResumeMessage(thread: ThreadSummary): string {
-		const completedSteps =
-			thread.total_steps > 0 ? Math.max(0, Math.min(thread.current_step, thread.total_steps)) : 0;
-		const progressText =
-			thread.total_steps > 0 ? ` (${completedSteps}/${thread.total_steps} steps)` : '';
-		return `Resuming ${thread.thread_id}: ${getThreadResumeStatus(thread)}${progressText}`;
+		return `Resuming ${thread.thread_id}: ${getPendingResumeSummary(thread)}`;
 	}
 
 	function hasSystemMessage(
