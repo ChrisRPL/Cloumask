@@ -29,9 +29,15 @@
 	} from '$lib/utils/tauri';
 	import { inferStepType } from '$lib/utils/pipeline-step-type';
 	import type { LLMPullProgressEvent } from '$lib/utils/tauri';
+	import type {
+		PersistedThreadCheckpoint,
+		PersistedThreadCheckpointQualityMetrics,
+		PersistedThreadState
+	} from '$lib/utils/tauri';
 	import type { UserDecision } from '$lib/types/agent';
 	import type { LLMReadyResponse } from '$lib/types/commands';
 	import type { MessageRole, ClarificationRequest } from '$lib/types/agent';
+	import type { CheckpointInfo } from '$lib/types/execution';
 
 	import ChatHeader from './ChatHeader.svelte';
 	import MessageList from './MessageList.svelte';
@@ -179,6 +185,76 @@
 		return 'pending';
 	}
 
+	function toFiniteNumber(value: unknown): number | null {
+		return typeof value === 'number' && Number.isFinite(value) ? value : null;
+	}
+
+	function normalizeCheckpointTrigger(trigger: unknown): CheckpointInfo['triggerReason'] {
+		if (
+			trigger === 'percentage' ||
+			trigger === 'quality_drop' ||
+			trigger === 'error_rate' ||
+			trigger === 'critical_step'
+		) {
+			return trigger;
+		}
+		return 'percentage';
+	}
+
+	function getCheckpointMetric(
+		qualityMetrics: PersistedThreadCheckpointQualityMetrics | undefined,
+		snakeCaseKey: keyof PersistedThreadCheckpointQualityMetrics,
+		camelCaseKey: keyof PersistedThreadCheckpointQualityMetrics
+	): number | null {
+		return toFiniteNumber(qualityMetrics?.[snakeCaseKey]) ?? toFiniteNumber(qualityMetrics?.[camelCaseKey]);
+	}
+
+	function getLatestCheckpoint(checkpoints: PersistedThreadCheckpoint[] | undefined) {
+		if (!Array.isArray(checkpoints)) return null;
+		for (let index = checkpoints.length - 1; index >= 0; index -= 1) {
+			const checkpoint = checkpoints[index];
+			if (checkpoint && typeof checkpoint.id === 'string' && !checkpoint.resolved_at) {
+				return checkpoint;
+			}
+		}
+		return null;
+	}
+
+	function buildHydratedCheckpoint(
+		state: PersistedThreadState,
+		fallbackMessage: string | null
+	): CheckpointInfo | null {
+		const checkpoint = getLatestCheckpoint(state.checkpoints);
+		if (!checkpoint) return null;
+
+		const qualityMetrics = checkpoint.quality_metrics;
+		return {
+			id: checkpoint.id,
+			stepIndex: toFiniteNumber(checkpoint.step_index) ?? 0,
+			triggerReason: normalizeCheckpointTrigger(checkpoint.trigger_reason),
+			progressPercent:
+				toFiniteNumber(checkpoint.progress_percent) ??
+				toFiniteNumber(state.metadata?.progress_percent) ??
+				0,
+			qualityMetrics: {
+				averageConfidence:
+					getCheckpointMetric(qualityMetrics, 'average_confidence', 'averageConfidence') ?? 0,
+				errorCount: getCheckpointMetric(qualityMetrics, 'error_count', 'errorCount') ?? 0,
+				totalProcessed:
+					getCheckpointMetric(qualityMetrics, 'total_processed', 'totalProcessed') ?? 0,
+				processingSpeed:
+					getCheckpointMetric(qualityMetrics, 'processing_speed', 'processingSpeed') ?? 0
+			},
+			message:
+				(typeof checkpoint.message === 'string' && checkpoint.message) ||
+				fallbackMessage ||
+				'Resume from the saved checkpoint when you are ready.',
+			createdAt:
+				(typeof checkpoint.created_at === 'string' && checkpoint.created_at) ||
+				new Date().toISOString()
+		};
+	}
+
 	function buildResumeClarification(awaitingUser: boolean, planApproved: boolean): ClarificationRequest | null {
 		if (!awaitingUser) return null;
 		if (planApproved) {
@@ -245,15 +321,41 @@
 				startedAt: typeof step.started_at === 'string' ? step.started_at : undefined,
 				completedAt: typeof step.completed_at === 'string' ? step.completed_at : undefined
 			}));
+		const latestAssistantMessage =
+			[...messages]
+				.reverse()
+				.find((message) => message.role === 'assistant' && typeof message.content === 'string')
+				?.content ?? null;
+		const hydratedCheckpoint = buildHydratedCheckpoint(state, latestAssistantMessage);
+		const boundedProgressCurrent =
+			steps.length > 0 ? Math.max(0, Math.min(currentStep, steps.length)) : 0;
+		const hydratedStepIndex =
+			steps.length > 0 ? Math.max(0, Math.min(currentStep, steps.length - 1)) : -1;
+		const checkpointProcessed = hydratedCheckpoint?.qualityMetrics.totalProcessed ?? 0;
+		const checkpointErrors = hydratedCheckpoint?.qualityMetrics.errorCount ?? 0;
 
 		pipeline.setPipelineId(pipelineId);
 		pipeline.setSteps(steps);
-		execution.updateProgress(currentStep, steps.length);
-		execution.setCurrentStep(steps[currentStep]?.id ?? null);
+		execution.updateProgress(boundedProgressCurrent, steps.length);
+		execution.updateStats({
+			processed: checkpointProcessed || toFiniteNumber(state.metadata?.processed_files) || 0,
+			detected: toFiniteNumber(state.metadata?.total_items) || 0,
+			flagged: 0,
+			errors: checkpointErrors,
+			startedAt: typeof state.metadata?.created_at === 'string' ? state.metadata.created_at : null,
+			estimatedCompletion: null
+		});
+		execution.setCurrentStep(hydratedStepIndex >= 0 ? steps[hydratedStepIndex]?.id ?? null : null);
+		execution.setCheckpoint(hydratedCheckpoint);
 
 		const clarification = buildResumeClarification(awaitingUser, planApproved);
 		if (clarification) {
 			agent.setClarification(clarification);
+			if (planApproved) {
+				agent.setPhase('checkpoint');
+			}
+		} else if (hydratedCheckpoint) {
+			agent.setPhase('checkpoint');
 		} else if (planApproved && steps.length > 0 && currentStep >= steps.length) {
 			agent.setPhase('complete');
 			execution.setStatus('completed');
