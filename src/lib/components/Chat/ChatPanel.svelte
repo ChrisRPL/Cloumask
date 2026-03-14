@@ -16,6 +16,7 @@
 	import {
 		createThread,
 		listThreads,
+		getThreadState,
 		sendMessage,
 		closeThread,
 		checkLLMReady,
@@ -26,9 +27,11 @@
 		DEFAULT_REQUIRED_MODEL,
 		isTauri
 	} from '$lib/utils/tauri';
+	import { inferStepType } from '$lib/utils/pipeline-step-type';
 	import type { LLMPullProgressEvent } from '$lib/utils/tauri';
 	import type { UserDecision } from '$lib/types/agent';
 	import type { LLMReadyResponse } from '$lib/types/commands';
+	import type { MessageRole, ClarificationRequest } from '$lib/types/agent';
 
 	import ChatHeader from './ChatHeader.svelte';
 	import MessageList from './MessageList.svelte';
@@ -154,6 +157,116 @@
 		return 'a few GB';
 	}
 
+	function normalizeMessageRole(role: unknown): MessageRole | null {
+		if (role === 'user' || role === 'assistant' || role === 'system' || role === 'tool') {
+			return role;
+		}
+		return null;
+	}
+
+	function normalizeStepStatus(
+		status: unknown
+	): 'pending' | 'running' | 'completed' | 'failed' | 'skipped' {
+		if (
+			status === 'pending' ||
+			status === 'running' ||
+			status === 'completed' ||
+			status === 'failed' ||
+			status === 'skipped'
+		) {
+			return status;
+		}
+		return 'pending';
+	}
+
+	function buildResumeClarification(awaitingUser: boolean, planApproved: boolean): ClarificationRequest | null {
+		if (!awaitingUser) return null;
+		if (planApproved) {
+			return {
+				id: crypto.randomUUID(),
+				prompt: 'Resume from the saved checkpoint when you are ready.',
+				inputType: 'checkpoint_approval'
+			};
+		}
+
+		return {
+			id: crypto.randomUUID(),
+			prompt: 'Review the saved plan and choose how to continue.',
+			inputType: 'plan_approval'
+		};
+	}
+
+	function hydratePersistedThread(threadId: string, state: Awaited<ReturnType<typeof getThreadState>>) {
+		const messages = Array.isArray(state.messages) ? state.messages : [];
+		const plan = Array.isArray(state.plan) ? state.plan : [];
+		const currentStep =
+			typeof state.current_step === 'number' && Number.isFinite(state.current_step)
+				? state.current_step
+				: 0;
+		const awaitingUser = state.awaiting_user === true;
+		const planApproved = state.plan_approved === true;
+		const pipelineId =
+			typeof state.metadata?.pipeline_id === 'string' ? state.metadata.pipeline_id : null;
+
+		agent.startNewConversation();
+		agent.setThreadId(threadId);
+		pipeline.reset();
+		execution.reset();
+
+		for (const message of messages) {
+			const role = normalizeMessageRole(message.role);
+			if (!role || typeof message.content !== 'string') continue;
+			const created = agent.addMessage({
+				role,
+				content: message.content
+			});
+			if (typeof message.timestamp === 'string' && message.timestamp) {
+				agent.updateMessage(created.id, { timestamp: message.timestamp });
+			}
+		}
+
+		const steps = plan
+			.filter(
+				(step): step is NonNullable<typeof plan>[number] =>
+					typeof step?.id === 'string' &&
+					typeof step?.tool_name === 'string' &&
+					typeof step?.description === 'string'
+			)
+			.map((step, index) => ({
+				id: step.id,
+				toolName: step.tool_name,
+				type: inferStepType(step.tool_name),
+				description: step.description,
+				config: { params: step.parameters ?? {} },
+				status: normalizeStepStatus(step.status),
+				order: index,
+				result: step.result ?? undefined,
+				error: typeof step.error === 'string' ? step.error : undefined,
+				startedAt: typeof step.started_at === 'string' ? step.started_at : undefined,
+				completedAt: typeof step.completed_at === 'string' ? step.completed_at : undefined
+			}));
+
+		pipeline.setPipelineId(pipelineId);
+		pipeline.setSteps(steps);
+		execution.updateProgress(currentStep, steps.length);
+		execution.setCurrentStep(steps[currentStep]?.id ?? null);
+
+		const clarification = buildResumeClarification(awaitingUser, planApproved);
+		if (clarification) {
+			agent.setClarification(clarification);
+		} else if (planApproved && steps.length > 0 && currentStep >= steps.length) {
+			agent.setPhase('complete');
+			execution.setStatus('completed');
+		} else if (planApproved && steps.length > 0) {
+			agent.setPhase('executing');
+			execution.setStatus('running');
+		} else if (steps.length > 0) {
+			agent.setPhase('planning');
+		} else {
+			agent.setPhase('idle');
+		}
+	}
+
 	// Pull the required model
 	async function handlePullModel() {
 		if (!llmStatus || isPullingModel) return;
@@ -233,6 +346,12 @@
 			if (!threadId) {
 				const existingThreads = await listThreads(1).catch(() => []);
 				threadId = existingThreads[0]?.thread_id ?? null;
+				if (threadId) {
+					const persistedState = await getThreadState(threadId).catch(() => null);
+					if (persistedState) {
+						hydratePersistedThread(threadId, persistedState);
+					}
+				}
 			}
 
 			if (!threadId) {
