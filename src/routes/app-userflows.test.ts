@@ -451,6 +451,134 @@ describe('App user flows', () => {
 		view.unmount();
 	});
 
+	it('prefers awaiting review threads and shows a resume summary breadcrumb', async () => {
+		localStorage.setItem('cloumask:setup', 'complete');
+		const fetchMock = createFetchMock({
+			threadList: [
+				{
+					thread_id: 'thread-complete-older',
+					awaiting_user: false,
+					current_step: 2,
+					total_steps: 2,
+				},
+				{
+					thread_id: 'thread-awaiting-review',
+					awaiting_user: true,
+					current_step: 1,
+					total_steps: 3,
+				},
+			],
+			threadStates: {
+				'thread-awaiting-review': {
+					messages: [
+						{
+							role: 'user',
+							content: 'continue the latest run',
+							timestamp: '2026-03-14T12:00:00.000Z',
+						},
+						{
+							role: 'assistant',
+							content: 'Review this saved plan before continuing.',
+							timestamp: '2026-03-14T12:00:02.000Z',
+						},
+					],
+					plan: [
+						{
+							id: 'step-1',
+							tool_name: 'scan_directory',
+							description: 'Scan input',
+							parameters: { path: '/data/inbox' },
+							status: 'completed',
+						},
+						{
+							id: 'step-2',
+							tool_name: 'detect',
+							description: 'Detect people',
+							parameters: { classes: ['person'] },
+							status: 'pending',
+						},
+						{
+							id: 'step-3',
+							tool_name: 'export',
+							description: 'Export labels',
+							parameters: { output_path: '/data/out' },
+							status: 'pending',
+						},
+					],
+					plan_approved: false,
+					awaiting_user: true,
+					current_step: 1,
+					metadata: { pipeline_id: 'pipe-awaiting-review' },
+				},
+				'thread-complete-older': {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Older completed run',
+							timestamp: '2026-03-14T11:55:00.000Z',
+						},
+					],
+					plan: [
+						{
+							id: 'step-a',
+							tool_name: 'scan_directory',
+							description: 'Scan old input',
+							parameters: { path: '/data/old' },
+							status: 'completed',
+						},
+						{
+							id: 'step-b',
+							tool_name: 'detect',
+							description: 'Detect old people',
+							parameters: { classes: ['person'] },
+							status: 'completed',
+						},
+					],
+					plan_approved: true,
+					awaiting_user: false,
+					current_step: 2,
+				},
+			},
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		const view = render(AppTestHost);
+
+		await waitFor(() => {
+			expect(screen.getByText('Review this saved plan before continuing.')).toBeTruthy();
+		});
+
+		expect(
+			screen.getByText(
+				'Resumed backend thread thread-awaiting-review. Status: awaiting review. Progress: 1/3 steps.'
+			)
+		).toBeTruthy();
+		expect(screen.queryByText('Older completed run')).toBeNull();
+
+		const stateCalls = fetchMock.mock.calls.filter(([url, init]) => {
+			const requestUrl = typeof url === 'string' ? url : url.toString();
+			const method = (init?.method ?? 'GET').toUpperCase();
+			return requestUrl.includes('/api/chat/threads/') &&
+				requestUrl.endsWith('/state') &&
+				method === 'GET';
+		});
+
+		expect(
+			stateCalls.some(([url]) => {
+				const requestUrl = typeof url === 'string' ? url : url.toString();
+				return requestUrl.includes('/api/chat/threads/thread-awaiting-review/state');
+			})
+		).toBe(true);
+		expect(
+			stateCalls.some(([url]) => {
+				const requestUrl = typeof url === 'string' ? url : url.toString();
+				return requestUrl.includes('/api/chat/threads/thread-complete-older/state');
+			})
+		).toBe(false);
+
+		view.unmount();
+	});
+
 	it('reuses latest resumable backend thread before creating a new one', async () => {
 		localStorage.setItem('cloumask:setup', 'complete');
 		const fetchMock = createFetchMock({
