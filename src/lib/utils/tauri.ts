@@ -307,14 +307,49 @@ export interface PersistedThreadPlanStep {
 	completed_at?: string | null;
 }
 
+export interface PersistedThreadMetadata {
+	pipeline_id?: string;
+	created_at?: string | null;
+	progress_percent?: number;
+	processed_files?: number;
+	total_items?: number;
+	[key: string]: unknown;
+}
+
+export interface PersistedThreadCheckpointQualityMetrics {
+	average_confidence?: number;
+	averageConfidence?: number;
+	error_count?: number;
+	errorCount?: number;
+	total_processed?: number;
+	totalProcessed?: number;
+	processing_speed?: number;
+	processingSpeed?: number;
+	[key: string]: unknown;
+}
+
+export interface PersistedThreadCheckpoint {
+	id: string;
+	step_index?: number;
+	trigger_reason?: string;
+	progress_percent?: number;
+	quality_metrics?: PersistedThreadCheckpointQualityMetrics;
+	message?: string;
+	created_at?: string | null;
+	user_decision?: string | null;
+	user_feedback?: string | null;
+	resolved_at?: string | null;
+	[key: string]: unknown;
+}
+
 export interface PersistedThreadState {
 	messages?: PersistedThreadMessage[];
 	plan?: PersistedThreadPlanStep[];
 	plan_approved?: boolean;
 	current_step?: number;
 	awaiting_user?: boolean;
-	metadata?: Record<string, unknown>;
-	checkpoints?: Array<Record<string, unknown>>;
+	metadata?: PersistedThreadMetadata;
+	checkpoints?: PersistedThreadCheckpoint[];
 	execution_results?: Record<string, Record<string, unknown>>;
 }
 
