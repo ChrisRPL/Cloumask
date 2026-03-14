@@ -70,6 +70,7 @@
 	let modelPullError = $state<string | null>(null);
 	let isSending = $state(false);
 	let isRecoveringSidecar = $state(false);
+	let resumePreview = $state<string | null>(null);
 
 	// Derived state
 	const llmNotReady = $derived(llmStatus !== null && !llmStatus.ready);
@@ -310,6 +311,14 @@
 				? ` Progress: ${completedSteps}/${thread.total_steps} steps.`
 				: '';
 		return `Resumed backend thread ${thread.thread_id}. Status: ${getThreadResumeStatus(thread)}.${progressText}`;
+	}
+
+	function buildPendingResumeMessage(thread: ThreadSummary): string {
+		const completedSteps =
+			thread.total_steps > 0 ? Math.max(0, Math.min(thread.current_step, thread.total_steps)) : 0;
+		const progressText =
+			thread.total_steps > 0 ? ` (${completedSteps}/${thread.total_steps} steps)` : '';
+		return `Resuming ${thread.thread_id}: ${getThreadResumeStatus(thread)}${progressText}`;
 	}
 
 	function hasSystemMessage(
@@ -583,6 +592,7 @@
 
 		isInitializing = true;
 		initError = null;
+		resumePreview = null;
 
 		try {
 			if (isInTauri) {
@@ -596,7 +606,8 @@
 				const existingThreads = await listThreads(20).catch(() => []);
 				const threadToResume = selectThreadToResume(existingThreads);
 				threadId = threadToResume?.thread_id ?? null;
-				if (threadId) {
+				if (threadId && threadToResume) {
+					resumePreview = buildPendingResumeMessage(threadToResume);
 					const persistedState = await getThreadState(threadId).catch(() => null);
 					if (persistedState) {
 						hydratePersistedThread(threadId, persistedState, threadToResume);
@@ -618,6 +629,7 @@
 			console.error('[ChatPanel] Failed to initialize:', error);
 			initError = normalizeConnectionError(error);
 		} finally {
+			resumePreview = null;
 			isInitializing = false;
 		}
 	}
@@ -777,6 +789,12 @@
 		onClear={handleClear}
 		onExport={handleExport}
 	/>
+
+	{#if isInitializing && resumePreview}
+		<div class="px-4 py-2 mx-4 mt-2 rounded border border-border/60 bg-muted/20 text-xs font-mono text-muted-foreground">
+			{resumePreview}
+		</div>
+	{/if}
 
 	<!-- Messages -->
 	<MessageList
