@@ -185,6 +185,77 @@ class TestListThreads:
         assert data["threads"][0]["awaiting_user"] is True
         assert data["threads"][0]["total_steps"] == 1
 
+
+class TestGetThreadState:
+    """Tests for thread state hydration endpoint."""
+
+    @pytest.mark.xfail(reason="thread state hydration endpoint not implemented yet")
+    def test_get_thread_state_returns_persisted_snapshot(
+        self,
+        client: TestClient,
+        checkpoint_manager: CheckpointManager,
+    ) -> None:
+        """Thread state endpoint should expose the persisted channel values payload."""
+        thread_id = "thread-hydrate-state"
+        checkpoint_manager.create_thread(thread_id, title="Hydrate me")
+        checkpoint_manager.save_snapshot(
+            thread_id,
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": "process this folder",
+                            "timestamp": "2026-03-14T10:00:00.000Z",
+                        },
+                        {
+                            "role": "assistant",
+                            "content": "Here's a plan",
+                            "timestamp": "2026-03-14T10:00:01.000Z",
+                        },
+                    ],
+                    "plan": [
+                        {
+                            "id": "step-1",
+                            "tool_name": "scan_directory",
+                            "description": "Scan input",
+                            "parameters": {"path": "/data/input"},
+                            "status": "completed",
+                        },
+                        {
+                            "id": "step-2",
+                            "tool_name": "detect",
+                            "description": "Detect people",
+                            "parameters": {"classes": ["person"]},
+                            "status": "pending",
+                        },
+                    ],
+                    "plan_approved": False,
+                    "current_step": 1,
+                    "awaiting_user": True,
+                    "metadata": {"pipeline_id": "pipe-hydrate"},
+                    "checkpoints": [],
+                    "execution_results": {},
+                }
+            },
+        )
+
+        _event_queues.clear()
+        _thread_states.clear()
+        _threads.clear()
+
+        response = client.get(f"/api/chat/threads/{thread_id}/state")
+        data = response.json()
+
+        assert response.status_code == 200
+        assert data["thread_id"] == thread_id
+        assert data["state"]["metadata"]["pipeline_id"] == "pipe-hydrate"
+        assert len(data["state"]["messages"]) == 2
+        assert len(data["state"]["plan"]) == 2
+        assert data["state"]["awaiting_user"] is True
+        assert data["state"]["current_step"] == 1
+
 class TestCloseThread:
     """Tests for thread close endpoint."""
 
