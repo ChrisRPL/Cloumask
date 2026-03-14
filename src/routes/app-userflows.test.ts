@@ -20,11 +20,13 @@ function createFetchMock(options?: {
 		current_step?: number;
 		total_steps?: number;
 	}>;
+	threadStates?: Record<string, Record<string, unknown>>;
 }) {
 	const llmReady = options?.llmReady ?? true;
 	const llmReadyAfterPull = options?.llmReadyAfterPull ?? llmReady;
 	const failThreadCreate = options?.failThreadCreate ?? false;
 	const threadList = options?.threadList ?? [];
+	const threadStates = options?.threadStates ?? {};
 	let modelPulled = false;
 
 	return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -99,6 +101,14 @@ function createFetchMock(options?: {
 			});
 		}
 
+		if (url.includes('/api/chat/threads/') && url.endsWith('/state') && method === 'GET') {
+			const threadId = url.split('/api/chat/threads/')[1]?.replace('/state', '') ?? '';
+			return jsonResponse({
+				thread_id: threadId,
+				state: threadStates[threadId] ?? {},
+			});
+		}
+
 		if (url.includes('/api/review/items') && method === 'GET') {
 			return jsonResponse({
 				items: [],
@@ -123,6 +133,11 @@ function createFetchMock(options?: {
 describe('App user flows', () => {
 	beforeEach(() => {
 		localStorage.clear();
+		Object.defineProperty(HTMLElement.prototype, 'scrollTo', {
+			value: vi.fn(),
+			writable: true,
+			configurable: true,
+		});
 		// @ts-expect-error test cleanup
 		delete window.__TAURI__;
 		// @ts-expect-error test cleanup
@@ -231,6 +246,42 @@ describe('App user flows', () => {
 					total_steps: 3,
 				},
 			],
+			threadStates: {
+				'thread-existing-1': {
+					messages: [
+						{
+							role: 'user',
+							content: 'process this folder',
+							timestamp: '2026-03-14T10:00:00.000Z',
+						},
+						{
+							role: 'assistant',
+							content: "Here's a plan",
+							timestamp: '2026-03-14T10:00:01.000Z',
+						},
+					],
+					plan: [
+						{
+							id: 'step-1',
+							tool_name: 'scan_directory',
+							description: 'Scan input',
+							parameters: { path: '/data/input' },
+							status: 'completed',
+						},
+						{
+							id: 'step-2',
+							tool_name: 'detect',
+							description: 'Detect people',
+							parameters: { classes: ['person'] },
+							status: 'pending',
+						},
+					],
+					plan_approved: false,
+					awaiting_user: true,
+					current_step: 1,
+					metadata: { pipeline_id: 'pipe-existing-1' },
+				},
+			},
 		});
 		vi.stubGlobal('fetch', fetchMock);
 
@@ -239,6 +290,11 @@ describe('App user flows', () => {
 		await waitFor(() => {
 			expect(screen.getAllByText('Chat').length).toBeGreaterThan(0);
 		});
+		await waitFor(() => {
+			expect(screen.getByText("Here's a plan")).toBeTruthy();
+		});
+		expect(screen.getByText('Scan input')).toBeTruthy();
+		expect(screen.getByText('Review the saved plan and choose how to continue.')).toBeTruthy();
 
 		const createdThreadCalls = fetchMock.mock.calls.filter(([url, init]) => {
 			const requestUrl = typeof url === 'string' ? url : url.toString();
@@ -256,6 +312,11 @@ describe('App user flows', () => {
 
 		expect(listedThreadCalls.length).toBeGreaterThan(0);
 		expect(createdThreadCalls).toHaveLength(0);
+
+		await fireEvent.keyDown(window, { key: '2' });
+		await waitFor(() => {
+			expect(screen.getByText('Detect people')).toBeTruthy();
+		});
 
 		view.unmount();
 	});
