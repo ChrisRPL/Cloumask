@@ -44,6 +44,11 @@ def _coerce_message_list(value: Any) -> list[dict[str, Any]]:
     return [message for message in value if isinstance(message, dict)]
 
 
+def _coerce_message_content(value: Any) -> str:
+    """Return only string message content from a persisted payload."""
+    return value if isinstance(value, str) else ""
+
+
 class CheckpointManager:
     """
     High-level checkpoint management for the agent.
@@ -147,7 +152,7 @@ class CheckpointManager:
         last_message = ""
         if messages:
             last_msg = messages[-1]
-            last_message = last_msg.get("content", "")
+            last_message = _coerce_message_content(last_msg.get("content"))
 
         thread_info = state.get("thread_info", {}) or {}
 
