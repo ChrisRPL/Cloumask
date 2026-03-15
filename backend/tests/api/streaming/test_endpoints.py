@@ -781,7 +781,7 @@ class TestListThreads:
         assert response.status_code == 200
         assert [thread["thread_id"] for thread in data["threads"]] == ["thread-mixed-corruption"]
         assert data["threads"][0]["current_step"] == 0
-        assert data["threads"][0]["last_message"] == ""
+        assert data["threads"][0]["last_message"] == "Earlier valid message"
         assert data["threads"][0]["summary"] == "in progress. Progress: 0/2 steps."
 
     def test_list_threads_ignores_malformed_awaiting_user_values(
