@@ -1056,6 +1056,124 @@ describe('App user flows', () => {
 		view.unmount();
 	});
 
+	it('uses the newest titled thread in the temporary note when priorities tie', async () => {
+		localStorage.setItem('cloumask:setup', 'complete');
+		const fetchMock = createFetchMock({
+			threadStateDelayMs: 200,
+			threadList: [
+				{
+					thread_id: 'thread-title-newest',
+					title: 'Newest Review',
+					awaiting_user: true,
+					current_step: 0,
+					total_steps: 4,
+					summary: 'awaiting review. Progress: 2/4 steps.',
+				},
+				{
+					thread_id: 'thread-title-older',
+					title: 'Older Review',
+					awaiting_user: true,
+					current_step: 0,
+					total_steps: 3,
+					summary: 'awaiting review. Progress: 1/3 steps.',
+				},
+			],
+			threadStates: {
+				'thread-title-newest': {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Newest titled thread restored.',
+							timestamp: '2026-03-15T13:00:00.000Z',
+						},
+					],
+					plan: [
+						{
+							id: 'step-1',
+							tool_name: 'scan_directory',
+							description: 'Scan inbox',
+							parameters: { path: '/data/inbox' },
+							status: 'completed',
+						},
+						{
+							id: 'step-2',
+							tool_name: 'review',
+							description: 'Review detections',
+							parameters: {},
+							status: 'completed',
+						},
+						{
+							id: 'step-3',
+							tool_name: 'export',
+							description: 'Export labels',
+							parameters: { output_path: '/data/out' },
+							status: 'pending',
+						},
+						{
+							id: 'step-4',
+							tool_name: 'notify',
+							description: 'Notify user',
+							parameters: {},
+							status: 'pending',
+						},
+					],
+					plan_approved: false,
+					awaiting_user: true,
+					current_step: 2,
+				},
+				'thread-title-older': {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Older titled thread restored.',
+							timestamp: '2026-03-15T12:55:00.000Z',
+						},
+					],
+					plan: [
+						{
+							id: 'step-1',
+							tool_name: 'scan_directory',
+							description: 'Scan older inbox',
+							parameters: { path: '/data/older' },
+							status: 'completed',
+						},
+						{
+							id: 'step-2',
+							tool_name: 'review',
+							description: 'Review older detections',
+							parameters: {},
+							status: 'pending',
+						},
+						{
+							id: 'step-3',
+							tool_name: 'export',
+							description: 'Export older labels',
+							parameters: { output_path: '/data/older-out' },
+							status: 'pending',
+						},
+					],
+					plan_approved: false,
+					awaiting_user: true,
+					current_step: 1,
+				},
+			},
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		const view = render(AppTestHost);
+		const note = 'Resuming Newest Review (thread-title-newest): awaiting review (2/4 steps)';
+
+		await waitFor(() => {
+			expect(screen.getByText(note)).toBeTruthy();
+		});
+		await waitFor(() => {
+			expect(screen.getByText('Newest titled thread restored.')).toBeTruthy();
+		});
+		expect(screen.queryByText('Older titled thread restored.')).toBeNull();
+
+		view.unmount();
+	});
+
 	it('reuses latest resumable backend thread before creating a new one', async () => {
 		localStorage.setItem('cloumask:setup', 'complete');
 		const fetchMock = createFetchMock({
