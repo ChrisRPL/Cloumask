@@ -648,6 +648,54 @@ class TestListThreads:
         assert data["threads"][0]["created_at"] is None
         assert data["threads"][0]["summary"] == "ready."
 
+    def test_list_threads_ignores_malformed_title_and_status_metadata(
+        self,
+        client: TestClient,
+        checkpoint_manager: CheckpointManager,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """List threads should coerce malformed title/status metadata to safe defaults."""
+        checkpoint_manager.create_thread("thread-bad-metadata", title="Bad metadata")
+        checkpoint_manager.save_snapshot(
+            "thread-bad-metadata",
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "plan": [],
+                    "current_step": 0,
+                    "awaiting_user": False,
+                    "messages": [{"role": "assistant", "content": "Bad metadata restored"}],
+                }
+            },
+        )
+
+        original_get_thread = checkpoint_manager.saver.get_thread
+
+        def get_thread_with_bad_metadata(thread_id: str) -> dict[str, object] | None:
+            thread = original_get_thread(thread_id)
+            if not thread or thread_id != "thread-bad-metadata":
+                return thread
+            return {
+                **thread,
+                "title": {"unexpected": "object"},
+                "status": ["active"],
+            }
+
+        monkeypatch.setattr(checkpoint_manager.saver, "get_thread", get_thread_with_bad_metadata)
+
+        _event_queues.clear()
+        _thread_states.clear()
+        _threads.clear()
+
+        response = client.get("/api/chat/threads")
+        data = response.json()
+
+        assert response.status_code == 200
+        assert [thread["thread_id"] for thread in data["threads"]] == ["thread-bad-metadata"]
+        assert data["threads"][0]["title"] is None
+        assert data["threads"][0]["status"] == "active"
+        assert data["threads"][0]["summary"] == "ready."
+
 
 class TestGetThreadState:
     """Tests for thread state hydration endpoint."""
