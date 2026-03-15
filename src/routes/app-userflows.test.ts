@@ -784,6 +784,13 @@ describe('App user flows', () => {
 		await waitFor(() => {
 			expect(screen.queryByText(note)).toBeNull();
 		});
+		expect(screen.getByText('Resumed:')).toBeTruthy();
+		expect(screen.getByText('Inbox Review (thread-title-note)')).toBeTruthy();
+		expect(
+			screen.getByText((_, element) =>
+				element?.textContent === '• awaiting review. Progress: 1/3 steps.'
+			)
+		).toBeTruthy();
 
 		view.unmount();
 	});
