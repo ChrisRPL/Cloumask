@@ -49,6 +49,11 @@ def _coerce_message_content(value: Any) -> str:
     return value if isinstance(value, str) else ""
 
 
+def _coerce_optional_string(value: Any) -> str | None:
+    """Return only string metadata values from a persisted payload."""
+    return value if isinstance(value, str) else None
+
+
 class CheckpointManager:
     """
     High-level checkpoint management for the agent.
@@ -166,8 +171,8 @@ class CheckpointManager:
             "progress_percent": (completed / len(plan) * 100) if plan else 0,
             "awaiting_user": values.get("awaiting_user", False),
             "last_message": last_message,
-            "updated_at": thread_info.get("updated_at"),
-            "created_at": thread_info.get("created_at"),
+            "updated_at": _coerce_optional_string(thread_info.get("updated_at")),
+            "created_at": _coerce_optional_string(thread_info.get("created_at")),
         }
 
     # -------------------------------------------------------------------------
