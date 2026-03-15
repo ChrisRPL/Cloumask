@@ -159,7 +159,7 @@ class CheckpointManager:
             last_msg = messages[-1]
             last_message = _coerce_message_content(last_msg.get("content"))
 
-        thread_info = state.get("thread_info", {}) or {}
+        thread_info = _coerce_state_mapping(state.get("thread_info", {}))
         status = _coerce_optional_string(thread_info.get("status")) or STATUS_ACTIVE
 
         return {
@@ -191,7 +191,11 @@ class CheckpointManager:
 
         summaries = []
         for thread in threads:
-            summary = self.get_thread_summary(thread["thread_id"])
+            thread_info = _coerce_state_mapping(thread)
+            thread_id = _coerce_optional_string(thread_info.get("thread_id"))
+            if not thread_id:
+                continue
+            summary = self.get_thread_summary(thread_id)
             if summary:
                 summaries.append(summary)
 
