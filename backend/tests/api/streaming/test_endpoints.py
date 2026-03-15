@@ -600,6 +600,54 @@ class TestListThreads:
         assert data["threads"][0]["last_message"] == ""
         assert data["threads"][0]["summary"] == "ready."
 
+    def test_list_threads_ignores_malformed_timestamp_metadata(
+        self,
+        client: TestClient,
+        checkpoint_manager: CheckpointManager,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """List threads should coerce malformed timestamp metadata to null."""
+        checkpoint_manager.create_thread("thread-bad-timestamps", title="Bad timestamps")
+        checkpoint_manager.save_snapshot(
+            "thread-bad-timestamps",
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "plan": [],
+                    "current_step": 0,
+                    "awaiting_user": False,
+                    "messages": [{"role": "assistant", "content": "Bad timestamps restored"}],
+                }
+            },
+        )
+
+        original_get_thread = checkpoint_manager.saver.get_thread
+
+        def get_thread_with_bad_timestamps(thread_id: str) -> dict[str, object] | None:
+            thread = original_get_thread(thread_id)
+            if not thread or thread_id != "thread-bad-timestamps":
+                return thread
+            return {
+                **thread,
+                "updated_at": {"unexpected": "object"},
+                "created_at": 123,
+            }
+
+        monkeypatch.setattr(checkpoint_manager.saver, "get_thread", get_thread_with_bad_timestamps)
+
+        _event_queues.clear()
+        _thread_states.clear()
+        _threads.clear()
+
+        response = client.get("/api/chat/threads")
+        data = response.json()
+
+        assert response.status_code == 200
+        assert [thread["thread_id"] for thread in data["threads"]] == ["thread-bad-timestamps"]
+        assert data["threads"][0]["updated_at"] is None
+        assert data["threads"][0]["created_at"] is None
+        assert data["threads"][0]["summary"] == "ready."
+
 
 class TestGetThreadState:
     """Tests for thread state hydration endpoint."""
