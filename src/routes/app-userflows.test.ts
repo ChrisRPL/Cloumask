@@ -2,6 +2,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AppTestHost from '$lib/test-utils/AppTestHost.svelte';
 import { getSSEManager } from '$lib/utils/sse';
+import { mockInvoke } from '$lib/test-utils';
 
 function jsonResponse(body: unknown, init?: ResponseInit): Response {
 	return new Response(JSON.stringify(body), {
@@ -141,6 +142,7 @@ function createFetchMock(options?: {
 describe('App user flows', () => {
 	beforeEach(() => {
 		localStorage.clear();
+		mockInvoke.mockReset();
 		Object.defineProperty(HTMLElement.prototype, 'scrollTo', {
 			value: vi.fn(),
 			writable: true,
@@ -1137,6 +1139,124 @@ describe('App user flows', () => {
 			});
 			expect(createCalls).toHaveLength(1);
 		});
+
+		view.unmount();
+	});
+
+	it('keeps cleared resume UI from returning after disconnect and reconnect', async () => {
+		localStorage.setItem('cloumask:setup', 'complete');
+		let availableThreads = [
+			{
+				thread_id: 'thread-clear-reconnect',
+				title: 'Reconnect Review',
+				status: 'active',
+				last_message: '',
+				updated_at: '2026-03-15T13:30:00.000Z',
+				created_at: '2026-03-15T13:30:00.000Z',
+				awaiting_user: true,
+				current_step: 0,
+				total_steps: 2,
+				summary: 'awaiting review. Progress: 1/2 steps.',
+			},
+		];
+		const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+			const url =
+				typeof input === 'string'
+					? input
+					: input instanceof URL
+						? input.toString()
+						: input.url;
+			const method = (init?.method ?? 'GET').toUpperCase();
+
+			if (url.endsWith('/llm/ensure-ready') && method === 'GET') {
+				return jsonResponse({
+					ready: true,
+					service_running: true,
+					required_model: 'qwen3:8b',
+					model_available: true,
+					error: null,
+				});
+			}
+
+			if (url.includes('/api/chat/threads?limit=') && method === 'GET') {
+				return jsonResponse({ threads: availableThreads });
+			}
+
+			if (url.endsWith('/api/chat/threads/thread-clear-reconnect/state') && method === 'GET') {
+				return jsonResponse({
+					thread_id: 'thread-clear-reconnect',
+					state: {
+						messages: [
+							{
+								role: 'assistant',
+								content: 'Reconnect clear thread restored.',
+								timestamp: '2026-03-15T13:30:01.000Z',
+							},
+						],
+						plan: [
+							{
+								id: 'step-1',
+								tool_name: 'scan_directory',
+								description: 'Scan inbox',
+								parameters: { path: '/data/inbox' },
+								status: 'completed',
+							},
+							{
+								id: 'step-2',
+								tool_name: 'review',
+								description: 'Review detections',
+								parameters: {},
+								status: 'pending',
+							},
+						],
+						plan_approved: false,
+						awaiting_user: true,
+						current_step: 1,
+					},
+				});
+			}
+
+			if (url.endsWith('/api/chat/threads/thread-clear-reconnect') && method === 'DELETE') {
+				availableThreads = [];
+				return jsonResponse({});
+			}
+
+			if (url.endsWith('/api/chat/threads') && method === 'POST') {
+				return jsonResponse({
+					thread_id: 'thread-fresh-after-clear-reconnect',
+					created: true,
+					awaiting_user: false,
+					current_step: 0,
+					total_steps: 0,
+				});
+			}
+
+			return jsonResponse({});
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		const view = render(AppTestHost);
+
+		await waitFor(() => {
+			expect(screen.getByText('Reconnect clear thread restored.')).toBeTruthy();
+		});
+		expect(screen.getByText('Resumed:')).toBeTruthy();
+
+		(getSSEManager() as unknown as { updateState(state: 'disconnected'): void }).updateState(
+			'disconnected'
+		);
+		await fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+
+		await waitFor(() => {
+			expect(screen.queryByText('Resumed:')).toBeNull();
+		});
+
+		(getSSEManager() as unknown as { updateState(state: 'connected'): void }).updateState(
+			'connected'
+		);
+
+		expect(screen.queryByText('Resumed:')).toBeNull();
+		expect(screen.queryByText('Reconnect clear thread restored.')).toBeNull();
 
 		view.unmount();
 	});
