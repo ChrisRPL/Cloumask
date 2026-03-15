@@ -566,6 +566,40 @@ class TestListThreads:
         assert data["threads"][0]["total_steps"] == 0
         assert data["threads"][0]["summary"] == "ready."
 
+    def test_list_threads_ignores_non_string_last_message_content(
+        self,
+        client: TestClient,
+        checkpoint_manager: CheckpointManager,
+    ) -> None:
+        """List threads should not surface malformed last-message payload content."""
+        checkpoint_manager.create_thread("thread-bad-message", title="Bad message")
+        checkpoint_manager.save_snapshot(
+            "thread-bad-message",
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "plan": [],
+                    "current_step": 0,
+                    "awaiting_user": False,
+                    "messages": [
+                        {"role": "assistant", "content": {"unexpected": "object"}},
+                    ],
+                }
+            },
+        )
+
+        _event_queues.clear()
+        _thread_states.clear()
+        _threads.clear()
+
+        response = client.get("/api/chat/threads")
+        data = response.json()
+
+        assert response.status_code == 200
+        assert [thread["thread_id"] for thread in data["threads"]] == ["thread-bad-message"]
+        assert data["threads"][0]["last_message"] == ""
+        assert data["threads"][0]["summary"] == "ready."
+
 
 class TestGetThreadState:
     """Tests for thread state hydration endpoint."""
