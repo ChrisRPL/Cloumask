@@ -790,13 +790,21 @@
 
 	// Initialize on mount
 	onMount(() => {
+		const handleWindowKeydown = (event: KeyboardEvent) => {
+			if (event.key === 'Escape' && resumedThreadStrip) {
+				dismissResumedThreadStrip();
+			}
+		};
+
 		// Check LLM service readiness first
 		checkLLM();
 		// Initialize chat connection
 		initializeChat();
+		window.addEventListener('keydown', handleWindowKeydown);
 
 		// Cleanup on unmount - don't disconnect, just let SSE continue
 		return () => {
+			window.removeEventListener('keydown', handleWindowKeydown);
 			// SSE connection persists across view switches
 		};
 	});
