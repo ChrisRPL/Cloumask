@@ -1,6 +1,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AppTestHost from '$lib/test-utils/AppTestHost.svelte';
+import { getSSEManager } from '$lib/utils/sse';
 
 function jsonResponse(body: unknown, init?: ResponseInit): Response {
 	return new Response(JSON.stringify(body), {
@@ -861,6 +862,80 @@ describe('App user flows', () => {
 		await fireEvent.keyDown(window, { key: 'Escape' });
 
 		expect(screen.queryByText('Resumed:')).toBeNull();
+
+		view.unmount();
+	});
+
+	it('clears the resumed thread strip after sending a new message', async () => {
+		localStorage.setItem('cloumask:setup', 'complete');
+		const fetchMock = createFetchMock({
+			threadList: [
+				{
+					thread_id: 'thread-send-clears-strip',
+					title: 'Follow-up Review',
+					awaiting_user: true,
+					current_step: 0,
+					total_steps: 2,
+					summary: 'awaiting review. Progress: 1/2 steps.',
+				},
+			],
+			threadStates: {
+				'thread-send-clears-strip': {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Ready for your follow-up.',
+							timestamp: '2026-03-15T13:15:00.000Z',
+						},
+					],
+					plan: [
+						{
+							id: 'step-1',
+							tool_name: 'scan_directory',
+							description: 'Scan inbox',
+							parameters: { path: '/data/inbox' },
+							status: 'completed',
+						},
+						{
+							id: 'step-2',
+							tool_name: 'review',
+							description: 'Review detections',
+							parameters: {},
+							status: 'pending',
+						},
+					],
+					plan_approved: false,
+					awaiting_user: true,
+					current_step: 1,
+				},
+			},
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		const view = render(AppTestHost);
+
+		await waitFor(() => {
+			expect(screen.getByText('Ready for your follow-up.')).toBeTruthy();
+		});
+		expect(screen.getByText('Resumed:')).toBeTruthy();
+		(getSSEManager() as unknown as { updateState(state: 'connected'): void }).updateState(
+			'connected'
+		);
+
+		const input = screen.getByLabelText('Message input') as HTMLTextAreaElement;
+		await fireEvent.input(input, { target: { value: 'Continue the run' } });
+		await fireEvent.keyDown(input, { key: 'Enter' });
+
+		await waitFor(() => {
+			expect(screen.queryByText('Resumed:')).toBeNull();
+		});
+
+		const sendCalls = fetchMock.mock.calls.filter(([url, init]) => {
+			const requestUrl = typeof url === 'string' ? url : url.toString();
+			const method = (init?.method ?? 'GET').toUpperCase();
+			return requestUrl.includes('/api/chat/send/thread-send-clears-strip') && method === 'POST';
+		});
+		expect(sendCalls).toHaveLength(1);
 
 		view.unmount();
 	});
