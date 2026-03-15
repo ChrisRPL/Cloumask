@@ -866,7 +866,7 @@ describe('App user flows', () => {
 		view.unmount();
 	});
 
-	it('clears the resumed thread strip after sending a new message', async () => {
+	it('keeps the resumed thread strip cleared after sending a new message and reconnecting', async () => {
 		localStorage.setItem('cloumask:setup', 'complete');
 		const fetchMock = createFetchMock({
 			threadList: [
@@ -929,6 +929,13 @@ describe('App user flows', () => {
 		await waitFor(() => {
 			expect(screen.queryByText('Resumed:')).toBeNull();
 		});
+		(getSSEManager() as unknown as { updateState(state: 'disconnected' | 'connected'): void }).updateState(
+			'disconnected'
+		);
+		(getSSEManager() as unknown as { updateState(state: 'disconnected' | 'connected'): void }).updateState(
+			'connected'
+		);
+		expect(screen.queryByText('Resumed:')).toBeNull();
 
 		const sendCalls = fetchMock.mock.calls.filter(([url, init]) => {
 			const requestUrl = typeof url === 'string' ? url : url.toString();
