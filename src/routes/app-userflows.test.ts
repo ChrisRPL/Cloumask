@@ -465,14 +465,12 @@ describe('App user flows', () => {
 					awaiting_user: false,
 					current_step: 2,
 					total_steps: 2,
-					summary: 'completed. Progress: 2/2 steps.',
 				},
 				{
 					thread_id: 'thread-awaiting-review',
 					awaiting_user: true,
-					current_step: 0,
+					current_step: 1,
 					total_steps: 3,
-					summary: 'awaiting review. Progress: 1/3 steps.',
 				},
 			],
 			threadStates: {
@@ -655,9 +653,8 @@ describe('App user flows', () => {
 				{
 					thread_id: 'thread-loading-note',
 					awaiting_user: true,
-					current_step: 0,
+					current_step: 1,
 					total_steps: 3,
-					summary: 'awaiting review. Progress: 1/3 steps.',
 				},
 			],
 			threadStates: {
