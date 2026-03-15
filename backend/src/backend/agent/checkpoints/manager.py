@@ -162,8 +162,10 @@ class CheckpointManager:
             values = _coerce_state_mapping(checkpoint_data["channel_values"])
 
         plan = _coerce_step_list(values.get("plan", []))
-        current_step = _coerce_non_negative_int(values.get("current_step", 0))
         completed = sum(1 for s in plan if s.get("status") == "completed")
+        current_step = _coerce_non_negative_int(values.get("current_step", 0))
+        if plan and completed >= len(plan):
+            current_step = max(current_step, completed)
 
         # Get messages for last message content
         messages = _coerce_message_list(values.get("messages", []))
