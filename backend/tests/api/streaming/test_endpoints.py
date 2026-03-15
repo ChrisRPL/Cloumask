@@ -538,6 +538,34 @@ class TestListThreads:
         assert data["threads"][0]["summary"] == "awaiting review."
         assert data["threads"][1]["summary"] == "ready."
 
+    def test_list_threads_skips_corrupted_non_list_plan_payloads(self, client: TestClient, checkpoint_manager: CheckpointManager) -> None:
+        """List threads should not crash when persisted plan payloads are malformed."""
+        checkpoint_manager.create_thread("thread-corrupted-plan", title="Corrupted")
+        checkpoint_manager.save_snapshot(
+            "thread-corrupted-plan",
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "plan": {"unexpected": "shape"},
+                    "current_step": 3,
+                    "awaiting_user": False,
+                    "messages": [{"role": "assistant", "content": "Corrupted plan payload"}],
+                }
+            },
+        )
+
+        _event_queues.clear()
+        _thread_states.clear()
+        _threads.clear()
+
+        response = client.get("/api/chat/threads")
+        data = response.json()
+
+        assert response.status_code == 200
+        assert [thread["thread_id"] for thread in data["threads"]] == ["thread-corrupted-plan"]
+        assert data["threads"][0]["total_steps"] == 0
+        assert data["threads"][0]["summary"] == "ready."
+
 
 class TestGetThreadState:
     """Tests for thread state hydration endpoint."""
