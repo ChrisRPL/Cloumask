@@ -62,6 +62,11 @@ def _coerce_non_negative_int(value: Any) -> int:
         return 0
 
 
+def _coerce_bool(value: Any) -> bool:
+    """Return only real boolean payloads from persisted state."""
+    return value is True
+
+
 class CheckpointManager:
     """
     High-level checkpoint management for the agent.
@@ -178,7 +183,7 @@ class CheckpointManager:
             "completed_steps": completed,
             "current_step": current_step,
             "progress_percent": (completed / len(plan) * 100) if plan else 0,
-            "awaiting_user": values.get("awaiting_user", False),
+            "awaiting_user": _coerce_bool(values.get("awaiting_user")),
             "last_message": last_message,
             "updated_at": _coerce_optional_string(thread_info.get("updated_at")),
             "created_at": _coerce_optional_string(thread_info.get("created_at")),
