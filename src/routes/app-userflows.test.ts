@@ -1015,6 +1015,132 @@ describe('App user flows', () => {
 		view.unmount();
 	});
 
+	it('clears resumed thread context when starting a fresh conversation', async () => {
+		localStorage.setItem('cloumask:setup', 'complete');
+
+		let availableThreads = [
+			{
+				thread_id: 'thread-clear-strip',
+				title: 'Clear Review',
+				status: 'active',
+				last_message: '',
+				updated_at: '2026-03-15T13:20:00.000Z',
+				created_at: '2026-03-15T13:20:00.000Z',
+				awaiting_user: true,
+				current_step: 0,
+				total_steps: 2,
+				summary: 'awaiting review. Progress: 1/2 steps.',
+			},
+		];
+		const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+			const url =
+				typeof input === 'string'
+					? input
+					: input instanceof URL
+						? input.toString()
+						: input.url;
+			const method = (init?.method ?? 'GET').toUpperCase();
+
+			if (url.endsWith('/llm/ensure-ready') && method === 'GET') {
+				return jsonResponse({
+					ready: true,
+					service_running: true,
+					required_model: 'qwen3:8b',
+					model_available: true,
+					error: null,
+				});
+			}
+
+			if (url.includes('/api/chat/threads?limit=') && method === 'GET') {
+				return jsonResponse({ threads: availableThreads });
+			}
+
+			if (url.endsWith('/api/chat/threads/thread-clear-strip/state') && method === 'GET') {
+				return jsonResponse({
+					thread_id: 'thread-clear-strip',
+					state: {
+						messages: [
+							{
+								role: 'assistant',
+								content: 'Clear strip thread restored.',
+								timestamp: '2026-03-15T13:20:01.000Z',
+							},
+						],
+						plan: [
+							{
+								id: 'step-1',
+								tool_name: 'scan_directory',
+								description: 'Scan inbox',
+								parameters: { path: '/data/inbox' },
+								status: 'completed',
+							},
+							{
+								id: 'step-2',
+								tool_name: 'review',
+								description: 'Review detections',
+								parameters: {},
+								status: 'pending',
+							},
+						],
+						plan_approved: false,
+						awaiting_user: true,
+						current_step: 1,
+					},
+				});
+			}
+
+			if (url.endsWith('/api/chat/threads/thread-clear-strip') && method === 'DELETE') {
+				availableThreads = [];
+				return jsonResponse({});
+			}
+
+			if (url.endsWith('/api/chat/threads') && method === 'POST') {
+				return jsonResponse({
+					thread_id: 'thread-fresh-after-clear',
+					created: true,
+					awaiting_user: false,
+					current_step: 0,
+					total_steps: 0,
+				});
+			}
+
+			return jsonResponse({});
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		const view = render(AppTestHost);
+
+		await waitFor(() => {
+			expect(screen.getByText('Clear strip thread restored.')).toBeTruthy();
+		});
+		expect(screen.getByText('Resumed:')).toBeTruthy();
+
+		await fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+
+		await waitFor(() => {
+			expect(screen.queryByText('Resumed:')).toBeNull();
+		});
+		expect(screen.queryByText('Clear strip thread restored.')).toBeNull();
+
+		const closeCalls = fetchMock.mock.calls.filter(([url, init]) => {
+			const requestUrl = typeof url === 'string' ? url : url.toString();
+			const method = (init?.method ?? 'GET').toUpperCase();
+			return requestUrl.endsWith('/api/chat/threads/thread-clear-strip') && method === 'DELETE';
+		});
+		expect(closeCalls).toHaveLength(1);
+
+		await waitFor(() => {
+			const createCalls = fetchMock.mock.calls.filter(([url, init]) => {
+				const requestUrl = typeof url === 'string' ? url : url.toString();
+				const method = (init?.method ?? 'GET').toUpperCase();
+				return requestUrl.endsWith('/api/chat/threads') && method === 'POST';
+			});
+			expect(createCalls).toHaveLength(1);
+		});
+
+		view.unmount();
+	});
+
 	it('falls back to locally computed resume copy when backend summary is missing', async () => {
 		localStorage.setItem('cloumask:setup', 'complete');
 		const fetchMock = createFetchMock({
