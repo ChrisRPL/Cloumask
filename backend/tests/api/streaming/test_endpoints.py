@@ -480,6 +480,64 @@ class TestListThreads:
         assert data["threads"][0]["summary"] == "in progress. Progress: 0/2 steps."
         assert data["threads"][1]["summary"] == "awaiting review. Progress: 0/3 steps."
 
+    def test_list_threads_formats_empty_and_missing_plan_summaries(
+        self,
+        client: TestClient,
+        checkpoint_manager: CheckpointManager,
+    ) -> None:
+        """List threads should keep empty-plan summaries stable for ready and review states."""
+        checkpoint_manager.create_thread("thread-review-empty", title="Review empty")
+        checkpoint_manager.save_snapshot(
+            "thread-review-empty",
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "plan": [],
+                    "current_step": 0,
+                    "awaiting_user": True,
+                    "messages": [{"role": "assistant", "content": "Awaiting review without steps"}],
+                }
+            },
+        )
+
+        checkpoint_manager.create_thread("thread-ready-missing-plan", title="Ready missing plan")
+        checkpoint_manager.save_snapshot(
+            "thread-ready-missing-plan",
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "current_step": 4,
+                    "awaiting_user": False,
+                    "messages": [{"role": "assistant", "content": "Ready without plan"}],
+                }
+            },
+        )
+
+        with checkpoint_manager.saver._get_conn() as conn:
+            conn.execute(
+                "UPDATE threads SET updated_at = ? WHERE thread_id = ?",
+                ("2026-03-15 12:21:00", "thread-review-empty"),
+            )
+            conn.execute(
+                "UPDATE threads SET updated_at = ? WHERE thread_id = ?",
+                ("2026-03-15 12:20:00", "thread-ready-missing-plan"),
+            )
+
+        _event_queues.clear()
+        _thread_states.clear()
+        _threads.clear()
+
+        response = client.get("/api/chat/threads")
+        data = response.json()
+
+        assert response.status_code == 200
+        assert [thread["thread_id"] for thread in data["threads"]] == [
+            "thread-review-empty",
+            "thread-ready-missing-plan",
+        ]
+        assert data["threads"][0]["summary"] == "awaiting review."
+        assert data["threads"][1]["summary"] == "ready."
+
 
 class TestGetThreadState:
     """Tests for thread state hydration endpoint."""
