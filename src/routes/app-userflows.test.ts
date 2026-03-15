@@ -1261,6 +1261,130 @@ describe('App user flows', () => {
 		view.unmount();
 	});
 
+	it('handles repeated clear presses while disconnected without reviving old resume state', async () => {
+		localStorage.setItem('cloumask:setup', 'complete');
+
+		let availableThreads = [
+			{
+				thread_id: 'thread-repeat-clear',
+				title: 'Repeat Clear Review',
+				status: 'active',
+				last_message: '',
+				updated_at: '2026-03-15T13:40:00.000Z',
+				created_at: '2026-03-15T13:40:00.000Z',
+				awaiting_user: true,
+				current_step: 0,
+				total_steps: 2,
+				summary: 'awaiting review. Progress: 1/2 steps.',
+			},
+		];
+		let oldStateFetches = 0;
+		let createCount = 0;
+		const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+			const url =
+				typeof input === 'string'
+					? input
+					: input instanceof URL
+						? input.toString()
+						: input.url;
+			const method = (init?.method ?? 'GET').toUpperCase();
+
+			if (url.endsWith('/llm/ensure-ready') && method === 'GET') {
+				return jsonResponse({
+					ready: true,
+					service_running: true,
+					required_model: 'qwen3:8b',
+					model_available: true,
+					error: null,
+				});
+			}
+
+			if (url.includes('/api/chat/threads?limit=') && method === 'GET') {
+				return jsonResponse({ threads: availableThreads });
+			}
+
+			if (url.endsWith('/api/chat/threads/thread-repeat-clear/state') && method === 'GET') {
+				oldStateFetches += 1;
+				return jsonResponse({
+					thread_id: 'thread-repeat-clear',
+					state: {
+						messages: [
+							{
+								role: 'assistant',
+								content: 'Repeat clear thread restored.',
+								timestamp: '2026-03-15T13:40:01.000Z',
+							},
+						],
+						plan: [
+							{
+								id: 'step-1',
+								tool_name: 'scan_directory',
+								description: 'Scan inbox',
+								parameters: { path: '/data/inbox' },
+								status: 'completed',
+							},
+							{
+								id: 'step-2',
+								tool_name: 'review',
+								description: 'Review detections',
+								parameters: {},
+								status: 'pending',
+							},
+						],
+						plan_approved: false,
+						awaiting_user: true,
+						current_step: 1,
+					},
+				});
+			}
+
+			if (url.endsWith('/api/chat/threads/thread-repeat-clear') && method === 'DELETE') {
+				availableThreads = [];
+				return jsonResponse({});
+			}
+
+			if (url.endsWith('/api/chat/threads') && method === 'POST') {
+				createCount += 1;
+				return jsonResponse({
+					thread_id: 'thread-fresh-after-repeat-clear',
+					created: true,
+					awaiting_user: false,
+					current_step: 0,
+					total_steps: 0,
+				});
+			}
+
+			return jsonResponse({});
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		const view = render(AppTestHost);
+
+		await waitFor(() => {
+			expect(screen.getByText('Repeat clear thread restored.')).toBeTruthy();
+		});
+		expect(screen.getByText('Resumed:')).toBeTruthy();
+		expect(oldStateFetches).toBe(1);
+
+		(getSSEManager() as unknown as { updateState(state: 'disconnected'): void }).updateState(
+			'disconnected'
+		);
+		await fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+		await fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+
+		await waitFor(() => {
+			expect(screen.queryByText('Resumed:')).toBeNull();
+		});
+		expect(screen.queryByText('Repeat clear thread restored.')).toBeNull();
+
+		await waitFor(() => {
+			expect(createCount).toBe(1);
+		});
+		expect(oldStateFetches).toBe(1);
+
+		view.unmount();
+	});
+
 	it('falls back to locally computed resume copy when backend summary is missing', async () => {
 		localStorage.setItem('cloumask:setup', 'complete');
 		const fetchMock = createFetchMock({
