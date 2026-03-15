@@ -287,10 +287,12 @@
 
 		for (const thread of threads) {
 			const priority = getThreadResumePriority(thread);
-			if (priority < bestPriority) {
-				bestThread = thread;
-				bestPriority = priority;
-			}
+			if (priority > bestPriority) continue;
+			if (priority === bestPriority && bestThread !== null) continue;
+
+			// `listThreads()` already returns newest-first, so keep the first thread on priority ties.
+			bestThread = thread;
+			bestPriority = priority;
 		}
 
 		return bestThread;
