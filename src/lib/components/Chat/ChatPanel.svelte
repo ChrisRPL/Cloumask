@@ -357,6 +357,10 @@
 		};
 	}
 
+	function dismissResumedThreadStrip() {
+		resumedThreadStrip = null;
+	}
+
 	function hasSystemMessage(
 		messages: PersistedThreadState['messages'],
 		content: string
@@ -837,12 +841,22 @@
 	{/if}
 
 	{#if !isInitializing && resumedThreadStrip}
-		<div class="px-4 py-2 mx-4 mt-2 rounded border border-border/60 bg-card/40 text-xs text-muted-foreground">
-			<span class="font-medium text-foreground/90">Resumed:</span>
-			{' '}
-			{resumedThreadStrip.label}
-			{' '}
-			<span class="text-muted-foreground">• {resumedThreadStrip.summary}</span>
+		<div class="px-4 py-2 mx-4 mt-2 rounded border border-border/60 bg-card/40 text-xs text-muted-foreground flex items-center justify-between gap-3">
+			<div>
+				<span class="font-medium text-foreground/90">Resumed:</span>
+				{' '}
+				{resumedThreadStrip.label}
+				{' '}
+				<span class="text-muted-foreground">• {resumedThreadStrip.summary}</span>
+			</div>
+			<button
+				type="button"
+				class="shrink-0 rounded px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+				aria-label="Dismiss resumed thread summary"
+				onclick={dismissResumedThreadStrip}
+			>
+				Dismiss
+			</button>
 		</div>
 	{/if}
 
