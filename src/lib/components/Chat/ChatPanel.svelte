@@ -303,10 +303,15 @@
 		return 'ready';
 	}
 
+	function getTrimmedThreadSummary(thread: ThreadSummary): string | null {
+		const summary = thread.summary?.trim();
+		return summary ? summary : null;
+	}
+
 	function getThreadResumeSummary(thread: ThreadSummary): string {
-		const summary = (thread as ThreadSummary & { summary?: string | null }).summary;
-		if (typeof summary === 'string' && summary.trim().length > 0) {
-			return summary.trim();
+		const summary = getTrimmedThreadSummary(thread);
+		if (summary) {
+			return summary;
 		}
 
 		const completedSteps =
