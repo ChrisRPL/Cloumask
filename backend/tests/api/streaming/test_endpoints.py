@@ -415,6 +415,71 @@ class TestListThreads:
         assert data["threads"][1]["summary"] == "in progress. Progress: 1/2 steps."
         assert data["threads"][2]["summary"] == "awaiting review. Progress: 1/2 steps."
 
+    def test_list_threads_clamps_missing_and_negative_current_step_in_summary(
+        self,
+        client: TestClient,
+        checkpoint_manager: CheckpointManager,
+    ) -> None:
+        """List threads should keep summary text stable for malformed step counters."""
+        checkpoint_manager.create_thread("thread-missing-step", title="Missing step")
+        checkpoint_manager.save_snapshot(
+            "thread-missing-step",
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "plan": [
+                        {"id": "step-1", "tool_name": "scan_directory", "status": "completed"},
+                        {"id": "step-2", "tool_name": "detect", "status": "pending"},
+                    ],
+                    "awaiting_user": False,
+                    "messages": [{"role": "assistant", "content": "Missing current step"}],
+                }
+            },
+        )
+
+        checkpoint_manager.create_thread("thread-negative-step", title="Negative step")
+        checkpoint_manager.save_snapshot(
+            "thread-negative-step",
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "plan": [
+                        {"id": "step-1", "tool_name": "scan_directory", "status": "completed"},
+                        {"id": "step-2", "tool_name": "review", "status": "pending"},
+                        {"id": "step-3", "tool_name": "export", "status": "pending"},
+                    ],
+                    "current_step": -4,
+                    "awaiting_user": True,
+                    "messages": [{"role": "assistant", "content": "Negative current step"}],
+                }
+            },
+        )
+
+        with checkpoint_manager.saver._get_conn() as conn:
+            conn.execute(
+                "UPDATE threads SET updated_at = ? WHERE thread_id = ?",
+                ("2026-03-15 12:11:00", "thread-missing-step"),
+            )
+            conn.execute(
+                "UPDATE threads SET updated_at = ? WHERE thread_id = ?",
+                ("2026-03-15 12:10:00", "thread-negative-step"),
+            )
+
+        _event_queues.clear()
+        _thread_states.clear()
+        _threads.clear()
+
+        response = client.get("/api/chat/threads")
+        data = response.json()
+
+        assert response.status_code == 200
+        assert [thread["thread_id"] for thread in data["threads"]] == [
+            "thread-missing-step",
+            "thread-negative-step",
+        ]
+        assert data["threads"][0]["summary"] == "in progress. Progress: 0/2 steps."
+        assert data["threads"][1]["summary"] == "awaiting review. Progress: 0/3 steps."
+
 
 class TestGetThreadState:
     """Tests for thread state hydration endpoint."""
