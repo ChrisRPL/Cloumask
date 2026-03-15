@@ -283,6 +283,7 @@ export interface ThreadSummary {
 	current_step: number;
 	total_steps: number;
 	last_message: string;
+	summary: string;
 	updated_at: string | null;
 	created_at: string | null;
 }
