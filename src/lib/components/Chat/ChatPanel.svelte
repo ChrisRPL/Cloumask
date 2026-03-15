@@ -333,12 +333,20 @@
 		return summary.endsWith('.') ? summary.slice(0, -1) : summary;
 	}
 
+	function getPendingResumeLabel(thread: ThreadSummary): string {
+		const title = thread.title?.trim();
+		if (title && title !== thread.thread_id) {
+			return `${title} (${thread.thread_id})`;
+		}
+		return thread.thread_id;
+	}
+
 	function buildResumedThreadMessage(thread: ThreadSummary): string {
 		return `Resumed backend thread ${thread.thread_id}. Status: ${getThreadResumeSummary(thread)}`;
 	}
 
 	function buildPendingResumeMessage(thread: ThreadSummary): string {
-		return `Resuming ${thread.thread_id}: ${getPendingResumeSummary(thread)}`;
+		return `Resuming ${getPendingResumeLabel(thread)}: ${getPendingResumeSummary(thread)}`;
 	}
 
 	function hasSystemMessage(
