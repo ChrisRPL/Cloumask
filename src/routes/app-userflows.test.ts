@@ -791,6 +791,8 @@ describe('App user flows', () => {
 				element?.textContent === '• awaiting review. Progress: 1/3 steps.'
 			)
 		).toBeTruthy();
+		await fireEvent.click(screen.getByRole('button', { name: 'Dismiss resumed thread summary' }));
+		expect(screen.queryByText('Resumed:')).toBeNull();
 
 		view.unmount();
 	});
