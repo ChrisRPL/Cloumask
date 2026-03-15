@@ -330,6 +330,91 @@ class TestListThreads:
         assert data["threads"][0]["summary"] == "completed. Progress: 2/2 steps."
         assert data["threads"][1]["summary"] == "ready."
 
+    def test_list_threads_keeps_recency_order_for_mixed_resume_states(
+        self,
+        client: TestClient,
+        checkpoint_manager: CheckpointManager,
+    ) -> None:
+        """List threads should stay recency-ordered even when summaries span different states."""
+        checkpoint_manager.create_thread("thread-ready-newest", title="Ready newest")
+        checkpoint_manager.save_snapshot(
+            "thread-ready-newest",
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "plan": [],
+                    "current_step": 0,
+                    "awaiting_user": False,
+                    "messages": [{"role": "assistant", "content": "Ready thread"}],
+                }
+            },
+        )
+
+        checkpoint_manager.create_thread("thread-progress-middle", title="Progress middle")
+        checkpoint_manager.save_snapshot(
+            "thread-progress-middle",
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "plan": [
+                        {"id": "step-1", "tool_name": "scan_directory", "status": "completed"},
+                        {"id": "step-2", "tool_name": "detect", "status": "pending"},
+                    ],
+                    "current_step": 1,
+                    "awaiting_user": False,
+                    "messages": [{"role": "assistant", "content": "Progress thread"}],
+                }
+            },
+        )
+
+        checkpoint_manager.create_thread("thread-review-oldest", title="Review oldest")
+        checkpoint_manager.save_snapshot(
+            "thread-review-oldest",
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "plan": [
+                        {"id": "step-1", "tool_name": "scan_directory", "status": "completed"},
+                        {"id": "step-2", "tool_name": "review", "status": "pending"},
+                    ],
+                    "current_step": 1,
+                    "awaiting_user": True,
+                    "messages": [{"role": "assistant", "content": "Review thread"}],
+                }
+            },
+        )
+
+        with checkpoint_manager.saver._get_conn() as conn:
+            conn.execute(
+                "UPDATE threads SET updated_at = ? WHERE thread_id = ?",
+                ("2026-03-15 12:02:00", "thread-ready-newest"),
+            )
+            conn.execute(
+                "UPDATE threads SET updated_at = ? WHERE thread_id = ?",
+                ("2026-03-15 12:01:00", "thread-progress-middle"),
+            )
+            conn.execute(
+                "UPDATE threads SET updated_at = ? WHERE thread_id = ?",
+                ("2026-03-15 12:00:00", "thread-review-oldest"),
+            )
+
+        _event_queues.clear()
+        _thread_states.clear()
+        _threads.clear()
+
+        response = client.get("/api/chat/threads")
+        data = response.json()
+
+        assert response.status_code == 200
+        assert [thread["thread_id"] for thread in data["threads"]] == [
+            "thread-ready-newest",
+            "thread-progress-middle",
+            "thread-review-oldest",
+        ]
+        assert data["threads"][0]["summary"] == "ready."
+        assert data["threads"][1]["summary"] == "in progress. Progress: 1/2 steps."
+        assert data["threads"][2]["summary"] == "awaiting review. Progress: 1/2 steps."
+
 
 class TestGetThreadState:
     """Tests for thread state hydration endpoint."""
