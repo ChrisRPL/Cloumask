@@ -804,6 +804,67 @@ describe('App user flows', () => {
 		view.unmount();
 	});
 
+	it('dismisses the resumed thread strip with Escape', async () => {
+		localStorage.setItem('cloumask:setup', 'complete');
+		const fetchMock = createFetchMock({
+			threadList: [
+				{
+					thread_id: 'thread-escape-strip',
+					title: 'Escape Review',
+					awaiting_user: true,
+					current_step: 0,
+					total_steps: 2,
+					summary: 'awaiting review. Progress: 1/2 steps.',
+				},
+			],
+			threadStates: {
+				'thread-escape-strip': {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Escape strip thread restored.',
+							timestamp: '2026-03-15T13:10:00.000Z',
+						},
+					],
+					plan: [
+						{
+							id: 'step-1',
+							tool_name: 'scan_directory',
+							description: 'Scan inbox',
+							parameters: { path: '/data/inbox' },
+							status: 'completed',
+						},
+						{
+							id: 'step-2',
+							tool_name: 'review',
+							description: 'Review detections',
+							parameters: {},
+							status: 'pending',
+						},
+					],
+					plan_approved: false,
+					awaiting_user: true,
+					current_step: 1,
+				},
+			},
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		const view = render(AppTestHost);
+
+		await waitFor(() => {
+			expect(screen.getByText('Escape strip thread restored.')).toBeTruthy();
+		});
+		expect(screen.getByText('Resumed:')).toBeTruthy();
+		expect(screen.getByText('Escape Review (thread-escape-strip)')).toBeTruthy();
+
+		await fireEvent.keyDown(window, { key: 'Escape' });
+
+		expect(screen.queryByText('Resumed:')).toBeNull();
+
+		view.unmount();
+	});
+
 	it('falls back to locally computed resume copy when backend summary is missing', async () => {
 		localStorage.setItem('cloumask:setup', 'complete');
 		const fetchMock = createFetchMock({
