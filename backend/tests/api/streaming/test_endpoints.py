@@ -784,6 +784,41 @@ class TestListThreads:
         assert data["threads"][0]["last_message"] == ""
         assert data["threads"][0]["summary"] == "in progress. Progress: 0/2 steps."
 
+    def test_list_threads_ignores_malformed_awaiting_user_values(
+        self,
+        client: TestClient,
+        checkpoint_manager: CheckpointManager,
+    ) -> None:
+        """List threads should not treat malformed awaiting_user payloads as review-required."""
+        checkpoint_manager.create_thread("thread-bad-awaiting", title="Bad awaiting")
+        checkpoint_manager.save_snapshot(
+            "thread-bad-awaiting",
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "plan": [
+                        {"id": "step-1", "tool_name": "scan_directory", "status": "completed"},
+                        {"id": "step-2", "tool_name": "review", "status": "pending"},
+                    ],
+                    "current_step": 1,
+                    "awaiting_user": {"unexpected": "object"},
+                    "messages": [{"role": "assistant", "content": "Bad awaiting restored"}],
+                }
+            },
+        )
+
+        _event_queues.clear()
+        _thread_states.clear()
+        _threads.clear()
+
+        response = client.get("/api/chat/threads")
+        data = response.json()
+
+        assert response.status_code == 200
+        assert [thread["thread_id"] for thread in data["threads"]] == ["thread-bad-awaiting"]
+        assert data["threads"][0]["awaiting_user"] is False
+        assert data["threads"][0]["summary"] == "in progress. Progress: 1/2 steps."
+
 
 class TestGetThreadState:
     """Tests for thread state hydration endpoint."""
