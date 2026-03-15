@@ -160,11 +160,12 @@ class CheckpointManager:
             last_message = _coerce_message_content(last_msg.get("content"))
 
         thread_info = state.get("thread_info", {}) or {}
+        status = _coerce_optional_string(thread_info.get("status")) or STATUS_ACTIVE
 
         return {
             "thread_id": thread_id,
-            "title": thread_info.get("title"),
-            "status": thread_info.get("status", STATUS_ACTIVE),
+            "title": _coerce_optional_string(thread_info.get("title")),
+            "status": status,
             "total_steps": len(plan),
             "completed_steps": completed,
             "current_step": current_step,
