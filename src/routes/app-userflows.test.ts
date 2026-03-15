@@ -435,6 +435,13 @@ describe('App user flows', () => {
 		await waitFor(() => {
 			expect(screen.getByText('Pipeline finished successfully.')).toBeTruthy();
 		});
+		expect(screen.getByText('Resumed:')).toBeTruthy();
+		expect(screen.getByText('thread-complete-1')).toBeTruthy();
+		expect(
+			screen.getByText((_, element) =>
+				element?.textContent === '• completed. Progress: 2/2 steps.'
+			)
+		).toBeTruthy();
 
 		await fireEvent.keyDown(window, { key: '3' });
 		await waitFor(() => {
