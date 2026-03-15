@@ -71,6 +71,7 @@
 	let isSending = $state(false);
 	let isRecoveringSidecar = $state(false);
 	let resumePreview = $state<string | null>(null);
+	let resumedThreadStrip = $state<{ label: string; summary: string } | null>(null);
 
 	// Derived state
 	const llmNotReady = $derived(llmStatus !== null && !llmStatus.ready);
@@ -349,6 +350,13 @@
 		return `Resuming ${getPendingResumeLabel(thread)}: ${getPendingResumeSummary(thread)}`;
 	}
 
+	function buildResumedThreadStrip(thread: ThreadSummary): { label: string; summary: string } {
+		return {
+			label: getPendingResumeLabel(thread),
+			summary: getThreadResumeSummary(thread)
+		};
+	}
+
 	function hasSystemMessage(
 		messages: PersistedThreadState['messages'],
 		content: string
@@ -484,6 +492,7 @@
 			}
 		}
 		const resumeMessage = threadSummary ? buildResumedThreadMessage(threadSummary) : null;
+		resumedThreadStrip = threadSummary ? buildResumedThreadStrip(threadSummary) : null;
 		if (resumeMessage && !hasSystemMessage(messages, resumeMessage)) {
 			agent.addMessage({
 				role: 'system',
@@ -621,6 +630,7 @@
 		isInitializing = true;
 		initError = null;
 		resumePreview = null;
+		resumedThreadStrip = null;
 
 		try {
 			if (isInTauri) {
@@ -677,6 +687,7 @@
 		}
 
 		isSending = true;
+		resumedThreadStrip = null;
 
 		// Add user message to store
 		agent.addMessage({
@@ -740,6 +751,7 @@
 	// Clear conversation
 	async function handleClear() {
 		const previousThreadId = agent.threadId;
+		resumedThreadStrip = null;
 		agent.startNewConversation();
 		pipeline.clearPipeline();
 		if (previousThreadId) {
@@ -821,6 +833,16 @@
 	{#if isInitializing && resumePreview}
 		<div class="px-4 py-2 mx-4 mt-2 rounded border border-border/60 bg-muted/20 text-xs font-mono text-muted-foreground">
 			{resumePreview}
+		</div>
+	{/if}
+
+	{#if !isInitializing && resumedThreadStrip}
+		<div class="px-4 py-2 mx-4 mt-2 rounded border border-border/60 bg-card/40 text-xs text-muted-foreground">
+			<span class="font-medium text-foreground/90">Resumed:</span>
+			{' '}
+			{resumedThreadStrip.label}
+			{' '}
+			<span class="text-muted-foreground">• {resumedThreadStrip.summary}</span>
 		</div>
 	{/if}
 
