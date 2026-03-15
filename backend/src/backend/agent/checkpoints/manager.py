@@ -54,6 +54,14 @@ def _coerce_optional_string(value: Any) -> str | None:
     return value if isinstance(value, str) else None
 
 
+def _coerce_non_negative_int(value: Any) -> int:
+    """Return a non-negative integer from persisted numeric payloads."""
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 0
+
+
 class CheckpointManager:
     """
     High-level checkpoint management for the agent.
@@ -149,7 +157,7 @@ class CheckpointManager:
             values = _coerce_state_mapping(checkpoint_data["channel_values"])
 
         plan = _coerce_step_list(values.get("plan", []))
-        current_step = values.get("current_step", 0)
+        current_step = _coerce_non_negative_int(values.get("current_step", 0))
         completed = sum(1 for s in plan if s.get("status") == "completed")
 
         # Get messages for last message content
