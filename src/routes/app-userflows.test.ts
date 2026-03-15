@@ -717,6 +717,78 @@ describe('App user flows', () => {
 		view.unmount();
 	});
 
+	it('falls back to locally computed resume copy when backend summary is missing', async () => {
+		localStorage.setItem('cloumask:setup', 'complete');
+		const fetchMock = createFetchMock({
+			threadList: [
+				{
+					thread_id: 'thread-fallback-summary',
+					awaiting_user: true,
+					current_step: 2,
+					total_steps: 4,
+				},
+			],
+			threadStates: {
+				'thread-fallback-summary': {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Fallback summary thread restored.',
+							timestamp: '2026-03-15T10:00:00.000Z',
+						},
+					],
+					plan: [
+						{
+							id: 'step-1',
+							tool_name: 'scan_directory',
+							description: 'Scan inbox',
+							parameters: { path: '/data/inbox' },
+							status: 'completed',
+						},
+						{
+							id: 'step-2',
+							tool_name: 'detect',
+							description: 'Detect people',
+							parameters: { classes: ['person'] },
+							status: 'completed',
+						},
+						{
+							id: 'step-3',
+							tool_name: 'export',
+							description: 'Export labels',
+							parameters: { output_path: '/data/out' },
+							status: 'pending',
+						},
+						{
+							id: 'step-4',
+							tool_name: 'review',
+							description: 'Review output',
+							parameters: {},
+							status: 'pending',
+						},
+					],
+					plan_approved: false,
+					awaiting_user: true,
+					current_step: 2,
+				},
+			},
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		const view = render(AppTestHost);
+
+		await waitFor(() => {
+			expect(screen.getByText('Fallback summary thread restored.')).toBeTruthy();
+		});
+		expect(
+			screen.getByText(
+				'Resumed backend thread thread-fallback-summary. Status: awaiting review. Progress: 2/4 steps.'
+			)
+		).toBeTruthy();
+
+		view.unmount();
+	});
+
 	it('reuses latest resumable backend thread before creating a new one', async () => {
 		localStorage.setItem('cloumask:setup', 'complete');
 		const fetchMock = createFetchMock({
