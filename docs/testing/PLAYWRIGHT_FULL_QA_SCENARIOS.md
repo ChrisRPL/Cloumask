@@ -19,6 +19,8 @@ Separate non-Playwright app-userflow automation now covers these resume/hydratio
 - latest thread auto-resume selection priority (`awaiting review` before `in progress` before completed)
 - visible resumed-thread breadcrumb with backend thread id plus backend-provided resume summary text
 - temporary auto-resume note that reuses the backend thread-list `summary` field instead of recomputing copy in the frontend
+- persistent resumed-thread strip after hydration, including completed-thread restores
+- resumed-thread strip dismissal via button and `Escape`
 - completed-thread resume breadcrumb coverage using backend-provided summary text
 - frontend fallback copy when older/backend-misaligned thread summaries are missing
 - checkpoint resume hydration after startup
