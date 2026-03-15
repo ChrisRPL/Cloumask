@@ -168,9 +168,10 @@ class CheckpointManager:
         # Get messages for last message content
         messages = _coerce_message_list(values.get("messages", []))
         last_message = ""
-        if messages:
-            last_msg = messages[-1]
-            last_message = _coerce_message_content(last_msg.get("content"))
+        for message in reversed(messages):
+            last_message = _coerce_message_content(message.get("content"))
+            if last_message:
+                break
 
         thread_info = _coerce_state_mapping(state.get("thread_info", {}))
         status = _coerce_optional_string(thread_info.get("status")) or STATUS_ACTIVE
