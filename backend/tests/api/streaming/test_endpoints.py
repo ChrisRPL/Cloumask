@@ -744,6 +744,46 @@ class TestListThreads:
         assert [thread["thread_id"] for thread in data["threads"]] == ["thread-valid-row"]
         assert data["threads"][0]["summary"] == "ready."
 
+    def test_list_threads_clamps_mixed_corrupted_step_and_message_payloads(
+        self,
+        client: TestClient,
+        checkpoint_manager: CheckpointManager,
+    ) -> None:
+        """List threads should stay stable when current_step and trailing messages are malformed."""
+        checkpoint_manager.create_thread("thread-mixed-corruption", title="Mixed corruption")
+        checkpoint_manager.save_snapshot(
+            "thread-mixed-corruption",
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "plan": [
+                        {"id": "step-1", "tool_name": "scan_directory", "status": "completed"},
+                        {"id": "step-2", "tool_name": "review", "status": "pending"},
+                    ],
+                    "current_step": {"unexpected": "object"},
+                    "awaiting_user": False,
+                    "messages": [
+                        {"role": "assistant", "content": "Earlier valid message"},
+                        "corrupted-tail",
+                        {"role": "assistant", "content": {"unexpected": "object"}},
+                    ],
+                }
+            },
+        )
+
+        _event_queues.clear()
+        _thread_states.clear()
+        _threads.clear()
+
+        response = client.get("/api/chat/threads")
+        data = response.json()
+
+        assert response.status_code == 200
+        assert [thread["thread_id"] for thread in data["threads"]] == ["thread-mixed-corruption"]
+        assert data["threads"][0]["current_step"] == 0
+        assert data["threads"][0]["last_message"] == ""
+        assert data["threads"][0]["summary"] == "in progress. Progress: 0/2 steps."
+
 
 class TestGetThreadState:
     """Tests for thread state hydration endpoint."""
