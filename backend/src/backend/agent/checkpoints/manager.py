@@ -25,6 +25,25 @@ if TYPE_CHECKING:
     from langgraph.graph.state import CompiledStateGraph
 
 
+def _coerce_state_mapping(value: Any) -> dict[str, Any]:
+    """Return a dict-like checkpoint payload or an empty fallback."""
+    return value if isinstance(value, dict) else {}
+
+
+def _coerce_step_list(value: Any) -> list[dict[str, Any]]:
+    """Return only dict plan steps from a persisted payload."""
+    if not isinstance(value, list):
+        return []
+    return [step for step in value if isinstance(step, dict)]
+
+
+def _coerce_message_list(value: Any) -> list[dict[str, Any]]:
+    """Return only dict messages from a persisted payload."""
+    if not isinstance(value, list):
+        return []
+    return [message for message in value if isinstance(message, dict)]
+
+
 class CheckpointManager:
     """
     High-level checkpoint management for the agent.
@@ -115,21 +134,20 @@ class CheckpointManager:
 
         # Extract state from checkpoint if it has channel_values
         # LangGraph stores state in channel_values
-        values = checkpoint_data
+        values = _coerce_state_mapping(checkpoint_data)
         if isinstance(checkpoint_data, dict) and "channel_values" in checkpoint_data:
-            values = checkpoint_data["channel_values"]
+            values = _coerce_state_mapping(checkpoint_data["channel_values"])
 
-        plan = values.get("plan", [])
+        plan = _coerce_step_list(values.get("plan", []))
         current_step = values.get("current_step", 0)
         completed = sum(1 for s in plan if s.get("status") == "completed")
 
         # Get messages for last message content
-        messages = values.get("messages", [])
+        messages = _coerce_message_list(values.get("messages", []))
         last_message = ""
         if messages:
             last_msg = messages[-1]
-            if isinstance(last_msg, dict):
-                last_message = last_msg.get("content", "")
+            last_message = last_msg.get("content", "")
 
         thread_info = state.get("thread_info", {}) or {}
 
