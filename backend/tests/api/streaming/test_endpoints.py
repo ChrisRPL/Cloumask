@@ -696,6 +696,54 @@ class TestListThreads:
         assert data["threads"][0]["status"] == "active"
         assert data["threads"][0]["summary"] == "ready."
 
+    def test_list_threads_skips_corrupted_rows_without_string_thread_ids(
+        self,
+        client: TestClient,
+        checkpoint_manager: CheckpointManager,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """List threads should ignore corrupted rows that cannot provide a valid thread id."""
+        checkpoint_manager.create_thread("thread-valid-row", title="Valid row")
+        checkpoint_manager.save_snapshot(
+            "thread-valid-row",
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "plan": [],
+                    "current_step": 0,
+                    "awaiting_user": False,
+                    "messages": [{"role": "assistant", "content": "Valid row restored"}],
+                }
+            },
+        )
+
+        original_list_threads = checkpoint_manager.saver.list_threads
+
+        def list_threads_with_corruption(
+            status: str | None = None,
+            limit: int | None = None,
+        ) -> list[object]:
+            valid_rows = original_list_threads(status=status, limit=limit)
+            return [
+                *valid_rows,
+                {"thread_id": None, "status": "active"},
+                {"title": "Missing id", "status": "active"},
+                "corrupted-row",
+            ]
+
+        monkeypatch.setattr(checkpoint_manager.saver, "list_threads", list_threads_with_corruption)
+
+        _event_queues.clear()
+        _thread_states.clear()
+        _threads.clear()
+
+        response = client.get("/api/chat/threads")
+        data = response.json()
+
+        assert response.status_code == 200
+        assert [thread["thread_id"] for thread in data["threads"]] == ["thread-valid-row"]
+        assert data["threads"][0]["summary"] == "ready."
+
 
 class TestGetThreadState:
     """Tests for thread state hydration endpoint."""
