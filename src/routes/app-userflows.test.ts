@@ -17,6 +17,7 @@ function createFetchMock(options?: {
 	threadStateDelayMs?: number;
 	threadList?: Array<{
 		thread_id: string;
+		title?: string | null;
 		awaiting_user?: boolean;
 		current_step?: number;
 		total_steps?: number;
@@ -709,6 +710,76 @@ describe('App user flows', () => {
 		});
 		await waitFor(() => {
 			expect(screen.getByText('Thread hydration finished.')).toBeTruthy();
+		});
+		await waitFor(() => {
+			expect(screen.queryByText(note)).toBeNull();
+		});
+
+		view.unmount();
+	});
+
+	it('shows thread title in the temporary auto-resume note when available', async () => {
+		localStorage.setItem('cloumask:setup', 'complete');
+		const fetchMock = createFetchMock({
+			threadStateDelayMs: 200,
+			threadList: [
+				{
+					thread_id: 'thread-title-note',
+					title: 'Inbox Review',
+					awaiting_user: true,
+					current_step: 0,
+					total_steps: 3,
+					summary: 'awaiting review. Progress: 1/3 steps.',
+				},
+			],
+			threadStates: {
+				'thread-title-note': {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Titled thread hydration finished.',
+							timestamp: '2026-03-15T12:45:00.000Z',
+						},
+					],
+					plan: [
+						{
+							id: 'step-1',
+							tool_name: 'scan_directory',
+							description: 'Scan inbox',
+							parameters: { path: '/data/inbox' },
+							status: 'completed',
+						},
+						{
+							id: 'step-2',
+							tool_name: 'review',
+							description: 'Review detections',
+							parameters: {},
+							status: 'pending',
+						},
+						{
+							id: 'step-3',
+							tool_name: 'export',
+							description: 'Export labels',
+							parameters: { output_path: '/data/out' },
+							status: 'pending',
+						},
+					],
+					plan_approved: false,
+					awaiting_user: true,
+					current_step: 1,
+				},
+			},
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		const view = render(AppTestHost);
+		const note = 'Resuming Inbox Review (thread-title-note): awaiting review (1/3 steps)';
+
+		await waitFor(() => {
+			expect(screen.getByText(note)).toBeTruthy();
+		});
+		await waitFor(() => {
+			expect(screen.getByText('Titled thread hydration finished.')).toBeTruthy();
 		});
 		await waitFor(() => {
 			expect(screen.queryByText(note)).toBeNull();
