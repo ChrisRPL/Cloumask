@@ -789,6 +789,65 @@ describe('App user flows', () => {
 		view.unmount();
 	});
 
+	it('uses backend completed summary copy for resumed completed threads', async () => {
+		localStorage.setItem('cloumask:setup', 'complete');
+		const fetchMock = createFetchMock({
+			threadList: [
+				{
+					thread_id: 'thread-completed-summary',
+					awaiting_user: false,
+					current_step: 99,
+					total_steps: 2,
+					summary: 'completed. Progress: 2/2 steps.',
+				},
+			],
+			threadStates: {
+				'thread-completed-summary': {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Completed thread restored.',
+							timestamp: '2026-03-15T12:00:00.000Z',
+						},
+					],
+					plan: [
+						{
+							id: 'step-1',
+							tool_name: 'scan_directory',
+							description: 'Scan inbox',
+							parameters: { path: '/data/inbox' },
+							status: 'completed',
+						},
+						{
+							id: 'step-2',
+							tool_name: 'export',
+							description: 'Export labels',
+							parameters: { output_path: '/data/out' },
+							status: 'completed',
+						},
+					],
+					plan_approved: true,
+					awaiting_user: false,
+					current_step: 2,
+				},
+			},
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		const view = render(AppTestHost);
+
+		await waitFor(() => {
+			expect(screen.getByText('Completed thread restored.')).toBeTruthy();
+		});
+		expect(
+			screen.getByText(
+				'Resumed backend thread thread-completed-summary. Status: completed. Progress: 2/2 steps.'
+			)
+		).toBeTruthy();
+
+		view.unmount();
+	});
+
 	it('reuses latest resumable backend thread before creating a new one', async () => {
 		localStorage.setItem('cloumask:setup', 'complete');
 		const fetchMock = createFetchMock({
