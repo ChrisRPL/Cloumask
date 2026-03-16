@@ -1385,6 +1385,80 @@ describe('App user flows', () => {
 		view.unmount();
 	});
 
+	it('does not refetch dismissed resume state after reconnecting', async () => {
+		localStorage.setItem('cloumask:setup', 'complete');
+		const fetchMock = createFetchMock({
+			threadList: [
+				{
+					thread_id: 'thread-dismiss-send-reconnect',
+					title: 'Dismiss Reconnect Review',
+					awaiting_user: true,
+					current_step: 0,
+					total_steps: 2,
+					summary: 'awaiting review. Progress: 1/2 steps.',
+				},
+			],
+			threadStates: {
+				'thread-dismiss-send-reconnect': {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Dismiss reconnect thread restored.',
+							timestamp: '2026-03-15T13:45:00.000Z',
+						},
+					],
+					plan: [
+						{
+							id: 'step-1',
+							tool_name: 'scan_directory',
+							description: 'Scan inbox',
+							parameters: { path: '/data/inbox' },
+							status: 'completed',
+						},
+						{
+							id: 'step-2',
+							tool_name: 'review',
+							description: 'Review detections',
+							parameters: {},
+							status: 'pending',
+						},
+					],
+					plan_approved: false,
+					awaiting_user: true,
+					current_step: 1,
+				},
+			},
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		const view = render(AppTestHost);
+
+		await waitFor(() => {
+			expect(screen.getByText('Dismiss reconnect thread restored.')).toBeTruthy();
+		});
+		expect(screen.getByText('Resumed:')).toBeTruthy();
+
+		await fireEvent.click(screen.getByRole('button', { name: 'Dismiss resumed thread summary' }));
+		expect(screen.queryByText('Resumed:')).toBeNull();
+
+		(getSSEManager() as unknown as { updateState(state: 'disconnected' | 'connected'): void }).updateState(
+			'disconnected'
+		);
+		(getSSEManager() as unknown as { updateState(state: 'disconnected' | 'connected'): void }).updateState(
+			'connected'
+		);
+		expect(screen.queryByText('Resumed:')).toBeNull();
+
+		const stateCalls = fetchMock.mock.calls.filter(([url, init]) => {
+			const requestUrl = typeof url === 'string' ? url : url.toString();
+			const method = (init?.method ?? 'GET').toUpperCase();
+			return requestUrl.includes('/api/chat/threads/thread-dismiss-send-reconnect/state') && method === 'GET';
+		});
+		expect(stateCalls).toHaveLength(1);
+
+		view.unmount();
+	});
+
 	it('falls back to locally computed resume copy when backend summary is missing', async () => {
 		localStorage.setItem('cloumask:setup', 'complete');
 		const fetchMock = createFetchMock({
