@@ -301,11 +301,29 @@
 		return bestThread;
 	}
 
+	function getThreadResumeStatusHint(thread: ThreadSummary): string | null {
+		const resumeStatus = (thread as ThreadSummary & { resume_status?: unknown }).resume_status;
+		if (
+			resumeStatus === 'awaiting review' ||
+			resumeStatus === 'in progress' ||
+			resumeStatus === 'completed' ||
+			resumeStatus === 'ready' ||
+			resumeStatus === 'failed'
+		) {
+			return resumeStatus;
+		}
+		return null;
+	}
+
 	function getThreadResumeStatus(thread: ThreadSummary): string {
 		const summary = getTrimmedThreadSummary(thread);
 		const summaryMatch = /^(awaiting review|in progress|completed|ready|failed)\./.exec(summary ?? '');
 		if (summaryMatch) {
 			return summaryMatch[1];
+		}
+		const resumeStatusHint = getThreadResumeStatusHint(thread);
+		if (resumeStatusHint) {
+			return resumeStatusHint;
 		}
 		if (thread.awaiting_user) return 'awaiting review';
 		if (thread.total_steps > 0 && thread.current_step >= thread.total_steps) return 'completed';
