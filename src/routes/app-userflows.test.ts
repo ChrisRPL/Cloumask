@@ -1711,6 +1711,74 @@ describe('App user flows', () => {
 		view.unmount();
 	});
 
+	it('shows resumed failed execution without a running pause action', async () => {
+		localStorage.setItem('cloumask:setup', 'complete');
+		const fetchMock = createFetchMock({
+			threadList: [
+				{
+					thread_id: 'thread-failed-hydration',
+					awaiting_user: false,
+					current_step: 99,
+					total_steps: 2,
+					summary: 'in progress. Progress: 1/2 steps.',
+				},
+			],
+			threadStates: {
+				'thread-failed-hydration': {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Failed hydration thread restored.',
+							timestamp: '2026-03-15T12:20:00.000Z',
+						},
+					],
+					plan: [
+						{
+							id: 'step-1',
+							tool_name: 'scan_directory',
+							description: 'Scan inbox',
+							parameters: { path: '/data/inbox' },
+							status: 'completed',
+						},
+						{
+							id: 'step-2',
+							tool_name: 'export',
+							description: 'Export labels',
+							parameters: { output_path: '/data/out' },
+							status: 'failed',
+						},
+					],
+					plan_approved: true,
+					awaiting_user: false,
+					current_step: 99,
+					execution_results: {
+						'step-2': {
+							error: 'Disk full',
+						},
+					},
+				},
+			},
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		const view = render(AppTestHost);
+
+		await waitFor(() => {
+			expect(screen.getByText('Failed hydration thread restored.')).toBeTruthy();
+		});
+
+		await fireEvent.click(screen.getByRole('button', { name: /Execute/ }));
+		await waitFor(() => {
+			expect(screen.getByText('Disk full')).toBeTruthy();
+		});
+
+		expect(screen.queryByRole('button', { name: 'Pause' })).toBeNull();
+		expect(screen.getByText('Step 2/2')).toBeTruthy();
+		expect(screen.getByText('Export labels')).toBeTruthy();
+
+		view.unmount();
+	});
+
 	it('keeps backend recency order when resume priorities tie', async () => {
 		localStorage.setItem('cloumask:setup', 'complete');
 		const fetchMock = createFetchMock({
