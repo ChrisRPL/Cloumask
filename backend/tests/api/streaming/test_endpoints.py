@@ -854,6 +854,41 @@ class TestListThreads:
         assert data["threads"][0]["current_step"] == 2
         assert data["threads"][0]["summary"] == "completed. Progress: 2/2 steps."
 
+    def test_list_threads_does_not_mark_incomplete_plan_as_completed_from_stale_step(
+        self,
+        client: TestClient,
+        checkpoint_manager: CheckpointManager,
+    ) -> None:
+        """List threads should not overreport completion when current_step runs ahead of plan status."""
+        checkpoint_manager.create_thread("thread-stale-complete", title="Stale complete")
+        checkpoint_manager.save_snapshot(
+            "thread-stale-complete",
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "plan": [
+                        {"id": "step-1", "tool_name": "scan_directory", "status": "completed"},
+                        {"id": "step-2", "tool_name": "export", "status": "pending"},
+                    ],
+                    "current_step": 2,
+                    "awaiting_user": False,
+                    "messages": [{"role": "assistant", "content": "Export still pending"}],
+                }
+            },
+        )
+
+        _event_queues.clear()
+        _thread_states.clear()
+        _threads.clear()
+
+        response = client.get("/api/chat/threads")
+        data = response.json()
+
+        assert response.status_code == 200
+        assert [thread["thread_id"] for thread in data["threads"]] == ["thread-stale-complete"]
+        assert data["threads"][0]["current_step"] == 1
+        assert data["threads"][0]["summary"] == "in progress. Progress: 1/2 steps."
+
 
 class TestGetThreadState:
     """Tests for thread state hydration endpoint."""
