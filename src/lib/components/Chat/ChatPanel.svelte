@@ -524,6 +524,13 @@
 				startedAt: typeof step.started_at === 'string' ? step.started_at : undefined,
 				completedAt: typeof step.completed_at === 'string' ? step.completed_at : undefined
 			}));
+		const completedStepCount = steps.filter((step) => step.status === 'completed').length;
+		const effectiveCurrentStep =
+			steps.length > 0 && currentStep >= steps.length && completedStepCount < steps.length
+				? completedStepCount
+				: steps.length > 0
+					? Math.max(0, Math.min(Math.max(currentStep, completedStepCount), steps.length))
+					: Math.max(0, currentStep);
 		const latestAssistantMessage =
 			[...messages]
 				.reverse()
@@ -531,9 +538,9 @@
 				?.content ?? null;
 		const hydratedCheckpoint = buildHydratedCheckpoint(state, latestAssistantMessage);
 		const boundedProgressCurrent =
-			steps.length > 0 ? Math.max(0, Math.min(currentStep, steps.length)) : 0;
+			steps.length > 0 ? effectiveCurrentStep : 0;
 		const hydratedStepIndex =
-			steps.length > 0 ? Math.max(0, Math.min(currentStep, steps.length - 1)) : -1;
+			steps.length > 0 ? Math.max(0, Math.min(effectiveCurrentStep, steps.length - 1)) : -1;
 
 		pipeline.setPipelineId(pipelineId);
 		pipeline.setSteps(steps);
@@ -553,7 +560,12 @@
 			}
 		} else if (hydratedCheckpoint) {
 			agent.setPhase('checkpoint');
-		} else if (planApproved && steps.length > 0 && currentStep >= steps.length) {
+		} else if (
+			planApproved &&
+			steps.length > 0 &&
+			effectiveCurrentStep >= steps.length &&
+			completedStepCount >= steps.length
+		) {
 			agent.setPhase('complete');
 			execution.setStatus('completed');
 		} else if (planApproved && steps.length > 0) {
