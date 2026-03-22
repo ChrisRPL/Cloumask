@@ -525,6 +525,7 @@
 				completedAt: typeof step.completed_at === 'string' ? step.completed_at : undefined
 			}));
 		const completedStepCount = steps.filter((step) => step.status === 'completed').length;
+		const failedStepCount = steps.filter((step) => step.status === 'failed').length;
 		const effectiveCurrentStep =
 			steps.length > 0 && currentStep >= steps.length && completedStepCount < steps.length
 				? completedStepCount
@@ -560,6 +561,9 @@
 			}
 		} else if (hydratedCheckpoint) {
 			agent.setPhase('checkpoint');
+		} else if (planApproved && failedStepCount > 0) {
+			agent.setPhase('complete');
+			execution.setStatus('failed');
 		} else if (
 			planApproved &&
 			steps.length > 0 &&
