@@ -166,6 +166,8 @@ class CheckpointManager:
         current_step = _coerce_non_negative_int(values.get("current_step", 0))
         if plan and completed >= len(plan):
             current_step = max(current_step, completed)
+        elif plan and current_step >= len(plan):
+            current_step = completed
 
         # Get messages for last message content
         messages = _coerce_message_list(values.get("messages", []))
