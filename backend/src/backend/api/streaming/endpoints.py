@@ -268,6 +268,7 @@ class ThreadSummary(BaseModel):
     thread_id: str
     title: str | None = None
     status: str
+    resume_status: str
     awaiting_user: bool = False
     current_step: int = 0
     total_steps: int = 0
@@ -481,6 +482,7 @@ async def list_threads(limit: int = 20) -> ThreadListResponse:
             ThreadSummary.model_validate(
                 {
                     **thread,
+                    "resume_status": _get_thread_resume_status(thread),
                     "summary": _build_thread_resume_summary(thread),
                 }
             )
