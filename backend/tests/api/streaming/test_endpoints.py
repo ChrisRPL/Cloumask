@@ -415,8 +415,11 @@ class TestListThreads:
             "thread-progress-middle",
             "thread-review-oldest",
         ]
+        assert data["threads"][0]["resume_status"] == "ready"
         assert data["threads"][0]["summary"] == "ready."
+        assert data["threads"][1]["resume_status"] == "in progress"
         assert data["threads"][1]["summary"] == "in progress. Progress: 1/2 steps."
+        assert data["threads"][2]["resume_status"] == "awaiting review"
         assert data["threads"][2]["summary"] == "awaiting review. Progress: 1/2 steps."
 
     def test_list_threads_keeps_failed_summary_in_mixed_recency_order(
@@ -503,8 +506,11 @@ class TestListThreads:
             "thread-progress-middle",
             "thread-review-oldest",
         ]
+        assert data["threads"][0]["resume_status"] == "failed"
         assert data["threads"][0]["summary"] == "failed. Progress: 1/2 steps."
+        assert data["threads"][1]["resume_status"] == "in progress"
         assert data["threads"][1]["summary"] == "in progress. Progress: 1/2 steps."
+        assert data["threads"][2]["resume_status"] == "awaiting review"
         assert data["threads"][2]["summary"] == "awaiting review. Progress: 1/2 steps."
 
     def test_list_threads_clamps_missing_and_negative_current_step_in_summary(
