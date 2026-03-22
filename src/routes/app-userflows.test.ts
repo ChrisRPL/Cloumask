@@ -1784,6 +1784,120 @@ describe('App user flows', () => {
 		view.unmount();
 	});
 
+	it('prefers in-progress threads over newer failed resumes', async () => {
+		localStorage.setItem('cloumask:setup', 'complete');
+		const fetchMock = createFetchMock({
+			threadList: [
+				{
+					thread_id: 'thread-failed-newest',
+					awaiting_user: false,
+					current_step: 1,
+					total_steps: 2,
+					summary: 'failed. Progress: 1/2 steps.',
+				},
+				{
+					thread_id: 'thread-progress-older',
+					awaiting_user: false,
+					current_step: 1,
+					total_steps: 3,
+					summary: 'in progress. Progress: 1/3 steps.',
+				},
+			],
+			threadStates: {
+				'thread-failed-newest': {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Failed newest thread restored.',
+							timestamp: '2026-03-15T12:25:00.000Z',
+						},
+					],
+					plan: [
+						{
+							id: 'step-1',
+							tool_name: 'scan_directory',
+							description: 'Scan newest',
+							parameters: { path: '/data/newest' },
+							status: 'completed',
+						},
+						{
+							id: 'step-2',
+							tool_name: 'export',
+							description: 'Export newest labels',
+							parameters: { output_path: '/data/newest-out' },
+							status: 'failed',
+						},
+					],
+					plan_approved: true,
+					awaiting_user: false,
+					current_step: 99,
+					execution_results: {
+						'step-2': {
+							error: 'Newest thread failed',
+						},
+					},
+				},
+				'thread-progress-older': {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Progress older thread restored.',
+							timestamp: '2026-03-15T12:20:00.000Z',
+						},
+					],
+					plan: [
+						{
+							id: 'step-1',
+							tool_name: 'scan_directory',
+							description: 'Scan older',
+							parameters: { path: '/data/older' },
+							status: 'completed',
+						},
+						{
+							id: 'step-2',
+							tool_name: 'detect',
+							description: 'Detect older people',
+							parameters: { classes: ['person'] },
+							status: 'pending',
+						},
+						{
+							id: 'step-3',
+							tool_name: 'export',
+							description: 'Export older labels',
+							parameters: { output_path: '/data/older-out' },
+							status: 'pending',
+						},
+					],
+					plan_approved: true,
+					awaiting_user: false,
+					current_step: 1,
+				},
+			},
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		const view = render(AppTestHost);
+
+		await waitFor(() => {
+			expect(screen.getByText('Progress older thread restored.')).toBeTruthy();
+		});
+		expect(
+			screen.getByText(
+				'Resumed backend thread thread-progress-older. Status: in progress. Progress: 1/3 steps.'
+			)
+		).toBeTruthy();
+		expect(screen.queryByText('Failed newest thread restored.')).toBeNull();
+
+		const stateCalls = fetchMock.mock.calls.filter(([url, init]) => {
+			const requestUrl = typeof url === 'string' ? url : url.toString();
+			const method = (init?.method ?? 'GET').toUpperCase();
+			return requestUrl.includes('/api/chat/threads/thread-progress-older/state') && method === 'GET';
+		});
+		expect(stateCalls).toHaveLength(1);
+
+		view.unmount();
+	});
+
 	it('keeps backend recency order when resume priorities tie', async () => {
 		localStorage.setItem('cloumask:setup', 'complete');
 		const fetchMock = createFetchMock({
