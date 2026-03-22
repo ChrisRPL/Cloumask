@@ -798,6 +798,53 @@ class TestListThreads:
         assert data["threads"][0]["status"] == "active"
         assert data["threads"][0]["summary"] == "ready."
 
+    def test_list_threads_keeps_resume_status_when_thread_status_metadata_is_unknown(
+        self,
+        client: TestClient,
+        checkpoint_manager: CheckpointManager,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Unknown thread metadata status should not change user-facing resume status."""
+        checkpoint_manager.create_thread("thread-unknown-status", title="Unknown status")
+        checkpoint_manager.save_snapshot(
+            "thread-unknown-status",
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "plan": [],
+                    "current_step": 0,
+                    "awaiting_user": True,
+                    "messages": [{"role": "assistant", "content": "Unknown status restored"}],
+                }
+            },
+        )
+
+        original_get_thread = checkpoint_manager.saver.get_thread
+
+        def get_thread_with_unknown_status(thread_id: str) -> dict[str, object] | None:
+            thread = original_get_thread(thread_id)
+            if not thread or thread_id != "thread-unknown-status":
+                return thread
+            return {
+                **thread,
+                "status": "mystery",
+            }
+
+        monkeypatch.setattr(checkpoint_manager.saver, "get_thread", get_thread_with_unknown_status)
+
+        _event_queues.clear()
+        _thread_states.clear()
+        _threads.clear()
+
+        response = client.get("/api/chat/threads")
+        data = response.json()
+
+        assert response.status_code == 200
+        assert [thread["thread_id"] for thread in data["threads"]] == ["thread-unknown-status"]
+        assert data["threads"][0]["status"] == "mystery"
+        assert data["threads"][0]["resume_status"] == "awaiting review"
+        assert data["threads"][0]["summary"] == "awaiting review."
+
     def test_list_threads_skips_corrupted_rows_without_string_thread_ids(
         self,
         client: TestClient,
