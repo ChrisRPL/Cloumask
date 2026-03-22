@@ -2243,6 +2243,132 @@ describe('App user flows', () => {
 		view.unmount();
 	});
 
+	it('keeps backend recency order for fallback-only awaiting review threads', async () => {
+		localStorage.setItem('cloumask:setup', 'complete');
+		const fetchMock = createFetchMock({
+			threadList: [
+				{
+					thread_id: 'thread-review-fallback-newest',
+					resume_status: 'awaiting review',
+					awaiting_user: true,
+					current_step: 1,
+					total_steps: 4,
+				},
+				{
+					thread_id: 'thread-review-fallback-older',
+					resume_status: 'awaiting review',
+					awaiting_user: true,
+					current_step: 1,
+					total_steps: 3,
+				},
+			],
+			threadStates: {
+				'thread-review-fallback-newest': {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Newest fallback review thread restored.',
+							timestamp: '2026-03-15T12:45:00.000Z',
+						},
+					],
+					plan: [
+						{
+							id: 'step-1',
+							tool_name: 'scan_directory',
+							description: 'Scan newest fallback review',
+							parameters: { path: '/data/review-fallback-newest' },
+							status: 'completed',
+						},
+						{
+							id: 'step-2',
+							tool_name: 'detect',
+							description: 'Detect newest fallback review people',
+							parameters: { classes: ['person'] },
+							status: 'completed',
+						},
+						{
+							id: 'step-3',
+							tool_name: 'review',
+							description: 'Review newest fallback items',
+							parameters: {},
+							status: 'pending',
+						},
+						{
+							id: 'step-4',
+							tool_name: 'export',
+							description: 'Export newest fallback labels',
+							parameters: { output_path: '/data/review-fallback-newest-out' },
+							status: 'pending',
+						},
+					],
+					plan_approved: true,
+					awaiting_user: true,
+					current_step: 1,
+				},
+				'thread-review-fallback-older': {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Older fallback review thread restored.',
+							timestamp: '2026-03-15T12:15:00.000Z',
+						},
+					],
+					plan: [
+						{
+							id: 'step-1',
+							tool_name: 'scan_directory',
+							description: 'Scan older fallback review',
+							parameters: { path: '/data/review-fallback-older' },
+							status: 'completed',
+						},
+						{
+							id: 'step-2',
+							tool_name: 'review',
+							description: 'Review older fallback items',
+							parameters: {},
+							status: 'pending',
+						},
+						{
+							id: 'step-3',
+							tool_name: 'export',
+							description: 'Export older fallback labels',
+							parameters: { output_path: '/data/review-fallback-older-out' },
+							status: 'pending',
+						},
+					],
+					plan_approved: true,
+					awaiting_user: true,
+					current_step: 1,
+				},
+			},
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		const view = render(AppTestHost);
+
+		await waitFor(() => {
+			expect(screen.getByText('Newest fallback review thread restored.')).toBeTruthy();
+		});
+		expect(
+			screen.getByText(
+				'Resumed backend thread thread-review-fallback-newest. Status: awaiting review. Progress: 1/4 steps.'
+			)
+		).toBeTruthy();
+		expect(screen.queryByText('Older fallback review thread restored.')).toBeNull();
+
+		const stateCalls = fetchMock.mock.calls.filter(([url, init]) => {
+			const requestUrl = typeof url === 'string' ? url : url.toString();
+			const method = (init?.method ?? 'GET').toUpperCase();
+			return (
+				requestUrl.includes('/api/chat/threads/thread-review-fallback-newest/state') &&
+				method === 'GET'
+			);
+		});
+		expect(stateCalls).toHaveLength(1);
+
+		view.unmount();
+	});
+
 	it('keeps backend recency order when resume priorities tie', async () => {
 		localStorage.setItem('cloumask:setup', 'complete');
 		const fetchMock = createFetchMock({
