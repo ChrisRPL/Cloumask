@@ -894,7 +894,7 @@ class TestListThreads:
         client: TestClient,
         checkpoint_manager: CheckpointManager,
     ) -> None:
-        """List threads should not surface failed work as completed when current_step overshoots."""
+        """List threads should surface failed work as failed even when current_step overshoots."""
         checkpoint_manager.create_thread("thread-stale-failed", title="Stale failed")
         checkpoint_manager.save_snapshot(
             "thread-stale-failed",
@@ -922,7 +922,7 @@ class TestListThreads:
         assert response.status_code == 200
         assert [thread["thread_id"] for thread in data["threads"]] == ["thread-stale-failed"]
         assert data["threads"][0]["current_step"] == 1
-        assert data["threads"][0]["summary"] == "in progress. Progress: 1/2 steps."
+        assert data["threads"][0]["summary"] == "failed. Progress: 1/2 steps."
 
 
 class TestGetThreadState:
