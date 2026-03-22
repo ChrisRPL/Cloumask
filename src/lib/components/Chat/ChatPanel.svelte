@@ -277,9 +277,11 @@
 	}
 
 	function getThreadResumePriority(thread: ThreadSummary): number {
-		if (thread.awaiting_user) return 0;
-		if (thread.total_steps > 0 && thread.current_step < thread.total_steps) return 1;
-		return 2;
+		const status = getThreadResumeStatus(thread);
+		if (status === 'awaiting review') return 0;
+		if (status === 'in progress') return 1;
+		if (status === 'failed') return 2;
+		return 3;
 	}
 
 	function selectThreadToResume(threads: ThreadSummary[]): ThreadSummary | null {
@@ -300,6 +302,11 @@
 	}
 
 	function getThreadResumeStatus(thread: ThreadSummary): string {
+		const summary = getTrimmedThreadSummary(thread);
+		const summaryMatch = /^(awaiting review|in progress|completed|ready|failed)\./.exec(summary ?? '');
+		if (summaryMatch) {
+			return summaryMatch[1];
+		}
 		if (thread.awaiting_user) return 'awaiting review';
 		if (thread.total_steps > 0 && thread.current_step >= thread.total_steps) return 'completed';
 		if (thread.total_steps > 0) return 'in progress';
