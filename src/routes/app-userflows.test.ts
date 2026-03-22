@@ -1720,7 +1720,7 @@ describe('App user flows', () => {
 					awaiting_user: false,
 					current_step: 99,
 					total_steps: 2,
-					summary: 'in progress. Progress: 1/2 steps.',
+					summary: 'failed. Progress: 1/2 steps.',
 				},
 			],
 			threadStates: {
@@ -1766,6 +1766,11 @@ describe('App user flows', () => {
 		await waitFor(() => {
 			expect(screen.getByText('Failed hydration thread restored.')).toBeTruthy();
 		});
+		expect(
+			screen.getByText(
+				'Resumed backend thread thread-failed-hydration. Status: failed. Progress: 1/2 steps.'
+			)
+		).toBeTruthy();
 
 		await fireEvent.click(screen.getByRole('button', { name: /Execute/ }));
 		await waitFor(() => {
