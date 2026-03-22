@@ -16,9 +16,10 @@ Current automated Playwright coverage is still smoke-level for many browser flow
 - backend API smoke checks
 
 Separate non-Playwright app-userflow automation now covers these resume/hydration paths in the Svelte test harness:
-- latest thread auto-resume selection priority (`awaiting review` before `in progress` before completed)
+- latest thread auto-resume selection priority (`awaiting review` before `in progress` before `failed` before ready/completed)
 - visible resumed-thread breadcrumb with backend thread id plus backend-provided resume summary text
 - temporary auto-resume note that reuses the backend thread-list `summary` field instead of recomputing copy in the frontend
+- fallback to backend thread-list `resume_status` when `summary` text is missing, so failed threads do not masquerade as live work
 - persistent resumed-thread strip after hydration, including completed-thread restores
 - resumed-thread strip dismissal via button and `Escape`
 - completed-thread resume breadcrumb coverage using backend-provided summary text
