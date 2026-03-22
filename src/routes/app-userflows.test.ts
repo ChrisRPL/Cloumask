@@ -2016,6 +2016,116 @@ describe('App user flows', () => {
 		view.unmount();
 	});
 
+	it('prefers failed threads over newer completed resumes without summary text', async () => {
+		localStorage.setItem('cloumask:setup', 'complete');
+		const fetchMock = createFetchMock({
+			threadList: [
+				{
+					thread_id: 'thread-completed-nosummary-newest',
+					resume_status: 'completed',
+					awaiting_user: false,
+					current_step: 2,
+					total_steps: 2,
+				},
+				{
+					thread_id: 'thread-failed-nosummary-older',
+					resume_status: 'failed',
+					awaiting_user: false,
+					current_step: 1,
+					total_steps: 2,
+				},
+			],
+			threadStates: {
+				'thread-completed-nosummary-newest': {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Completed without summary thread restored.',
+							timestamp: '2026-03-15T12:35:00.000Z',
+						},
+					],
+					plan: [
+						{
+							id: 'step-1',
+							tool_name: 'scan_directory',
+							description: 'Scan completed latest',
+							parameters: { path: '/data/completed-latest' },
+							status: 'completed',
+						},
+						{
+							id: 'step-2',
+							tool_name: 'export',
+							description: 'Export completed latest labels',
+							parameters: { output_path: '/data/completed-latest-out' },
+							status: 'completed',
+						},
+					],
+					plan_approved: true,
+					awaiting_user: false,
+					current_step: 99,
+				},
+				'thread-failed-nosummary-older': {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Failed fallback thread restored.',
+							timestamp: '2026-03-15T12:05:00.000Z',
+						},
+					],
+					plan: [
+						{
+							id: 'step-1',
+							tool_name: 'scan_directory',
+							description: 'Scan failed older',
+							parameters: { path: '/data/failed-older' },
+							status: 'completed',
+						},
+						{
+							id: 'step-2',
+							tool_name: 'export',
+							description: 'Export failed older labels',
+							parameters: { output_path: '/data/failed-older-out' },
+							status: 'failed',
+						},
+					],
+					plan_approved: true,
+					awaiting_user: false,
+					current_step: 99,
+					execution_results: {
+						'step-2': {
+							error: 'Failed fallback thread errored',
+						},
+					},
+				},
+			},
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		const view = render(AppTestHost);
+
+		await waitFor(() => {
+			expect(screen.getByText('Failed fallback thread restored.')).toBeTruthy();
+		});
+		expect(
+			screen.getByText(
+				'Resumed backend thread thread-failed-nosummary-older. Status: failed. Progress: 1/2 steps.'
+			)
+		).toBeTruthy();
+		expect(screen.queryByText('Completed without summary thread restored.')).toBeNull();
+
+		const stateCalls = fetchMock.mock.calls.filter(([url, init]) => {
+			const requestUrl = typeof url === 'string' ? url : url.toString();
+			const method = (init?.method ?? 'GET').toUpperCase();
+			return (
+				requestUrl.includes('/api/chat/threads/thread-failed-nosummary-older/state') &&
+				method === 'GET'
+			);
+		});
+		expect(stateCalls).toHaveLength(1);
+
+		view.unmount();
+	});
+
 	it('keeps backend recency order when resume priorities tie', async () => {
 		localStorage.setItem('cloumask:setup', 'complete');
 		const fetchMock = createFetchMock({
