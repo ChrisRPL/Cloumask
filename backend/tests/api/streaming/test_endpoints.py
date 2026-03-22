@@ -253,6 +253,7 @@ class TestListThreads:
         latest = data["threads"][0]
         assert latest["title"] == "Still running"
         assert latest["status"] == "active"
+        assert latest["resume_status"] == "in progress"
         assert latest["awaiting_user"] is False
         assert latest["current_step"] == 2
         assert latest["total_steps"] == 3
@@ -262,6 +263,7 @@ class TestListThreads:
         review = data["threads"][1]
         assert review["title"] == "Needs review"
         assert review["status"] == "active"
+        assert review["resume_status"] == "awaiting review"
         assert review["awaiting_user"] is True
         assert review["current_step"] == 1
         assert review["total_steps"] == 2
@@ -327,7 +329,9 @@ class TestListThreads:
             "thread-complete",
             "thread-ready",
         ]
+        assert data["threads"][0]["resume_status"] == "completed"
         assert data["threads"][0]["summary"] == "completed. Progress: 2/2 steps."
+        assert data["threads"][1]["resume_status"] == "ready"
         assert data["threads"][1]["summary"] == "ready."
 
     def test_list_threads_keeps_recency_order_for_mixed_resume_states(
