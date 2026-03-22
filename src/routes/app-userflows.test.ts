@@ -2126,6 +2126,123 @@ describe('App user flows', () => {
 		view.unmount();
 	});
 
+	it('prefers awaiting review threads over newer failed resumes without summary text', async () => {
+		localStorage.setItem('cloumask:setup', 'complete');
+		const fetchMock = createFetchMock({
+			threadList: [
+				{
+					thread_id: 'thread-failed-review-fallback-newest',
+					resume_status: 'failed',
+					awaiting_user: false,
+					current_step: 1,
+					total_steps: 2,
+				},
+				{
+					thread_id: 'thread-review-fallback-older',
+					resume_status: 'awaiting review',
+					awaiting_user: true,
+					current_step: 1,
+					total_steps: 3,
+				},
+			],
+			threadStates: {
+				'thread-failed-review-fallback-newest': {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Failed review fallback thread restored.',
+							timestamp: '2026-03-15T12:40:00.000Z',
+						},
+					],
+					plan: [
+						{
+							id: 'step-1',
+							tool_name: 'scan_directory',
+							description: 'Scan failed review fallback',
+							parameters: { path: '/data/failed-review-fallback' },
+							status: 'completed',
+						},
+						{
+							id: 'step-2',
+							tool_name: 'export',
+							description: 'Export failed review fallback labels',
+							parameters: { output_path: '/data/failed-review-fallback-out' },
+							status: 'failed',
+						},
+					],
+					plan_approved: true,
+					awaiting_user: false,
+					current_step: 99,
+					execution_results: {
+						'step-2': {
+							error: 'Failed review fallback thread errored',
+						},
+					},
+				},
+				'thread-review-fallback-older': {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Awaiting review fallback thread restored.',
+							timestamp: '2026-03-15T12:00:00.000Z',
+						},
+					],
+					plan: [
+						{
+							id: 'step-1',
+							tool_name: 'scan_directory',
+							description: 'Scan review fallback',
+							parameters: { path: '/data/review-fallback' },
+							status: 'completed',
+						},
+						{
+							id: 'step-2',
+							tool_name: 'detect',
+							description: 'Detect review fallback people',
+							parameters: { classes: ['person'] },
+							status: 'completed',
+						},
+						{
+							id: 'step-3',
+							tool_name: 'review',
+							description: 'Review review fallback items',
+							parameters: {},
+							status: 'pending',
+						},
+					],
+					plan_approved: true,
+					awaiting_user: true,
+					current_step: 1,
+				},
+			},
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		const view = render(AppTestHost);
+
+		await waitFor(() => {
+			expect(screen.getByText('Awaiting review fallback thread restored.')).toBeTruthy();
+		});
+		expect(
+			screen.getByText(
+				'Resumed backend thread thread-review-fallback-older. Status: awaiting review. Progress: 1/3 steps.'
+			)
+		).toBeTruthy();
+		expect(screen.queryByText('Failed review fallback thread restored.')).toBeNull();
+
+		const stateCalls = fetchMock.mock.calls.filter(([url, init]) => {
+			const requestUrl = typeof url === 'string' ? url : url.toString();
+			const method = (init?.method ?? 'GET').toUpperCase();
+			return (
+				requestUrl.includes('/api/chat/threads/thread-review-fallback-older/state') &&
+				method === 'GET'
+			);
+		});
+		expect(stateCalls).toHaveLength(1);
+
+		view.unmount();
+	});
+
 	it('keeps backend recency order when resume priorities tie', async () => {
 		localStorage.setItem('cloumask:setup', 'complete');
 		const fetchMock = createFetchMock({
