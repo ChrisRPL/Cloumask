@@ -302,7 +302,7 @@
 	}
 
 	function getThreadResumeStatusHint(thread: ThreadSummary): string | null {
-		const resumeStatus = (thread as ThreadSummary & { resume_status?: unknown }).resume_status;
+		const resumeStatus = thread.resume_status;
 		if (
 			resumeStatus === 'awaiting review' ||
 			resumeStatus === 'in progress' ||
