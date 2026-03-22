@@ -20,6 +20,7 @@ function createFetchMock(options?: {
 	threadList?: Array<{
 		thread_id: string;
 		title?: string | null;
+		resume_status?: string;
 		awaiting_user?: boolean;
 		current_step?: number;
 		total_steps?: number;
@@ -1892,6 +1893,123 @@ describe('App user flows', () => {
 			const requestUrl = typeof url === 'string' ? url : url.toString();
 			const method = (init?.method ?? 'GET').toUpperCase();
 			return requestUrl.includes('/api/chat/threads/thread-progress-older/state') && method === 'GET';
+		});
+		expect(stateCalls).toHaveLength(1);
+
+		view.unmount();
+	});
+
+	it('prefers in-progress threads over newer failed resumes without summary text', async () => {
+		localStorage.setItem('cloumask:setup', 'complete');
+		const fetchMock = createFetchMock({
+			threadList: [
+				{
+					thread_id: 'thread-failed-nosummary-newest',
+					resume_status: 'failed',
+					awaiting_user: false,
+					current_step: 1,
+					total_steps: 2,
+				},
+				{
+					thread_id: 'thread-progress-summary-older',
+					awaiting_user: false,
+					current_step: 1,
+					total_steps: 3,
+					summary: 'in progress. Progress: 1/3 steps.',
+				},
+			],
+			threadStates: {
+				'thread-failed-nosummary-newest': {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Failed without summary thread restored.',
+							timestamp: '2026-03-15T12:30:00.000Z',
+						},
+					],
+					plan: [
+						{
+							id: 'step-1',
+							tool_name: 'scan_directory',
+							description: 'Scan failed latest',
+							parameters: { path: '/data/failed-latest' },
+							status: 'completed',
+						},
+						{
+							id: 'step-2',
+							tool_name: 'export',
+							description: 'Export failed latest labels',
+							parameters: { output_path: '/data/failed-latest-out' },
+							status: 'failed',
+						},
+					],
+					plan_approved: true,
+					awaiting_user: false,
+					current_step: 99,
+					execution_results: {
+						'step-2': {
+							error: 'Failed without summary thread errored',
+						},
+					},
+				},
+				'thread-progress-summary-older': {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Progress with summary thread restored.',
+							timestamp: '2026-03-15T12:10:00.000Z',
+						},
+					],
+					plan: [
+						{
+							id: 'step-1',
+							tool_name: 'scan_directory',
+							description: 'Scan progress older',
+							parameters: { path: '/data/progress-older' },
+							status: 'completed',
+						},
+						{
+							id: 'step-2',
+							tool_name: 'detect',
+							description: 'Detect progress older people',
+							parameters: { classes: ['person'] },
+							status: 'pending',
+						},
+						{
+							id: 'step-3',
+							tool_name: 'export',
+							description: 'Export progress older labels',
+							parameters: { output_path: '/data/progress-older-out' },
+							status: 'pending',
+						},
+					],
+					plan_approved: true,
+					awaiting_user: false,
+					current_step: 1,
+				},
+			},
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		const view = render(AppTestHost);
+
+		await waitFor(() => {
+			expect(screen.getByText('Progress with summary thread restored.')).toBeTruthy();
+		});
+		expect(
+			screen.getByText(
+				'Resumed backend thread thread-progress-summary-older. Status: in progress. Progress: 1/3 steps.'
+			)
+		).toBeTruthy();
+		expect(screen.queryByText('Failed without summary thread restored.')).toBeNull();
+
+		const stateCalls = fetchMock.mock.calls.filter(([url, init]) => {
+			const requestUrl = typeof url === 'string' ? url : url.toString();
+			const method = (init?.method ?? 'GET').toUpperCase();
+			return (
+				requestUrl.includes('/api/chat/threads/thread-progress-summary-older/state') &&
+				method === 'GET'
+			);
 		});
 		expect(stateCalls).toHaveLength(1);
 
