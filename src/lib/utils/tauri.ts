@@ -279,6 +279,7 @@ export interface ThreadSummary {
 	thread_id: string;
 	title: string | null;
 	status: string;
+	resume_status?: string;
 	awaiting_user: boolean;
 	current_step: number;
 	total_steps: number;
