@@ -633,7 +633,9 @@ class TestListThreads:
             "thread-review-empty",
             "thread-ready-missing-plan",
         ]
+        assert data["threads"][0]["resume_status"] == "awaiting review"
         assert data["threads"][0]["summary"] == "awaiting review."
+        assert data["threads"][1]["resume_status"] == "ready"
         assert data["threads"][1]["summary"] == "ready."
 
     def test_list_threads_skips_corrupted_non_list_plan_payloads(self, client: TestClient, checkpoint_manager: CheckpointManager) -> None:
