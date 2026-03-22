@@ -1532,6 +1532,72 @@ describe('App user flows', () => {
 		view.unmount();
 	});
 
+	it('falls back to local counters when backend resume status is unknown', async () => {
+		localStorage.setItem('cloumask:setup', 'complete');
+		const fetchMock = createFetchMock({
+			threadList: [
+				{
+					thread_id: 'thread-unknown-resume-status',
+					resume_status: 'mystery',
+					awaiting_user: false,
+					current_step: 1,
+					total_steps: 3,
+				},
+			],
+			threadStates: {
+				'thread-unknown-resume-status': {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Unknown status thread restored.',
+							timestamp: '2026-03-15T10:05:00.000Z',
+						},
+					],
+					plan: [
+						{
+							id: 'step-1',
+							tool_name: 'scan_directory',
+							description: 'Scan unknown status inbox',
+							parameters: { path: '/data/unknown-status' },
+							status: 'completed',
+						},
+						{
+							id: 'step-2',
+							tool_name: 'detect',
+							description: 'Detect unknown status people',
+							parameters: { classes: ['person'] },
+							status: 'pending',
+						},
+						{
+							id: 'step-3',
+							tool_name: 'export',
+							description: 'Export unknown status labels',
+							parameters: { output_path: '/data/unknown-status-out' },
+							status: 'pending',
+						},
+					],
+					plan_approved: true,
+					awaiting_user: false,
+					current_step: 1,
+				},
+			},
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		const view = render(AppTestHost);
+
+		await waitFor(() => {
+			expect(screen.getByText('Unknown status thread restored.')).toBeTruthy();
+		});
+		expect(
+			screen.getByText(
+				'Resumed backend thread thread-unknown-resume-status. Status: in progress. Progress: 1/3 steps.'
+			)
+		).toBeTruthy();
+
+		view.unmount();
+	});
+
 	it('uses backend completed summary copy for resumed completed threads', async () => {
 		localStorage.setItem('cloumask:setup', 'complete');
 		const fetchMock = createFetchMock({
