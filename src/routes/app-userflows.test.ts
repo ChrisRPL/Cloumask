@@ -1598,6 +1598,50 @@ describe('App user flows', () => {
 		view.unmount();
 	});
 
+	it('falls back to ready when backend resume status is unknown and counters are empty', async () => {
+		localStorage.setItem('cloumask:setup', 'complete');
+		const fetchMock = createFetchMock({
+			threadList: [
+				{
+					thread_id: 'thread-unknown-ready-fallback',
+					resume_status: 'mystery',
+					awaiting_user: false,
+					current_step: 0,
+					total_steps: 0,
+				},
+			],
+			threadStates: {
+				'thread-unknown-ready-fallback': {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Unknown ready fallback thread restored.',
+							timestamp: '2026-03-15T10:06:00.000Z',
+						},
+					],
+					plan: [],
+					plan_approved: false,
+					awaiting_user: false,
+					current_step: 0,
+				},
+			},
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		const view = render(AppTestHost);
+
+		await waitFor(() => {
+			expect(screen.getByText('Unknown ready fallback thread restored.')).toBeTruthy();
+		});
+		expect(
+			screen.getByText(
+				'Resumed backend thread thread-unknown-ready-fallback. Status: ready.'
+			)
+		).toBeTruthy();
+
+		view.unmount();
+	});
+
 	it('uses backend completed summary copy for resumed completed threads', async () => {
 		localStorage.setItem('cloumask:setup', 'complete');
 		const fetchMock = createFetchMock({
