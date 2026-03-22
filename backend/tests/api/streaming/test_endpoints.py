@@ -664,6 +664,7 @@ class TestListThreads:
         assert response.status_code == 200
         assert [thread["thread_id"] for thread in data["threads"]] == ["thread-corrupted-plan"]
         assert data["threads"][0]["total_steps"] == 0
+        assert data["threads"][0]["resume_status"] == "ready"
         assert data["threads"][0]["summary"] == "ready."
 
     def test_list_threads_ignores_non_string_last_message_content(
@@ -698,6 +699,7 @@ class TestListThreads:
         assert response.status_code == 200
         assert [thread["thread_id"] for thread in data["threads"]] == ["thread-bad-message"]
         assert data["threads"][0]["last_message"] == ""
+        assert data["threads"][0]["resume_status"] == "ready"
         assert data["threads"][0]["summary"] == "ready."
 
     def test_list_threads_ignores_malformed_timestamp_metadata(
