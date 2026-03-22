@@ -294,6 +294,8 @@ def _get_thread_resume_status(thread: dict[str, Any]) -> str:
     """Return the user-facing resume status for a persisted thread."""
     if thread.get("awaiting_user"):
         return "awaiting review"
+    if max(0, int(thread.get("failed_steps", 0) or 0)) > 0:
+        return "failed"
 
     total_steps = max(0, int(thread.get("total_steps", 0) or 0))
     current_step = max(0, int(thread.get("current_step", 0) or 0))

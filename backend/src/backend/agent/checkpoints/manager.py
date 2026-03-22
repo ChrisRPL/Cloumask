@@ -163,6 +163,7 @@ class CheckpointManager:
 
         plan = _coerce_step_list(values.get("plan", []))
         completed = sum(1 for s in plan if s.get("status") == "completed")
+        failed = sum(1 for s in plan if s.get("status") == "failed")
         current_step = _coerce_non_negative_int(values.get("current_step", 0))
         if plan and completed >= len(plan):
             current_step = max(current_step, completed)
@@ -186,6 +187,7 @@ class CheckpointManager:
             "status": status,
             "total_steps": len(plan),
             "completed_steps": completed,
+            "failed_steps": failed,
             "current_step": current_step,
             "progress_percent": (completed / len(plan) * 100) if plan else 0,
             "awaiting_user": _coerce_bool(values.get("awaiting_user")),
