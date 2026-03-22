@@ -1590,6 +1590,65 @@ describe('App user flows', () => {
 		view.unmount();
 	});
 
+	it('uses backend in-progress summary copy when raw counters look completed', async () => {
+		localStorage.setItem('cloumask:setup', 'complete');
+		const fetchMock = createFetchMock({
+			threadList: [
+				{
+					thread_id: 'thread-stale-summary',
+					awaiting_user: false,
+					current_step: 99,
+					total_steps: 2,
+					summary: 'in progress. Progress: 1/2 steps.',
+				},
+			],
+			threadStates: {
+				'thread-stale-summary': {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Stale summary thread restored.',
+							timestamp: '2026-03-15T12:10:00.000Z',
+						},
+					],
+					plan: [
+						{
+							id: 'step-1',
+							tool_name: 'scan_directory',
+							description: 'Scan inbox',
+							parameters: { path: '/data/inbox' },
+							status: 'completed',
+						},
+						{
+							id: 'step-2',
+							tool_name: 'export',
+							description: 'Export labels',
+							parameters: { output_path: '/data/out' },
+							status: 'pending',
+						},
+					],
+					plan_approved: true,
+					awaiting_user: false,
+					current_step: 1,
+				},
+			},
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		const view = render(AppTestHost);
+
+		await waitFor(() => {
+			expect(screen.getByText('Stale summary thread restored.')).toBeTruthy();
+		});
+		expect(
+			screen.getByText(
+				'Resumed backend thread thread-stale-summary. Status: in progress. Progress: 1/2 steps.'
+			)
+		).toBeTruthy();
+
+		view.unmount();
+	});
+
 	it('keeps backend recency order when resume priorities tie', async () => {
 		localStorage.setItem('cloumask:setup', 'complete');
 		const fetchMock = createFetchMock({
