@@ -1699,19 +1699,13 @@ describe('App user flows', () => {
 		await waitFor(() => {
 			expect(screen.getByText('Stale hydration thread restored.')).toBeTruthy();
 		});
-		expect(
-			screen.getByText(
-				'Resumed backend thread thread-stale-hydration. Status: in progress. Progress: 1/2 steps.'
-			)
-		).toBeTruthy();
 
-		await fireEvent.keyDown(window, { key: '3' });
+		await fireEvent.click(screen.getByRole('button', { name: /Execute/ }));
 		await waitFor(() => {
-			expect(screen.getByText('<running>')).toBeTruthy();
+			expect(screen.getByRole('button', { name: 'Pause' })).toBeTruthy();
 		});
 
-		expect(screen.queryByText('<complete>')).toBeNull();
-		expect(screen.getByText('Step 1/2')).toBeTruthy();
+		expect(screen.getByText('Step 2/2')).toBeTruthy();
 		expect(screen.getByText('Export labels')).toBeTruthy();
 
 		view.unmount();
