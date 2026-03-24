@@ -639,6 +639,113 @@ class TestListThreads:
             "completed",
         ]
 
+    def test_list_threads_keeps_both_status_fields_on_mixed_payload(
+        self,
+        client: TestClient,
+        checkpoint_manager: CheckpointManager,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """List threads should expose both lifecycle and resume enums together on a mixed payload."""
+        checkpoint_manager.create_thread("thread-mixed-ready", title="Mixed ready")
+        checkpoint_manager.save_snapshot(
+            "thread-mixed-ready",
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "plan": [],
+                    "current_step": 0,
+                    "awaiting_user": False,
+                    "messages": [{"role": "assistant", "content": "Mixed ready restored"}],
+                }
+            },
+        )
+
+        checkpoint_manager.create_thread("thread-mixed-review", title="Mixed review")
+        checkpoint_manager.save_snapshot(
+            "thread-mixed-review",
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "plan": [
+                        {"id": "step-1", "tool_name": "scan_directory", "status": "completed"},
+                        {"id": "step-2", "tool_name": "review", "status": "pending"},
+                    ],
+                    "current_step": 1,
+                    "awaiting_user": True,
+                    "messages": [{"role": "assistant", "content": "Mixed review restored"}],
+                }
+            },
+        )
+
+        checkpoint_manager.create_thread("thread-mixed-failed", title="Mixed failed")
+        checkpoint_manager.save_snapshot(
+            "thread-mixed-failed",
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "plan": [
+                        {"id": "step-1", "tool_name": "scan_directory", "status": "completed"},
+                        {"id": "step-2", "tool_name": "export", "status": "failed"},
+                    ],
+                    "current_step": 9,
+                    "awaiting_user": False,
+                    "messages": [{"role": "assistant", "content": "Mixed failed restored"}],
+                }
+            },
+        )
+
+        original_get_thread = checkpoint_manager.saver.get_thread
+
+        def get_thread_with_mixed_statuses(thread_id: str) -> dict[str, object] | None:
+            thread = original_get_thread(thread_id)
+            if not thread:
+                return thread
+            if thread_id == "thread-mixed-failed":
+                return {**thread, "status": "completed"}
+            if thread_id == "thread-mixed-review":
+                return {**thread, "status": "cancelled"}
+            return {**thread, "status": "active"}
+
+        monkeypatch.setattr(checkpoint_manager.saver, "get_thread", get_thread_with_mixed_statuses)
+
+        with checkpoint_manager.saver._get_conn() as conn:
+            conn.execute(
+                "UPDATE threads SET updated_at = ? WHERE thread_id = ?",
+                ("2026-03-15 12:44:00", "thread-mixed-ready"),
+            )
+            conn.execute(
+                "UPDATE threads SET updated_at = ? WHERE thread_id = ?",
+                ("2026-03-15 12:43:00", "thread-mixed-review"),
+            )
+            conn.execute(
+                "UPDATE threads SET updated_at = ? WHERE thread_id = ?",
+                ("2026-03-15 12:42:00", "thread-mixed-failed"),
+            )
+
+        _event_queues.clear()
+        _thread_states.clear()
+        _threads.clear()
+
+        response = client.get("/api/chat/threads")
+        data = response.json()
+
+        assert response.status_code == 200
+        assert [thread["thread_id"] for thread in data["threads"]] == [
+            "thread-mixed-ready",
+            "thread-mixed-review",
+            "thread-mixed-failed",
+        ]
+        assert [thread["status"] for thread in data["threads"]] == [
+            "active",
+            "cancelled",
+            "completed",
+        ]
+        assert [thread["resume_status"] for thread in data["threads"]] == [
+            "ready",
+            "awaiting review",
+            "failed",
+        ]
+
     def test_list_threads_clamps_missing_and_negative_current_step_in_summary(
         self,
         client: TestClient,
@@ -1233,6 +1340,106 @@ class TestListThreads:
             "active",
             "completed",
             "cancelled",
+        ]
+
+    def test_list_threads_keeps_lifecycle_and_resume_status_separate(
+        self,
+        client: TestClient,
+        checkpoint_manager: CheckpointManager,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Lifecycle status and resume status should remain separate contracts."""
+        checkpoint_manager.create_thread("thread-separate-active", title="Separate active")
+        checkpoint_manager.save_snapshot(
+            "thread-separate-active",
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "plan": [],
+                    "current_step": 0,
+                    "awaiting_user": False,
+                    "messages": [{"role": "assistant", "content": "Separate active restored"}],
+                }
+            },
+        )
+
+        checkpoint_manager.create_thread("thread-separate-completed", title="Separate completed")
+        checkpoint_manager.save_snapshot(
+            "thread-separate-completed",
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "plan": [
+                        {"id": "step-1", "tool_name": "scan_directory", "status": "completed"},
+                        {"id": "step-2", "tool_name": "detect", "status": "pending"},
+                    ],
+                    "current_step": 1,
+                    "awaiting_user": False,
+                    "messages": [{"role": "assistant", "content": "Separate completed restored"}],
+                }
+            },
+        )
+
+        checkpoint_manager.create_thread("thread-separate-cancelled", title="Separate cancelled")
+        checkpoint_manager.save_snapshot(
+            "thread-separate-cancelled",
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "plan": [
+                        {"id": "step-1", "tool_name": "scan_directory", "status": "completed"},
+                        {"id": "step-2", "tool_name": "review", "status": "pending"},
+                    ],
+                    "current_step": 1,
+                    "awaiting_user": True,
+                    "messages": [{"role": "assistant", "content": "Separate cancelled restored"}],
+                }
+            },
+        )
+
+        original_get_thread = checkpoint_manager.saver.get_thread
+
+        def get_thread_with_separate_statuses(thread_id: str) -> dict[str, object] | None:
+            thread = original_get_thread(thread_id)
+            if not thread:
+                return thread
+            if thread_id == "thread-separate-completed":
+                return {**thread, "status": "completed"}
+            if thread_id == "thread-separate-cancelled":
+                return {**thread, "status": "cancelled"}
+            return {**thread, "status": "active"}
+
+        monkeypatch.setattr(checkpoint_manager.saver, "get_thread", get_thread_with_separate_statuses)
+
+        with checkpoint_manager.saver._get_conn() as conn:
+            conn.execute(
+                "UPDATE threads SET updated_at = ? WHERE thread_id = ?",
+                ("2026-03-15 12:52:00", "thread-separate-active"),
+            )
+            conn.execute(
+                "UPDATE threads SET updated_at = ? WHERE thread_id = ?",
+                ("2026-03-15 12:51:00", "thread-separate-completed"),
+            )
+            conn.execute(
+                "UPDATE threads SET updated_at = ? WHERE thread_id = ?",
+                ("2026-03-15 12:50:00", "thread-separate-cancelled"),
+            )
+
+        _event_queues.clear()
+        _thread_states.clear()
+        _threads.clear()
+
+        response = client.get("/api/chat/threads")
+        data = response.json()
+
+        assert response.status_code == 200
+        assert [
+            (thread["status"], thread["resume_status"])
+            for thread in data["threads"]
+        ] == [
+            ("active", "ready"),
+            ("completed", "in progress"),
+            ("cancelled", "awaiting review"),
         ]
 
     def test_list_threads_skips_corrupted_rows_without_string_thread_ids(
