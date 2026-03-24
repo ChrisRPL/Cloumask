@@ -20,6 +20,7 @@ function createFetchMock(options?: {
 	threadList?: Array<{
 		thread_id: string;
 		title?: string | null;
+		status?: string;
 		resume_status?: string;
 		awaiting_user?: boolean;
 		current_step?: number;
@@ -1638,6 +1639,67 @@ describe('App user flows', () => {
 				'Resumed backend thread thread-unknown-ready-fallback. Status: ready.'
 			)
 		).toBeTruthy();
+
+		view.unmount();
+	});
+
+	it('ignores lifecycle status when resume status disagrees', async () => {
+		localStorage.setItem('cloumask:setup', 'complete');
+		const fetchMock = createFetchMock({
+			threadList: [
+				{
+					thread_id: 'thread-lifecycle-noise',
+					status: 'cancelled',
+					resume_status: 'awaiting review',
+					awaiting_user: true,
+					current_step: 1,
+					total_steps: 2,
+				},
+			],
+			threadStates: {
+				'thread-lifecycle-noise': {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Lifecycle noise thread restored.',
+							timestamp: '2026-03-15T10:07:00.000Z',
+						},
+					],
+					plan: [
+						{
+							id: 'step-1',
+							tool_name: 'scan_directory',
+							description: 'Scan lifecycle noise inbox',
+							parameters: { path: '/data/lifecycle-noise' },
+							status: 'completed',
+						},
+						{
+							id: 'step-2',
+							tool_name: 'review',
+							description: 'Review lifecycle noise output',
+							parameters: {},
+							status: 'pending',
+						},
+					],
+					plan_approved: true,
+					awaiting_user: true,
+					current_step: 1,
+				},
+			},
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		const view = render(AppTestHost);
+
+		await waitFor(() => {
+			expect(screen.getByText('Lifecycle noise thread restored.')).toBeTruthy();
+		});
+		expect(
+			screen.getByText(
+				'Resumed backend thread thread-lifecycle-noise. Status: awaiting review. Progress: 1/2 steps.'
+			)
+		).toBeTruthy();
+		expect(screen.queryByText(/Status: cancelled/i)).toBeNull();
 
 		view.unmount();
 	});
