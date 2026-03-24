@@ -1,6 +1,6 @@
 # Cloumask Full QA Scenarios (Playwright Manual Runbook)
 
-Last updated: 2026-03-14
+Last updated: 2026-03-24
 
 ## Scope
 
