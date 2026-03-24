@@ -513,6 +513,132 @@ class TestListThreads:
         assert data["threads"][2]["resume_status"] == "awaiting review"
         assert data["threads"][2]["summary"] == "awaiting review. Progress: 1/2 steps."
 
+    def test_list_threads_uses_allowed_resume_status_values(
+        self,
+        client: TestClient,
+        checkpoint_manager: CheckpointManager,
+    ) -> None:
+        """List threads should emit only the documented resume status values."""
+        checkpoint_manager.create_thread("thread-ready", title="Ready")
+        checkpoint_manager.save_snapshot(
+            "thread-ready",
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "plan": [],
+                    "current_step": 0,
+                    "awaiting_user": False,
+                    "messages": [{"role": "assistant", "content": "Ready thread"}],
+                }
+            },
+        )
+
+        checkpoint_manager.create_thread("thread-progress", title="Progress")
+        checkpoint_manager.save_snapshot(
+            "thread-progress",
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "plan": [
+                        {"id": "step-1", "tool_name": "scan_directory", "status": "completed"},
+                        {"id": "step-2", "tool_name": "detect", "status": "pending"},
+                    ],
+                    "current_step": 1,
+                    "awaiting_user": False,
+                    "messages": [{"role": "assistant", "content": "Progress thread"}],
+                }
+            },
+        )
+
+        checkpoint_manager.create_thread("thread-review", title="Review")
+        checkpoint_manager.save_snapshot(
+            "thread-review",
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "plan": [
+                        {"id": "step-1", "tool_name": "scan_directory", "status": "completed"},
+                        {"id": "step-2", "tool_name": "review", "status": "pending"},
+                    ],
+                    "current_step": 1,
+                    "awaiting_user": True,
+                    "messages": [{"role": "assistant", "content": "Review thread"}],
+                }
+            },
+        )
+
+        checkpoint_manager.create_thread("thread-failed", title="Failed")
+        checkpoint_manager.save_snapshot(
+            "thread-failed",
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "plan": [
+                        {"id": "step-1", "tool_name": "scan_directory", "status": "completed"},
+                        {"id": "step-2", "tool_name": "export", "status": "failed"},
+                    ],
+                    "current_step": 9,
+                    "awaiting_user": False,
+                    "messages": [{"role": "assistant", "content": "Failed thread"}],
+                }
+            },
+        )
+
+        checkpoint_manager.create_thread("thread-completed", title="Completed")
+        checkpoint_manager.save_snapshot(
+            "thread-completed",
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "plan": [
+                        {"id": "step-1", "tool_name": "scan_directory", "status": "completed"},
+                        {"id": "step-2", "tool_name": "export", "status": "completed"},
+                    ],
+                    "current_step": 8,
+                    "awaiting_user": False,
+                    "messages": [{"role": "assistant", "content": "Completed thread"}],
+                }
+            },
+        )
+
+        with checkpoint_manager.saver._get_conn() as conn:
+            conn.execute(
+                "UPDATE threads SET updated_at = ? WHERE thread_id = ?",
+                ("2026-03-15 12:04:00", "thread-ready"),
+            )
+            conn.execute(
+                "UPDATE threads SET updated_at = ? WHERE thread_id = ?",
+                ("2026-03-15 12:03:00", "thread-progress"),
+            )
+            conn.execute(
+                "UPDATE threads SET updated_at = ? WHERE thread_id = ?",
+                ("2026-03-15 12:02:00", "thread-review"),
+            )
+            conn.execute(
+                "UPDATE threads SET updated_at = ? WHERE thread_id = ?",
+                ("2026-03-15 12:01:00", "thread-failed"),
+            )
+            conn.execute(
+                "UPDATE threads SET updated_at = ? WHERE thread_id = ?",
+                ("2026-03-15 12:00:00", "thread-completed"),
+            )
+
+        _event_queues.clear()
+        _thread_states.clear()
+        _threads.clear()
+
+        response = client.get("/api/chat/threads")
+        data = response.json()
+
+        assert response.status_code == 200
+        assert [thread["resume_status"] for thread in data["threads"]] == [
+            "ready",
+            "in progress",
+            "awaiting review",
+            "failed",
+            "completed",
+        ]
+
     def test_list_threads_clamps_missing_and_negative_current_step_in_summary(
         self,
         client: TestClient,
