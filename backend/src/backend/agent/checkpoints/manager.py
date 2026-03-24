@@ -54,6 +54,14 @@ def _coerce_optional_string(value: Any) -> str | None:
     return value if isinstance(value, str) else None
 
 
+def _coerce_thread_status(value: Any) -> str:
+    """Return only known lifecycle thread statuses from persisted metadata."""
+    status = _coerce_optional_string(value)
+    if status in (STATUS_ACTIVE, STATUS_COMPLETED, STATUS_CANCELLED):
+        return status
+    return STATUS_ACTIVE
+
+
 def _coerce_non_negative_int(value: Any) -> int:
     """Return a non-negative integer from persisted numeric payloads."""
     try:
@@ -179,7 +187,7 @@ class CheckpointManager:
                 break
 
         thread_info = _coerce_state_mapping(state.get("thread_info", {}))
-        status = _coerce_optional_string(thread_info.get("status")) or STATUS_ACTIVE
+        status = _coerce_thread_status(thread_info.get("status"))
 
         return {
             "thread_id": thread_id,
