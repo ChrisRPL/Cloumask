@@ -1996,6 +1996,139 @@ describe('App user flows', () => {
 		view.unmount();
 	});
 
+	it('keeps backend recency order when pure local fallback counters differ', async () => {
+		localStorage.setItem('cloumask:setup', 'complete');
+		const fetchMock = createFetchMock({
+			threadList: [
+				{
+					thread_id: 'thread-local-fallback-progress-newest',
+					status: 'active',
+					awaiting_user: true,
+					current_step: 2,
+					total_steps: 5,
+				},
+				{
+					thread_id: 'thread-local-fallback-progress-older',
+					status: 'cancelled',
+					awaiting_user: true,
+					current_step: 1,
+					total_steps: 3,
+				},
+			],
+			threadStates: {
+				'thread-local-fallback-progress-newest': {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Newest differing fallback thread restored.',
+							timestamp: '2026-03-15T10:10:00.000Z',
+						},
+					],
+					plan: [
+						{
+							id: 'step-1',
+							tool_name: 'scan_directory',
+							description: 'Scan newest differing fallback',
+							parameters: { path: '/data/local-fallback-progress-newest' },
+							status: 'completed',
+						},
+						{
+							id: 'step-2',
+							tool_name: 'detect',
+							description: 'Detect newest differing fallback',
+							parameters: { classes: ['person'] },
+							status: 'completed',
+						},
+						{
+							id: 'step-3',
+							tool_name: 'review',
+							description: 'Review newest differing fallback',
+							parameters: {},
+							status: 'pending',
+						},
+						{
+							id: 'step-4',
+							tool_name: 'export',
+							description: 'Export newest differing fallback',
+							parameters: { output_path: '/data/local-fallback-progress-newest-out' },
+							status: 'pending',
+						},
+						{
+							id: 'step-5',
+							tool_name: 'archive',
+							description: 'Archive newest differing fallback',
+							parameters: {},
+							status: 'pending',
+						},
+					],
+					plan_approved: true,
+					awaiting_user: true,
+					current_step: 2,
+				},
+				'thread-local-fallback-progress-older': {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Older differing fallback thread restored.',
+							timestamp: '2026-03-15T10:00:00.000Z',
+						},
+					],
+					plan: [
+						{
+							id: 'step-1',
+							tool_name: 'scan_directory',
+							description: 'Scan older differing fallback',
+							parameters: { path: '/data/local-fallback-progress-older' },
+							status: 'completed',
+						},
+						{
+							id: 'step-2',
+							tool_name: 'review',
+							description: 'Review older differing fallback',
+							parameters: {},
+							status: 'pending',
+						},
+						{
+							id: 'step-3',
+							tool_name: 'export',
+							description: 'Export older differing fallback',
+							parameters: { output_path: '/data/local-fallback-progress-older-out' },
+							status: 'pending',
+						},
+					],
+					plan_approved: true,
+					awaiting_user: true,
+					current_step: 1,
+				},
+			},
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		const view = render(AppTestHost);
+
+		await waitFor(() => {
+			expect(screen.getByText('Newest differing fallback thread restored.')).toBeTruthy();
+		});
+		expect(
+			screen.getByText(
+				'Resumed backend thread thread-local-fallback-progress-newest. Status: awaiting review. Progress: 2/5 steps.'
+			)
+		).toBeTruthy();
+		expect(screen.queryByText('Older differing fallback thread restored.')).toBeNull();
+
+		const stateCalls = fetchMock.mock.calls.filter(([url, init]) => {
+			const requestUrl = typeof url === 'string' ? url : url.toString();
+			const method = (init?.method ?? 'GET').toUpperCase();
+			return (
+				requestUrl.includes('/api/chat/threads/thread-local-fallback-progress-newest/state') &&
+				method === 'GET'
+			);
+		});
+		expect(stateCalls).toHaveLength(1);
+
+		view.unmount();
+	});
+
 	it('uses backend completed summary copy for resumed completed threads', async () => {
 		localStorage.setItem('cloumask:setup', 'complete');
 		const fetchMock = createFetchMock({
