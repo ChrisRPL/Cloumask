@@ -841,7 +841,7 @@ class TestListThreads:
 
         assert response.status_code == 200
         assert [thread["thread_id"] for thread in data["threads"]] == ["thread-unknown-status"]
-        assert data["threads"][0]["status"] == "mystery"
+        assert data["threads"][0]["status"] == "active"
         assert data["threads"][0]["resume_status"] == "awaiting review"
         assert data["threads"][0]["summary"] == "awaiting review."
 
