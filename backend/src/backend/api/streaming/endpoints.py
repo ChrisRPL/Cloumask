@@ -17,7 +17,7 @@ import os
 import time
 import uuid
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
@@ -262,13 +262,17 @@ class ThreadInfo(BaseModel):
     total_steps: int = 0
 
 
+ThreadLifecycleStatus = Literal["active", "completed", "cancelled"]
+ThreadResumeStatus = Literal["awaiting review", "in progress", "failed", "completed", "ready"]
+
+
 class ThreadSummary(BaseModel):
     """Summary of a resumable chat thread."""
 
     thread_id: str
     title: str | None = None
-    status: str
-    resume_status: str
+    status: ThreadLifecycleStatus
+    resume_status: ThreadResumeStatus
     awaiting_user: bool = False
     current_step: int = 0
     total_steps: int = 0
@@ -291,7 +295,7 @@ class ThreadStateResponse(BaseModel):
     state: dict[str, Any]
 
 
-def _get_thread_resume_status(thread: dict[str, Any]) -> str:
+def _get_thread_resume_status(thread: dict[str, Any]) -> ThreadResumeStatus:
     """Return the user-facing resume status for a persisted thread."""
     if thread.get("awaiting_user"):
         return "awaiting review"
