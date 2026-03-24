@@ -1704,6 +1704,66 @@ describe('App user flows', () => {
 		view.unmount();
 	});
 
+	it('falls back locally when summary and resume status are both missing', async () => {
+		localStorage.setItem('cloumask:setup', 'complete');
+		const fetchMock = createFetchMock({
+			threadList: [
+				{
+					thread_id: 'thread-local-fallback-noise',
+					status: 'cancelled',
+					awaiting_user: true,
+					current_step: 1,
+					total_steps: 2,
+				},
+			],
+			threadStates: {
+				'thread-local-fallback-noise': {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Local fallback noise thread restored.',
+							timestamp: '2026-03-15T10:08:00.000Z',
+						},
+					],
+					plan: [
+						{
+							id: 'step-1',
+							tool_name: 'scan_directory',
+							description: 'Scan local fallback inbox',
+							parameters: { path: '/data/local-fallback' },
+							status: 'completed',
+						},
+						{
+							id: 'step-2',
+							tool_name: 'review',
+							description: 'Review local fallback output',
+							parameters: {},
+							status: 'pending',
+						},
+					],
+					plan_approved: true,
+					awaiting_user: true,
+					current_step: 1,
+				},
+			},
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		const view = render(AppTestHost);
+
+		await waitFor(() => {
+			expect(screen.getByText('Local fallback noise thread restored.')).toBeTruthy();
+		});
+		expect(
+			screen.getByText(
+				'Resumed backend thread thread-local-fallback-noise. Status: awaiting review. Progress: 1/2 steps.'
+			)
+		).toBeTruthy();
+		expect(screen.queryByText(/Status: cancelled/i)).toBeNull();
+
+		view.unmount();
+	});
+
 	it('uses backend completed summary copy for resumed completed threads', async () => {
 		localStorage.setItem('cloumask:setup', 'complete');
 		const fetchMock = createFetchMock({
