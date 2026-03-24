@@ -25,6 +25,7 @@ Separate non-Playwright app-userflow automation now covers these resume/hydratio
 - unknown backend `resume_status` values degrade to the local heuristic instead of breaking resume selection/copy
 - once fallback heuristic resolves equal priority, backend recency still wins the tie
 - thread-list lifecycle `status` stays normalized to `active`/`completed`/`cancelled`; resume UI should key off `summary`/`resume_status`
+- `status` and `resume_status` are separate enums; lifecycle state stays backend-internal, resume state drives UI selection/copy
 - persistent resumed-thread strip after hydration, including completed-thread restores
 - resumed-thread strip dismissal via button and `Escape`
 - completed-thread resume breadcrumb coverage using backend-provided summary text
