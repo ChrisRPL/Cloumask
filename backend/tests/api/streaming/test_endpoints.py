@@ -746,6 +746,106 @@ class TestListThreads:
             "failed",
         ]
 
+    def test_list_threads_keeps_status_pairs_on_mixed_payload(
+        self,
+        client: TestClient,
+        checkpoint_manager: CheckpointManager,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """List threads should keep lifecycle and resume status pairs aligned per row."""
+        checkpoint_manager.create_thread("thread-paired-ready", title="Paired ready")
+        checkpoint_manager.save_snapshot(
+            "thread-paired-ready",
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "plan": [],
+                    "current_step": 0,
+                    "awaiting_user": False,
+                    "messages": [{"role": "assistant", "content": "Paired ready restored"}],
+                }
+            },
+        )
+
+        checkpoint_manager.create_thread("thread-paired-review", title="Paired review")
+        checkpoint_manager.save_snapshot(
+            "thread-paired-review",
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "plan": [
+                        {"id": "step-1", "tool_name": "scan_directory", "status": "completed"},
+                        {"id": "step-2", "tool_name": "review", "status": "pending"},
+                    ],
+                    "current_step": 1,
+                    "awaiting_user": True,
+                    "messages": [{"role": "assistant", "content": "Paired review restored"}],
+                }
+            },
+        )
+
+        checkpoint_manager.create_thread("thread-paired-failed", title="Paired failed")
+        checkpoint_manager.save_snapshot(
+            "thread-paired-failed",
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "plan": [
+                        {"id": "step-1", "tool_name": "scan_directory", "status": "completed"},
+                        {"id": "step-2", "tool_name": "export", "status": "failed"},
+                    ],
+                    "current_step": 9,
+                    "awaiting_user": False,
+                    "messages": [{"role": "assistant", "content": "Paired failed restored"}],
+                }
+            },
+        )
+
+        original_get_thread = checkpoint_manager.saver.get_thread
+
+        def get_thread_with_paired_statuses(thread_id: str) -> dict[str, object] | None:
+            thread = original_get_thread(thread_id)
+            if not thread:
+                return thread
+            if thread_id == "thread-paired-review":
+                return {**thread, "status": "cancelled"}
+            if thread_id == "thread-paired-failed":
+                return {**thread, "status": "completed"}
+            return {**thread, "status": "active"}
+
+        monkeypatch.setattr(checkpoint_manager.saver, "get_thread", get_thread_with_paired_statuses)
+
+        with checkpoint_manager.saver._get_conn() as conn:
+            conn.execute(
+                "UPDATE threads SET updated_at = ? WHERE thread_id = ?",
+                ("2026-03-15 13:44:00", "thread-paired-ready"),
+            )
+            conn.execute(
+                "UPDATE threads SET updated_at = ? WHERE thread_id = ?",
+                ("2026-03-15 13:43:00", "thread-paired-review"),
+            )
+            conn.execute(
+                "UPDATE threads SET updated_at = ? WHERE thread_id = ?",
+                ("2026-03-15 13:42:00", "thread-paired-failed"),
+            )
+
+        _event_queues.clear()
+        _thread_states.clear()
+        _threads.clear()
+
+        response = client.get("/api/chat/threads")
+        data = response.json()
+
+        assert response.status_code == 200
+        assert [
+            (thread["thread_id"], thread["status"], thread["resume_status"])
+            for thread in data["threads"]
+        ] == [
+            ("thread-paired-ready", "active", "ready"),
+            ("thread-paired-review", "cancelled", "awaiting review"),
+            ("thread-paired-failed", "completed", "failed"),
+        ]
+
     def test_list_threads_clamps_missing_and_negative_current_step_in_summary(
         self,
         client: TestClient,
