@@ -274,12 +274,21 @@ export interface ThreadInfo {
 	total_steps: number;
 }
 
+export type ThreadLifecycleStatus = 'active' | 'completed' | 'cancelled';
+
+export type ThreadResumeStatus =
+	| 'awaiting review'
+	| 'in progress'
+	| 'failed'
+	| 'completed'
+	| 'ready';
+
 /** Summary of a resumable chat thread. */
 export interface ThreadSummary {
 	thread_id: string;
 	title: string | null;
-	status: string;
-	resume_status?: string;
+	status: ThreadLifecycleStatus;
+	resume_status?: ThreadResumeStatus;
 	awaiting_user: boolean;
 	current_step: number;
 	total_steps: number;
