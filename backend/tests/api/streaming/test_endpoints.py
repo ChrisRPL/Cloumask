@@ -1055,6 +1055,186 @@ class TestListThreads:
         assert data["threads"][1]["resume_status"] == "ready"
         assert data["threads"][1]["summary"] == "ready."
 
+    def test_list_threads_preserves_known_lifecycle_status_values(
+        self,
+        client: TestClient,
+        checkpoint_manager: CheckpointManager,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """List threads should only expose known lifecycle status values."""
+        checkpoint_manager.create_thread("thread-lifecycle-completed", title="Lifecycle completed")
+        checkpoint_manager.save_snapshot(
+            "thread-lifecycle-completed",
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "plan": [],
+                    "current_step": 0,
+                    "awaiting_user": False,
+                    "messages": [{"role": "assistant", "content": "Lifecycle completed restored"}],
+                }
+            },
+        )
+
+        checkpoint_manager.create_thread("thread-lifecycle-cancelled", title="Lifecycle cancelled")
+        checkpoint_manager.save_snapshot(
+            "thread-lifecycle-cancelled",
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "plan": [],
+                    "current_step": 0,
+                    "awaiting_user": False,
+                    "messages": [{"role": "assistant", "content": "Lifecycle cancelled restored"}],
+                }
+            },
+        )
+
+        original_get_thread = checkpoint_manager.saver.get_thread
+
+        def get_thread_with_known_lifecycle_statuses(thread_id: str) -> dict[str, object] | None:
+            thread = original_get_thread(thread_id)
+            if not thread:
+                return thread
+            if thread_id == "thread-lifecycle-completed":
+                return {
+                    **thread,
+                    "status": "completed",
+                }
+            if thread_id == "thread-lifecycle-cancelled":
+                return {
+                    **thread,
+                    "status": "cancelled",
+                }
+            return thread
+
+        monkeypatch.setattr(checkpoint_manager.saver, "get_thread", get_thread_with_known_lifecycle_statuses)
+
+        with checkpoint_manager.saver._get_conn() as conn:
+            conn.execute(
+                "UPDATE threads SET updated_at = ? WHERE thread_id = ?",
+                ("2026-03-15 12:41:00", "thread-lifecycle-cancelled"),
+            )
+            conn.execute(
+                "UPDATE threads SET updated_at = ? WHERE thread_id = ?",
+                ("2026-03-15 12:40:00", "thread-lifecycle-completed"),
+            )
+
+        _event_queues.clear()
+        _thread_states.clear()
+        _threads.clear()
+
+        response = client.get("/api/chat/threads")
+        data = response.json()
+
+        assert response.status_code == 200
+        assert [thread["thread_id"] for thread in data["threads"]] == [
+            "thread-lifecycle-cancelled",
+            "thread-lifecycle-completed",
+        ]
+        assert data["threads"][0]["status"] == "cancelled"
+        assert data["threads"][0]["resume_status"] == "ready"
+        assert data["threads"][0]["summary"] == "ready."
+        assert data["threads"][1]["status"] == "completed"
+        assert data["threads"][1]["resume_status"] == "ready"
+        assert data["threads"][1]["summary"] == "ready."
+
+    def test_list_threads_uses_allowed_lifecycle_status_values(
+        self,
+        client: TestClient,
+        checkpoint_manager: CheckpointManager,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """List threads should emit only the documented lifecycle status values."""
+        checkpoint_manager.create_thread("thread-status-active", title="Lifecycle active")
+        checkpoint_manager.save_snapshot(
+            "thread-status-active",
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "plan": [],
+                    "current_step": 0,
+                    "awaiting_user": False,
+                    "messages": [{"role": "assistant", "content": "Lifecycle active restored"}],
+                }
+            },
+        )
+
+        checkpoint_manager.create_thread("thread-status-completed", title="Lifecycle completed")
+        checkpoint_manager.save_snapshot(
+            "thread-status-completed",
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "plan": [],
+                    "current_step": 0,
+                    "awaiting_user": False,
+                    "messages": [{"role": "assistant", "content": "Lifecycle completed restored"}],
+                }
+            },
+        )
+
+        checkpoint_manager.create_thread("thread-status-cancelled", title="Lifecycle cancelled")
+        checkpoint_manager.save_snapshot(
+            "thread-status-cancelled",
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "plan": [],
+                    "current_step": 0,
+                    "awaiting_user": False,
+                    "messages": [{"role": "assistant", "content": "Lifecycle cancelled restored"}],
+                }
+            },
+        )
+
+        original_get_thread = checkpoint_manager.saver.get_thread
+
+        def get_thread_with_lifecycle_statuses(thread_id: str) -> dict[str, object] | None:
+            thread = original_get_thread(thread_id)
+            if not thread:
+                return thread
+            if thread_id == "thread-status-completed":
+                return {**thread, "status": "completed"}
+            if thread_id == "thread-status-cancelled":
+                return {**thread, "status": "cancelled"}
+            return {**thread, "status": "active"}
+
+        monkeypatch.setattr(checkpoint_manager.saver, "get_thread", get_thread_with_lifecycle_statuses)
+
+        with checkpoint_manager.saver._get_conn() as conn:
+            conn.execute(
+                "UPDATE threads SET updated_at = ? WHERE thread_id = ?",
+                ("2026-03-15 12:42:00", "thread-status-active"),
+            )
+            conn.execute(
+                "UPDATE threads SET updated_at = ? WHERE thread_id = ?",
+                ("2026-03-15 12:41:00", "thread-status-completed"),
+            )
+            conn.execute(
+                "UPDATE threads SET updated_at = ? WHERE thread_id = ?",
+                ("2026-03-15 12:40:00", "thread-status-cancelled"),
+            )
+
+        _event_queues.clear()
+        _thread_states.clear()
+        _threads.clear()
+
+        response = client.get("/api/chat/threads")
+        data = response.json()
+
+        assert response.status_code == 200
+        assert [thread["thread_id"] for thread in data["threads"]] == [
+            "thread-status-active",
+            "thread-status-completed",
+            "thread-status-cancelled",
+        ]
+        assert [thread["status"] for thread in data["threads"]] == [
+            "active",
+            "completed",
+            "cancelled",
+        ]
+
     def test_list_threads_skips_corrupted_rows_without_string_thread_ids(
         self,
         client: TestClient,
