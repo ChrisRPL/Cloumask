@@ -1764,6 +1764,111 @@ describe('App user flows', () => {
 		view.unmount();
 	});
 
+	it('keeps backend recency order when both threads need pure local fallback', async () => {
+		localStorage.setItem('cloumask:setup', 'complete');
+		const fetchMock = createFetchMock({
+			threadList: [
+				{
+					thread_id: 'thread-local-fallback-newest',
+					status: 'cancelled',
+					awaiting_user: true,
+					current_step: 1,
+					total_steps: 2,
+				},
+				{
+					thread_id: 'thread-local-fallback-older',
+					status: 'active',
+					awaiting_user: true,
+					current_step: 1,
+					total_steps: 2,
+				},
+			],
+			threadStates: {
+				'thread-local-fallback-newest': {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Newest local fallback thread restored.',
+							timestamp: '2026-03-15T10:09:00.000Z',
+						},
+					],
+					plan: [
+						{
+							id: 'step-1',
+							tool_name: 'scan_directory',
+							description: 'Scan newest local fallback',
+							parameters: { path: '/data/local-fallback-newest' },
+							status: 'completed',
+						},
+						{
+							id: 'step-2',
+							tool_name: 'review',
+							description: 'Review newest local fallback',
+							parameters: {},
+							status: 'pending',
+						},
+					],
+					plan_approved: true,
+					awaiting_user: true,
+					current_step: 1,
+				},
+				'thread-local-fallback-older': {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Older local fallback thread restored.',
+							timestamp: '2026-03-15T10:00:00.000Z',
+						},
+					],
+					plan: [
+						{
+							id: 'step-1',
+							tool_name: 'scan_directory',
+							description: 'Scan older local fallback',
+							parameters: { path: '/data/local-fallback-older' },
+							status: 'completed',
+						},
+						{
+							id: 'step-2',
+							tool_name: 'review',
+							description: 'Review older local fallback',
+							parameters: {},
+							status: 'pending',
+						},
+					],
+					plan_approved: true,
+					awaiting_user: true,
+					current_step: 1,
+				},
+			},
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		const view = render(AppTestHost);
+
+		await waitFor(() => {
+			expect(screen.getByText('Newest local fallback thread restored.')).toBeTruthy();
+		});
+		expect(
+			screen.getByText(
+				'Resumed backend thread thread-local-fallback-newest. Status: awaiting review. Progress: 1/2 steps.'
+			)
+		).toBeTruthy();
+		expect(screen.queryByText('Older local fallback thread restored.')).toBeNull();
+
+		const stateCalls = fetchMock.mock.calls.filter(([url, init]) => {
+			const requestUrl = typeof url === 'string' ? url : url.toString();
+			const method = (init?.method ?? 'GET').toUpperCase();
+			return (
+				requestUrl.includes('/api/chat/threads/thread-local-fallback-newest/state') &&
+				method === 'GET'
+			);
+		});
+		expect(stateCalls).toHaveLength(1);
+
+		view.unmount();
+	});
+
 	it('uses backend completed summary copy for resumed completed threads', async () => {
 		localStorage.setItem('cloumask:setup', 'complete');
 		const fetchMock = createFetchMock({
