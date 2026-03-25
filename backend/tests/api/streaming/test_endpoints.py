@@ -752,7 +752,7 @@ class TestListThreads:
         checkpoint_manager: CheckpointManager,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """List threads should keep lifecycle and resume status pairs aligned per row."""
+        """List threads should keep lifecycle, resume, and summary fields aligned per row."""
         checkpoint_manager.create_thread("thread-paired-ready", title="Paired ready")
         checkpoint_manager.save_snapshot(
             "thread-paired-ready",
@@ -844,6 +844,18 @@ class TestListThreads:
             ("thread-paired-ready", "active", "ready"),
             ("thread-paired-review", "cancelled", "awaiting review"),
             ("thread-paired-failed", "completed", "failed"),
+        ]
+        assert [
+            (thread["thread_id"], thread["resume_status"], thread["summary"])
+            for thread in data["threads"]
+        ] == [
+            ("thread-paired-ready", "ready", "ready."),
+            (
+                "thread-paired-review",
+                "awaiting review",
+                "awaiting review. Progress: 1/2 steps.",
+            ),
+            ("thread-paired-failed", "failed", "failed. Progress: 1/2 steps."),
         ]
 
     def test_list_threads_clamps_missing_and_negative_current_step_in_summary(
