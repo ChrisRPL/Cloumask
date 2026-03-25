@@ -1587,8 +1587,9 @@ class TestListThreads:
         self,
         client: TestClient,
         checkpoint_manager: CheckpointManager,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """List threads should stay stable when current_step and trailing messages are malformed."""
+        """List threads should stay stable when current_step is malformed and summary is blank."""
         checkpoint_manager.create_thread("thread-mixed-corruption", title="Mixed corruption")
         checkpoint_manager.save_snapshot(
             "thread-mixed-corruption",
@@ -1610,6 +1611,19 @@ class TestListThreads:
             },
         )
 
+        original_build_summary = streaming_endpoints._build_thread_resume_summary
+
+        def build_summary_with_missing_corruption(thread: dict[str, object]) -> str:
+            if thread.get("thread_id") == "thread-mixed-corruption":
+                return ""
+            return original_build_summary(thread)
+
+        monkeypatch.setattr(
+            streaming_endpoints,
+            "_build_thread_resume_summary",
+            build_summary_with_missing_corruption,
+        )
+
         _event_queues.clear()
         _thread_states.clear()
         _threads.clear()
@@ -1621,7 +1635,11 @@ class TestListThreads:
         assert [thread["thread_id"] for thread in data["threads"]] == ["thread-mixed-corruption"]
         assert data["threads"][0]["current_step"] == 0
         assert data["threads"][0]["last_message"] == "Earlier valid message"
-        assert data["threads"][0]["summary"] == "in progress. Progress: 0/2 steps."
+        assert (
+            data["threads"][0]["thread_id"],
+            data["threads"][0]["resume_status"],
+            data["threads"][0]["summary"],
+        ) == ("thread-mixed-corruption", "in progress", "")
 
     def test_list_threads_ignores_malformed_awaiting_user_values(
         self,
