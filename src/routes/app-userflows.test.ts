@@ -1764,6 +1764,73 @@ describe('App user flows', () => {
 		view.unmount();
 	});
 
+	it('falls back locally when awaiting_user disagrees with plan shape', async () => {
+		localStorage.setItem('cloumask:setup', 'complete');
+		const fetchMock = createFetchMock({
+			threadList: [
+				{
+					thread_id: 'thread-local-fallback-awaiting-noise',
+					status: 'cancelled',
+					awaiting_user: false,
+					current_step: 1,
+					total_steps: 3,
+				},
+			],
+			threadStates: {
+				'thread-local-fallback-awaiting-noise': {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Awaiting-user noise thread restored.',
+							timestamp: '2026-03-15T10:09:00.000Z',
+						},
+					],
+					plan: [
+						{
+							id: 'step-1',
+							tool_name: 'scan_directory',
+							description: 'Scan noisy local fallback inbox',
+							parameters: { path: '/data/local-fallback-noise' },
+							status: 'completed',
+						},
+						{
+							id: 'step-2',
+							tool_name: 'review',
+							description: 'Review noisy local fallback output',
+							parameters: {},
+							status: 'pending',
+						},
+						{
+							id: 'step-3',
+							tool_name: 'export',
+							description: 'Export noisy local fallback labels',
+							parameters: { output_path: '/data/local-fallback-noise-out' },
+							status: 'pending',
+						},
+					],
+					plan_approved: true,
+					awaiting_user: false,
+					current_step: 1,
+				},
+			},
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		const view = render(AppTestHost);
+
+		await waitFor(() => {
+			expect(screen.getByText('Awaiting-user noise thread restored.')).toBeTruthy();
+		});
+		expect(
+			screen.getByText(
+				'Resumed backend thread thread-local-fallback-awaiting-noise. Status: in progress. Progress: 1/3 steps.'
+			)
+		).toBeTruthy();
+		expect(screen.queryByText(/Status: cancelled/i)).toBeNull();
+
+		view.unmount();
+	});
+
 	it('keeps backend recency order when both threads need pure local fallback', async () => {
 		localStorage.setItem('cloumask:setup', 'complete');
 		const fetchMock = createFetchMock({
