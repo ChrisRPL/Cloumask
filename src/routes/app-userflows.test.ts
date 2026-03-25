@@ -2249,7 +2249,7 @@ describe('App user flows', () => {
 		view.unmount();
 	});
 
-	it('uses hydrated plan truth when thread list counters are noisy', async () => {
+	it('uses hydrated plan truth when awaiting_user and counters are noisy', async () => {
 		localStorage.setItem('cloumask:setup', 'complete');
 		const fetchMock = createFetchMock({
 			threadList: [
