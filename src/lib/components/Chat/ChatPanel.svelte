@@ -367,19 +367,66 @@
 		return thread.thread_id;
 	}
 
-	function buildResumedThreadMessage(thread: ThreadSummary): string {
-		return `Resumed backend thread ${thread.thread_id}. Status: ${getThreadResumeSummary(thread)}`;
+	function buildResumedThreadMessage(thread: ThreadSummary, summary?: string | null): string {
+		return `Resumed backend thread ${thread.thread_id}. Status: ${summary ?? getThreadResumeSummary(thread)}`;
 	}
 
 	function buildPendingResumeMessage(thread: ThreadSummary): string {
 		return `Resuming ${getPendingResumeLabel(thread)}: ${getPendingResumeSummary(thread)}`;
 	}
 
-	function buildResumedThreadStrip(thread: ThreadSummary): { label: string; summary: string } {
+	function buildResumedThreadStrip(
+		thread: ThreadSummary,
+		summary?: string | null
+	): { label: string; summary: string } {
 		return {
 			label: getPendingResumeLabel(thread),
-			summary: getThreadResumeSummary(thread)
+			summary: summary ?? getThreadResumeSummary(thread)
 		};
+	}
+
+	function buildHydratedResumeSummary(
+		threadSummary: ThreadSummary | null,
+		stepsLength: number,
+		progressCurrent: number,
+		awaitingUser: boolean,
+		planApproved: boolean,
+		completedStepCount: number,
+		failedStepCount: number,
+		effectiveCurrentStep: number
+	): string | null {
+		if (!threadSummary) return null;
+
+		const backendSummary = getTrimmedThreadSummary(threadSummary);
+		if (backendSummary) {
+			return backendSummary;
+		}
+
+		const listCountersLookNoisy =
+			stepsLength > 0 &&
+			(threadSummary.total_steps <= 0 ||
+				threadSummary.total_steps < stepsLength ||
+				threadSummary.current_step > threadSummary.total_steps);
+		const awaitingUserLooksNoisy = threadSummary.awaiting_user !== awaitingUser;
+		if (!listCountersLookNoisy && !awaitingUserLooksNoisy) {
+			return getThreadResumeSummary(threadSummary);
+		}
+
+		const hydratedResumeStatus = awaitingUser
+			? 'awaiting review'
+			: planApproved && failedStepCount > 0
+				? 'failed'
+				: planApproved &&
+					  stepsLength > 0 &&
+					  effectiveCurrentStep >= stepsLength &&
+					  completedStepCount >= stepsLength
+					? 'completed'
+					: stepsLength > 0
+						? 'in progress'
+						: 'ready';
+		return stepsLength > 0
+			? `${hydratedResumeStatus}. Progress: ${progressCurrent}/${stepsLength} steps.`
+			: `${hydratedResumeStatus}.`;
 	}
 
 	function dismissResumedThreadStrip() {
@@ -520,14 +567,6 @@
 				agent.updateMessage(created.id, { timestamp: message.timestamp });
 			}
 		}
-		const resumeMessage = threadSummary ? buildResumedThreadMessage(threadSummary) : null;
-		resumedThreadStrip = threadSummary ? buildResumedThreadStrip(threadSummary) : null;
-		if (resumeMessage && !hasSystemMessage(messages, resumeMessage)) {
-			agent.addMessage({
-				role: 'system',
-				content: resumeMessage
-			});
-		}
 
 		const steps = plan
 			.filter(
@@ -567,6 +606,20 @@
 			steps.length > 0 ? effectiveCurrentStep : 0;
 		const hydratedStepIndex =
 			steps.length > 0 ? Math.max(0, Math.min(effectiveCurrentStep, steps.length - 1)) : -1;
+		const hydratedResumeSummary = buildHydratedResumeSummary(
+			threadSummary,
+			steps.length,
+			boundedProgressCurrent,
+			awaitingUser,
+			planApproved,
+			completedStepCount,
+			failedStepCount,
+			effectiveCurrentStep
+		);
+		const resumeMessage =
+			threadSummary && hydratedResumeSummary
+				? buildResumedThreadMessage(threadSummary, hydratedResumeSummary)
+				: null;
 
 		pipeline.setPipelineId(pipelineId);
 		pipeline.setSteps(steps);
@@ -576,6 +629,16 @@
 		execution.setCheckpoint(hydratedCheckpoint);
 		if (!hydratedCheckpoint) {
 			replayPersistedExecutionResults(steps, state);
+		}
+		resumedThreadStrip =
+			threadSummary && hydratedResumeSummary
+				? buildResumedThreadStrip(threadSummary, hydratedResumeSummary)
+				: null;
+		if (resumeMessage && !hasSystemMessage(messages, resumeMessage)) {
+			agent.addMessage({
+				role: 'system',
+				content: resumeMessage
+			});
 		}
 
 		const clarification = buildResumeClarification(awaitingUser, planApproved);
