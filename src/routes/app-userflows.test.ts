@@ -2249,6 +2249,73 @@ describe('App user flows', () => {
 		view.unmount();
 	});
 
+	it('uses hydrated plan truth when thread list counters are noisy', async () => {
+		localStorage.setItem('cloumask:setup', 'complete');
+		const fetchMock = createFetchMock({
+			threadList: [
+				{
+					thread_id: 'thread-noisy-plan-truth',
+					status: 'cancelled',
+					awaiting_user: false,
+					current_step: 99,
+					total_steps: 1,
+				},
+			],
+			threadStates: {
+				'thread-noisy-plan-truth': {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Noisy plan truth thread restored.',
+							timestamp: '2026-03-15T12:18:00.000Z',
+						},
+					],
+					plan: [
+						{
+							id: 'step-1',
+							tool_name: 'scan_directory',
+							description: 'Scan inbox',
+							parameters: { path: '/data/inbox' },
+							status: 'completed',
+						},
+						{
+							id: 'step-2',
+							tool_name: 'review',
+							description: 'Review labels',
+							parameters: {},
+							status: 'pending',
+						},
+						{
+							id: 'step-3',
+							tool_name: 'export',
+							description: 'Export labels',
+							parameters: { output_path: '/data/out' },
+							status: 'pending',
+						},
+					],
+					plan_approved: true,
+					awaiting_user: true,
+					current_step: 1,
+				},
+			},
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		const view = render(AppTestHost);
+
+		await waitFor(() => {
+			expect(screen.getByText('Noisy plan truth thread restored.')).toBeTruthy();
+		});
+		expect(
+			screen.getByText(
+				'Resumed backend thread thread-noisy-plan-truth. Status: awaiting review. Progress: 1/3 steps.'
+			)
+		).toBeTruthy();
+		expect(screen.queryByText(/Progress: 99\/1 steps/)).toBeNull();
+
+		view.unmount();
+	});
+
 	it('shows resumed failed execution without a running pause action', async () => {
 		localStorage.setItem('cloumask:setup', 'complete');
 		const fetchMock = createFetchMock({
