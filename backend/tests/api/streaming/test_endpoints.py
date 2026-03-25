@@ -858,6 +858,87 @@ class TestListThreads:
             ("thread-paired-failed", "failed", "failed. Progress: 1/2 steps."),
         ]
 
+    def test_list_threads_keeps_resume_status_truthful_when_some_summaries_are_missing(
+        self,
+        client: TestClient,
+        checkpoint_manager: CheckpointManager,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """List threads should keep resume status truthful even when summary text is absent."""
+        checkpoint_manager.create_thread("thread-summary-ready", title="Summary ready")
+        checkpoint_manager.save_snapshot(
+            "thread-summary-ready",
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "plan": [],
+                    "current_step": 0,
+                    "awaiting_user": False,
+                    "messages": [{"role": "assistant", "content": "Summary ready restored"}],
+                }
+            },
+        )
+
+        checkpoint_manager.create_thread("thread-summary-review", title="Summary review")
+        checkpoint_manager.save_snapshot(
+            "thread-summary-review",
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "plan": [
+                        {"id": "step-1", "tool_name": "scan_directory", "status": "completed"},
+                        {"id": "step-2", "tool_name": "review", "status": "pending"},
+                    ],
+                    "current_step": 1,
+                    "awaiting_user": True,
+                    "messages": [{"role": "assistant", "content": "Summary review restored"}],
+                }
+            },
+        )
+
+        original_build_summary = streaming_endpoints._build_thread_resume_summary
+
+        def build_summary_with_missing_ready(thread: dict[str, object]) -> str:
+            if thread.get("thread_id") == "thread-summary-ready":
+                return ""
+            return original_build_summary(thread)
+
+        monkeypatch.setattr(
+            streaming_endpoints,
+            "_build_thread_resume_summary",
+            build_summary_with_missing_ready,
+        )
+
+        with checkpoint_manager.saver._get_conn() as conn:
+            conn.execute(
+                "UPDATE threads SET updated_at = ? WHERE thread_id = ?",
+                ("2026-03-15 13:54:00", "thread-summary-ready"),
+            )
+            conn.execute(
+                "UPDATE threads SET updated_at = ? WHERE thread_id = ?",
+                ("2026-03-15 13:53:00", "thread-summary-review"),
+            )
+
+        _event_queues.clear()
+        _thread_states.clear()
+        _threads.clear()
+
+        response = client.get("/api/chat/threads")
+        data = response.json()
+
+        assert response.status_code == 200
+        assert [
+            (thread["thread_id"], thread["resume_status"], thread["summary"])
+            for thread in data["threads"]
+        ] == [
+            ("thread-summary-ready", "ready", ""),
+            (
+                "thread-summary-review",
+                "awaiting review",
+                "awaiting review. Progress: 1/2 steps.",
+            ),
+        ]
+
     def test_list_threads_clamps_missing_and_negative_current_step_in_summary(
         self,
         client: TestClient,
