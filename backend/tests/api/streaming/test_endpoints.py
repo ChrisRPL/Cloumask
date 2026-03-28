@@ -1759,6 +1759,73 @@ class TestListThreads:
             for thread in data["threads"]
         ] == [("thread-unknown-status", "active", "awaiting review", "")]
 
+    def test_list_threads_normalizes_unknown_resume_status_with_blank_summary(
+        self,
+        client: TestClient,
+        checkpoint_manager: CheckpointManager,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """List threads should fall back safely when lifecycle and resume metadata are corrupted."""
+        checkpoint_manager.create_thread("thread-unknown-resume-status", title="Unknown resume")
+        checkpoint_manager.save_snapshot(
+            "thread-unknown-resume-status",
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "plan": [
+                        {"id": "step-1", "tool_name": "scan_directory", "status": "completed"},
+                        {"id": "step-2", "tool_name": "review", "status": "pending"},
+                    ],
+                    "current_step": 1,
+                    "awaiting_user": False,
+                    "messages": [{"role": "assistant", "content": "Unknown resume restored"}],
+                }
+            },
+        )
+
+        original_get_thread = checkpoint_manager.saver.get_thread
+        original_build_summary = streaming_endpoints._build_thread_resume_summary
+        original_get_resume_status = streaming_endpoints._get_thread_resume_status
+
+        def get_thread_with_unknown_status(thread_id: str) -> dict[str, object] | None:
+            thread = original_get_thread(thread_id)
+            if not thread:
+                return thread
+            if thread_id == "thread-unknown-resume-status":
+                return {**thread, "status": "mystery"}
+            return thread
+
+        def get_unknown_resume_status(thread: dict[str, object]) -> str:
+            if thread.get("thread_id") == "thread-unknown-resume-status":
+                return "mystery"
+            return original_get_resume_status(thread)
+
+        def build_summary_with_blank_unknown_resume(thread: dict[str, object]) -> str:
+            if thread.get("thread_id") == "thread-unknown-resume-status":
+                return ""
+            return original_build_summary(thread)
+
+        monkeypatch.setattr(checkpoint_manager.saver, "get_thread", get_thread_with_unknown_status)
+        monkeypatch.setattr(streaming_endpoints, "_get_thread_resume_status", get_unknown_resume_status)
+        monkeypatch.setattr(
+            streaming_endpoints,
+            "_build_thread_resume_summary",
+            build_summary_with_blank_unknown_resume,
+        )
+
+        _event_queues.clear()
+        _thread_states.clear()
+        _threads.clear()
+
+        response = client.get("/api/chat/threads")
+        data = response.json()
+
+        assert response.status_code == 200
+        assert [
+            (thread["thread_id"], thread["status"], thread["resume_status"], thread["summary"])
+            for thread in data["threads"]
+        ] == [("thread-unknown-resume-status", "active", "in progress", "")]
+
     def test_list_threads_ignores_malformed_awaiting_user_values(
         self,
         client: TestClient,
