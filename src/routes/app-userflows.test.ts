@@ -2249,13 +2249,14 @@ describe('App user flows', () => {
 		view.unmount();
 	});
 
-	it('uses hydrated plan truth when awaiting_user and counters are noisy', async () => {
+	it('uses hydrated plan truth when lifecycle status and counters are noisy', async () => {
 		localStorage.setItem('cloumask:setup', 'complete');
 		const fetchMock = createFetchMock({
 			threadList: [
 				{
 					thread_id: 'thread-noisy-plan-truth',
-					status: 'cancelled',
+					status: 'mystery',
+					resume_status: 'unknown',
 					awaiting_user: false,
 					current_step: 99,
 					total_steps: 1,
