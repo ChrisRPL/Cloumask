@@ -1271,6 +1271,64 @@ class TestListThreads:
         assert data["threads"][0]["resume_status"] == "awaiting review"
         assert data["threads"][0]["summary"] == "awaiting review."
 
+    def test_list_threads_keeps_resume_status_with_unknown_status_and_blank_summary(
+        self,
+        client: TestClient,
+        checkpoint_manager: CheckpointManager,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Unknown thread metadata should keep resume status truthful even with blank summaries."""
+        checkpoint_manager.create_thread("thread-unknown-status-blank-summary", title="Unknown blank")
+        checkpoint_manager.save_snapshot(
+            "thread-unknown-status-blank-summary",
+            "ckpt-1",
+            {
+                "channel_values": {
+                    "plan": [],
+                    "current_step": 0,
+                    "awaiting_user": True,
+                    "messages": [{"role": "assistant", "content": "Unknown blank restored"}],
+                }
+            },
+        )
+
+        original_get_thread = checkpoint_manager.saver.get_thread
+        original_build_summary = streaming_endpoints._build_thread_resume_summary
+
+        def get_thread_with_unknown_status(thread_id: str) -> dict[str, object] | None:
+            thread = original_get_thread(thread_id)
+            if not thread or thread_id != "thread-unknown-status-blank-summary":
+                return thread
+            return {
+                **thread,
+                "status": "mystery",
+            }
+
+        def build_summary_with_blank_summary(thread: dict[str, object]) -> str:
+            if thread.get("thread_id") == "thread-unknown-status-blank-summary":
+                return ""
+            return original_build_summary(thread)
+
+        monkeypatch.setattr(checkpoint_manager.saver, "get_thread", get_thread_with_unknown_status)
+        monkeypatch.setattr(
+            streaming_endpoints,
+            "_build_thread_resume_summary",
+            build_summary_with_blank_summary,
+        )
+
+        _event_queues.clear()
+        _thread_states.clear()
+        _threads.clear()
+
+        response = client.get("/api/chat/threads")
+        data = response.json()
+
+        assert response.status_code == 200
+        assert [
+            (thread["thread_id"], thread["status"], thread["resume_status"], thread["summary"])
+            for thread in data["threads"]
+        ] == [("thread-unknown-status-blank-summary", "active", "awaiting review", "")]
+
     def test_list_threads_preserves_known_lifecycle_status_metadata(
         self,
         client: TestClient,
