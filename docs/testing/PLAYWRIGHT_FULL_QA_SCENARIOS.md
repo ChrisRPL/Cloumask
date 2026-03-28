@@ -22,6 +22,7 @@ Separate non-Playwright app-userflow automation now covers these resume/hydratio
 - backend thread-list `resume_status` values are limited to `awaiting review`, `in progress`, `failed`, `completed`, `ready`
 - fallback order `summary` -> `resume_status` -> local counters when thread-list `summary` text is missing
 - fallback via backend `resume_status`, so failed threads do not masquerade as live work and same-priority review threads still keep backend recency order
+- corrupted thread-list rows still follow the same selector rules: rank by `resume_status`, then fall back to hydrated/persisted truth when list counters or summaries are noisy
 - unknown backend `resume_status` values degrade to the local heuristic instead of breaking resume selection/copy
 - once fallback heuristic resolves equal priority, backend recency still wins the tie
 - hydrated persisted thread state may override noisy thread-list counters when plan truth is more trustworthy than list metadata
