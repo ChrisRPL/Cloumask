@@ -17,7 +17,7 @@ import os
 import time
 import uuid
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
@@ -264,6 +264,9 @@ class ThreadInfo(BaseModel):
 
 ThreadLifecycleStatus = Literal["active", "completed", "cancelled"]
 ThreadResumeStatus = Literal["awaiting review", "in progress", "failed", "completed", "ready"]
+THREAD_RESUME_STATUS_VALUES = frozenset(
+    {"awaiting review", "in progress", "failed", "completed", "ready"}
+)
 
 
 class ThreadSummary(BaseModel):
@@ -295,8 +298,8 @@ class ThreadStateResponse(BaseModel):
     state: dict[str, Any]
 
 
-def _get_thread_resume_status(thread: dict[str, Any]) -> ThreadResumeStatus:
-    """Return the user-facing resume status for a persisted thread."""
+def _infer_thread_resume_status(thread: dict[str, Any]) -> ThreadResumeStatus:
+    """Infer the user-facing resume status from persisted thread state."""
     if thread.get("awaiting_user"):
         return "awaiting review"
     if max(0, int(thread.get("failed_steps", 0) or 0)) > 0:
@@ -312,9 +315,24 @@ def _get_thread_resume_status(thread: dict[str, Any]) -> ThreadResumeStatus:
     return "ready"
 
 
+def _get_thread_resume_status(thread: dict[str, Any]) -> ThreadResumeStatus:
+    """Return the user-facing resume status for a persisted thread."""
+    return _infer_thread_resume_status(thread)
+
+
+def _coerce_thread_resume_status(
+    status: str | ThreadResumeStatus,
+    thread: dict[str, Any],
+) -> ThreadResumeStatus:
+    """Normalize unknown resume values back to the inferred persisted-thread status."""
+    if status in THREAD_RESUME_STATUS_VALUES:
+        return cast(ThreadResumeStatus, status)
+    return _infer_thread_resume_status(thread)
+
+
 def _build_thread_resume_summary(thread: dict[str, Any]) -> str:
     """Build the compact summary string used by resume UI."""
-    status = _get_thread_resume_status(thread)
+    status = _coerce_thread_resume_status(_get_thread_resume_status(thread), thread)
     total_steps = max(0, int(thread.get("total_steps", 0) or 0))
 
     if total_steps <= 0:
@@ -486,7 +504,9 @@ async def list_threads(limit: int = 20) -> ThreadListResponse:
             ThreadSummary.model_validate(
                 {
                     **thread,
-                    "resume_status": _get_thread_resume_status(thread),
+                    "resume_status": _coerce_thread_resume_status(
+                        _get_thread_resume_status(thread), thread
+                    ),
                     "summary": _build_thread_resume_summary(thread),
                 }
             )
