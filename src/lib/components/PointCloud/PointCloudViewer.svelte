@@ -15,6 +15,7 @@
 	import { onMount } from 'svelte';
 	import * as THREE from 'three';
 	import { isTauri } from '$lib/utils/tauri';
+	import { Button } from '$lib/components/ui/button';
 	import { setPointCloudState } from '$lib/stores/pointcloud.svelte';
 	import { getExecutionState } from '$lib/stores/execution.svelte';
 	import { resetCamera, type SceneContext } from '$lib/utils/three';
@@ -541,6 +542,41 @@
 
 		<!-- Controls Panel -->
 		<Controls collapsed={controlsCollapsed} onToggle={() => (controlsCollapsed = !controlsCollapsed)} />
+
+		{#if !pcState.file && !pcState.isLoading && !pcState.error}
+			<div class="absolute inset-0 flex items-center justify-center p-6">
+				<div
+					class="w-full max-w-lg rounded-xl border border-border bg-card/92 p-6 text-center shadow-lg backdrop-blur-sm"
+				>
+					<p class="text-[11px] uppercase tracking-[0.24em] font-mono text-muted-foreground">
+						Point Cloud
+					</p>
+					<h2 class="mt-3 text-lg font-mono text-foreground">
+						{isDesktopTauri
+							? 'Load a point cloud to start exploring'
+							: 'Desktop mode required for file workflows'}
+					</h2>
+					<p class="mt-3 text-sm leading-6 text-muted-foreground">
+						{isDesktopTauri
+							? 'Open a local PCD, PLY, LAS, or LAZ file to inspect geometry, switch color modes, and export processed results.'
+							: 'This web preview shows the shell only. Load and export stay in the desktop app.'}
+					</p>
+					<div class="mt-4 flex flex-wrap items-center justify-center gap-2 text-[10px] font-mono text-muted-foreground">
+						<span class="rounded-full border border-border px-2.5 py-1">PCD</span>
+						<span class="rounded-full border border-border px-2.5 py-1">PLY</span>
+						<span class="rounded-full border border-border px-2.5 py-1">LAS</span>
+						<span class="rounded-full border border-border px-2.5 py-1">LAZ</span>
+					</div>
+					{#if isDesktopTauri}
+						<div class="mt-5 flex justify-center">
+							<Button size="sm" class="font-mono" onclick={handleLoad}>
+								Load point cloud
+							</Button>
+						</div>
+					{/if}
+				</div>
+			</div>
+		{/if}
 
 		<!-- Annotation review panel -->
 		{#if execution?.selectedPointcloudPreview?.assetType === 'pointcloud' && execution.selectedPointcloudPreview.pointcloudAnnotations && execution.selectedPointcloudPreview.pointcloudAnnotations.length > 0}
