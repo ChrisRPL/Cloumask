@@ -34,6 +34,7 @@
 	}: ActionBarProps = $props();
 
 	const hasCurrentItem = $derived(total > 0 && currentIndex >= 0);
+	const canNavigateWithKeys = $derived(total > 1);
 </script>
 
 <div
@@ -115,17 +116,23 @@
 </div>
 
 <!-- Keyboard hints footer -->
-<div
-	class={cn(
-		'flex items-center justify-center gap-6 px-4 py-1.5',
-		'border-t border-border bg-muted/30',
-		'text-[10px] font-mono text-muted-foreground'
-	)}
->
-	<span><kbd class="px-1 py-0.5 bg-muted rounded">A</kbd> Approve</span>
-	<span><kbd class="px-1 py-0.5 bg-muted rounded">R</kbd> Reject</span>
-	<span><kbd class="px-1 py-0.5 bg-muted rounded">E</kbd> Edit</span>
-	<span><kbd class="px-1 py-0.5 bg-muted rounded">J/K</kbd> Navigate</span>
-	<span><kbd class="px-1 py-0.5 bg-muted rounded">Del</kbd> Delete</span>
-	<span><kbd class="px-1 py-0.5 bg-muted rounded">Ctrl+Z</kbd> Undo</span>
-</div>
+{#if hasCurrentItem || canNavigateWithKeys}
+	<div
+		class={cn(
+			'flex items-center justify-center gap-6 px-4 py-1.5',
+			'border-t border-border bg-muted/30',
+			'text-[10px] font-mono text-muted-foreground'
+		)}
+	>
+		{#if hasCurrentItem}
+			<span><kbd class="px-1 py-0.5 bg-muted rounded">A</kbd> Approve</span>
+			<span><kbd class="px-1 py-0.5 bg-muted rounded">R</kbd> Reject</span>
+			<span><kbd class="px-1 py-0.5 bg-muted rounded">E</kbd> Edit</span>
+			<span><kbd class="px-1 py-0.5 bg-muted rounded">Del</kbd> Delete</span>
+			<span><kbd class="px-1 py-0.5 bg-muted rounded">Ctrl+Z</kbd> Undo</span>
+		{/if}
+		{#if canNavigateWithKeys}
+			<span><kbd class="px-1 py-0.5 bg-muted rounded">J/K</kbd> Navigate</span>
+		{/if}
+	</div>
+{/if}
