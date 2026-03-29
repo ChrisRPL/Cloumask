@@ -211,12 +211,9 @@ test.describe('B. Navigation & Keyboard Shortcuts', () => {
     test('T-063: Ctrl+K command palette', async ({ page }) => {
         await page.keyboard.press('Control+k');
         await page.waitForTimeout(500);
+        await expect(page.getByRole('dialog')).toBeVisible();
+        await expect(page.getByLabel('Search commands')).toBeVisible();
         await snap(page, 'T-063-command-palette-open');
-
-        // Check for palette overlay
-        const palette = page.locator('[role="dialog"], [class*="command"], [class*="palette"]').first();
-        const paletteVisible = await palette.isVisible().catch(() => false);
-        console.log(`[T-063] Command palette visible: ${paletteVisible}`);
 
         // Close with Escape
         await page.keyboard.press('Escape');
