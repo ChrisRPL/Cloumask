@@ -34,6 +34,8 @@
 		onCancel,
 		onReset,
 	}: PlanHeaderProps = $props();
+
+	const hasPlan = $derived(stepCount > 0);
 </script>
 
 <header
@@ -74,31 +76,35 @@
 		{/if}
 
 		<!-- Edit toggle -->
-		<Button
-			variant={isEditing ? 'default' : 'ghost'}
-			size="sm"
-			onclick={onToggleEdit}
-			title={isEditing ? 'Done editing' : 'Edit pipeline'}
-		>
-			{#if isEditing}
-				<Check class="h-4 w-4 mr-1" />
-				Done
-			{:else}
-				<Pencil class="h-4 w-4 mr-1" />
-				Edit
-			{/if}
-		</Button>
+		{#if hasPlan}
+			<Button
+				variant={isEditing ? 'default' : 'ghost'}
+				size="sm"
+				onclick={onToggleEdit}
+				title={isEditing ? 'Done editing' : 'Edit pipeline'}
+			>
+				{#if isEditing}
+					<Check class="h-4 w-4 mr-1" />
+					Done
+				{:else}
+					<Pencil class="h-4 w-4 mr-1" />
+					Edit
+				{/if}
+			</Button>
+		{/if}
 
 		<!-- Cancel button -->
-		<Button
-			variant="ghost"
-			size="sm"
-			onclick={onCancel}
-			title="Cancel and return to chat"
-		>
-			<X class="h-4 w-4 mr-1" />
-			Cancel
-		</Button>
+		{#if hasPlan}
+			<Button
+				variant="ghost"
+				size="sm"
+				onclick={onCancel}
+				title="Cancel and return to chat"
+			>
+				<X class="h-4 w-4 mr-1" />
+				Cancel
+			</Button>
+		{/if}
 
 		<!-- Start button (prominent when awaiting approval) -->
 		{#if isAwaitingApproval}
