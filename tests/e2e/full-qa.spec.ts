@@ -164,6 +164,8 @@ test.describe('B. Navigation & Keyboard Shortcuts', () => {
         await expect(page.locator('button:has-text("Edit")')).toBeDisabled();
         await expect(page.locator('button:has-text("Reject")')).toBeDisabled();
         await expect(page.locator('button:has-text("Approve")').last()).toBeDisabled();
+        await expect(page.getByText('Ctrl+Z', { exact: true })).toHaveCount(0);
+        await expect(page.getByText('J/K', { exact: true })).toHaveCount(0);
         await snap(page, 'T-060-key-4-review');
 
         // Press 5 for Point Cloud
