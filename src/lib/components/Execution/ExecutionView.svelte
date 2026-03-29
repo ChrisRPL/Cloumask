@@ -49,6 +49,24 @@
 	const canPause = $derived(execution.isRunning);
 	const canResume = $derived(execution.isPaused || execution.status === 'checkpoint');
 	const isCheckpoint = $derived(execution.status === 'checkpoint');
+	const visibleKeyboardShortcuts = $derived.by(() => {
+		const visibleKeys = new Set<string>(['R']);
+
+		if (execution.isRunning || execution.isPaused) {
+			visibleKeys.add('Space');
+			visibleKeys.add('Esc');
+		}
+
+		if (execution.checkpoint && agent.threadId) {
+			visibleKeys.add('Enter');
+		}
+
+		if (execution.hasErrors) {
+			visibleKeys.add('E');
+		}
+
+		return KEYBOARD_SHORTCUTS.filter((shortcut) => visibleKeys.has(shortcut.key));
+	});
 
 	// ============================================================================
 	// Keyboard Shortcuts (registered with keyboard store for scope awareness)
@@ -245,7 +263,7 @@
 	<div
 		class="px-4 py-2 border-t border-border text-xs text-muted-foreground/60 font-mono flex gap-4"
 	>
-		{#each KEYBOARD_SHORTCUTS as shortcut}
+		{#each visibleKeyboardShortcuts as shortcut}
 			<span>
 				<kbd class="px-1 py-0.5 bg-muted/30 rounded text-muted-foreground">{shortcut.key}</kbd>
 				{shortcut.action}
