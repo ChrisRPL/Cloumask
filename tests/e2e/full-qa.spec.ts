@@ -142,6 +142,9 @@ test.describe('B. Navigation & Keyboard Shortcuts', () => {
         // Press 2 for Plan
         await page.keyboard.press('2');
         await page.waitForTimeout(500);
+        await expect(page.getByText('No steps in pipeline', { exact: true })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(0);
+        await expect(page.getByRole('button', { name: 'Cancel' })).toHaveCount(0);
         await snap(page, 'T-060-key-2-plan');
 
         // Press 3 for Execute
@@ -171,6 +174,10 @@ test.describe('B. Navigation & Keyboard Shortcuts', () => {
         // Press 5 for Point Cloud
         await page.keyboard.press('5');
         await page.waitForTimeout(500);
+        await expect(page.getByText('Browser preview only', { exact: true })).toBeVisible();
+        await expect(page.getByText('Load/export require desktop mode', { exact: true })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Load' })).toBeDisabled();
+        await expect(page.getByRole('button', { name: 'Export' })).toBeDisabled();
         await snap(page, 'T-060-key-5-pointcloud');
     });
 
