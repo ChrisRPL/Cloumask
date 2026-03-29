@@ -150,11 +150,20 @@ test.describe('B. Navigation & Keyboard Shortcuts', () => {
         await expect(page.getByText('<idle>', { exact: true })).toBeVisible();
         await expect(page.getByText('No pipeline queued', { exact: true })).toBeVisible();
         await expect(page.getByRole('button', { name: 'Cancel' })).toHaveCount(0);
+        const executeFooter = page.locator('.border-t.border-border.text-xs.font-mono');
+        await expect(executeFooter).not.toContainText('Space Pause/Resume');
+        await expect(executeFooter).not.toContainText('Esc Cancel');
+        await expect(executeFooter).not.toContainText('Enter Continue');
         await snap(page, 'T-060-key-3-execute');
 
         // Press 4 for Review
         await page.keyboard.press('4');
         await page.waitForTimeout(500);
+        await expect(page.getByText('0 items', { exact: true })).toBeVisible();
+        await expect(page.locator('button:has-text("Approve All")').first()).toBeDisabled();
+        await expect(page.locator('button:has-text("Edit")')).toBeDisabled();
+        await expect(page.locator('button:has-text("Reject")')).toBeDisabled();
+        await expect(page.locator('button:has-text("Approve")').last()).toBeDisabled();
         await snap(page, 'T-060-key-4-review');
 
         // Press 5 for Point Cloud
