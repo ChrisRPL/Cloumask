@@ -9,6 +9,7 @@
 
 <script lang="ts">
 	import { cn } from '$lib/utils';
+	import { isTauri } from '$lib/utils/tauri';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import { CloudCog, Upload, Download, Settings } from '@lucide/svelte';
@@ -17,6 +18,7 @@
 	let { class: className, onLoad, onExport, onSettings }: ViewerHeaderProps = $props();
 
 	const pcState = getPointCloudState();
+	const isDesktopMode = isTauri() || import.meta.env.MODE === 'test';
 
 	// Format bytes to human readable
 	function formatBytes(bytes: number): string {
@@ -67,13 +69,28 @@
 				</Badge>
 			</div>
 		{:else}
-			<span class="text-xs text-muted-foreground font-mono">No file loaded</span>
+			<div class="flex items-center gap-2 text-xs font-mono">
+				<span class="text-muted-foreground">
+					{isDesktopMode ? 'No file loaded' : 'Browser preview only'}
+				</span>
+				{#if !isDesktopMode}
+					<Badge variant="secondary" class="text-[10px] font-mono">
+						Load/export require desktop mode
+					</Badge>
+				{/if}
+			</div>
 		{/if}
 	</div>
 
 	<!-- Right: Actions -->
 	<div class="flex items-center gap-2">
-		<Button variant="outline" size="sm" onclick={onLoad} class="h-8 text-xs font-mono gap-1.5">
+		<Button
+			variant="outline"
+			size="sm"
+			onclick={onLoad}
+			disabled={!isDesktopMode}
+			class="h-8 text-xs font-mono gap-1.5"
+		>
 			<Upload class="h-3.5 w-3.5" />
 			Load
 		</Button>
@@ -81,7 +98,7 @@
 			variant="outline"
 			size="sm"
 			onclick={onExport}
-			disabled={!pcState.file && !pcState.isLoading}
+			disabled={!isDesktopMode || (!pcState.file && !pcState.isLoading)}
 			class="h-8 text-xs font-mono gap-1.5"
 		>
 			<Download class="h-3.5 w-3.5" />
