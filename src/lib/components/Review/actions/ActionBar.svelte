@@ -32,6 +32,8 @@
 		onToggleEdit,
 		class: className
 	}: ActionBarProps = $props();
+
+	const hasCurrentItem = $derived(total > 0 && currentIndex >= 0);
 </script>
 
 <div
@@ -72,6 +74,7 @@
 			size="sm"
 			onclick={onToggleEdit}
 			class="h-9 px-4 font-mono"
+			disabled={!hasCurrentItem}
 		>
 			<Pencil class="w-4 h-4 mr-2" />
 			Edit
@@ -83,13 +86,20 @@
 			size="sm"
 			onclick={onReject}
 			class="h-9 px-4 font-mono text-destructive hover:text-destructive hover:bg-destructive/10"
+			disabled={!hasCurrentItem}
 		>
 			<X class="w-4 h-4 mr-2" />
 			Reject
 			<kbd class="ml-2 px-1.5 py-0.5 text-[10px] bg-muted rounded">R</kbd>
 		</Button>
 
-		<Button variant="default" size="sm" onclick={onApprove} class="h-9 px-4 font-mono">
+		<Button
+			variant="default"
+			size="sm"
+			onclick={onApprove}
+			class="h-9 px-4 font-mono"
+			disabled={!hasCurrentItem}
+		>
 			<Check class="w-4 h-4 mr-2" />
 			Approve
 			<kbd class="ml-2 px-1.5 py-0.5 text-[10px] bg-primary-foreground/20 rounded">A</kbd>
