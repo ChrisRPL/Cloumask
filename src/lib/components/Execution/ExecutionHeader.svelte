@@ -35,6 +35,9 @@
 	}: ExecutionHeaderProps = $props();
 
 	const statusConfig = $derived(STATUS_DISPLAY[status]);
+	const isIdleEmpty = $derived(status === 'idle' && totalSteps === 0);
+	const displayTitle = $derived(isIdleEmpty ? 'No pipeline queued' : currentStepTitle);
+	const showCancel = $derived(status === 'running' || status === 'paused');
 </script>
 
 <header
@@ -59,7 +62,7 @@
 
 		<!-- Current step title -->
 		<span class="text-foreground font-mono text-sm truncate max-w-md">
-			{currentStepTitle}
+			{displayTitle}
 		</span>
 	</div>
 
@@ -89,15 +92,17 @@
 		{/if}
 
 		<!-- Cancel button -->
-		<Button
-			variant="ghost"
-			size="sm"
-			onclick={onCancel}
-			title="Cancel execution (Esc)"
-			class="text-muted-foreground hover:text-destructive"
-		>
-			<Square class="h-4 w-4 mr-1" />
-			Cancel
-		</Button>
+		{#if showCancel}
+			<Button
+				variant="ghost"
+				size="sm"
+				onclick={onCancel}
+				title="Cancel execution (Esc)"
+				class="text-muted-foreground hover:text-destructive"
+			>
+				<Square class="h-4 w-4 mr-1" />
+				Cancel
+			</Button>
+		{/if}
 	</div>
 </header>
