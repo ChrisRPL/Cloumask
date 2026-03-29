@@ -85,14 +85,14 @@
 </script>
 
 <Select.Root type="single" bind:value={selectedValue} onValueChange={handleValueChange}>
-	<Select.Trigger class={cn('w-[180px] bg-background/50', className)} size="sm">
+	<Select.Trigger class={cn('w-full min-w-0 bg-background/50', className)} size="sm">
 		{#if ui.currentProject}
-			<span class="flex items-center gap-2 truncate">
+			<span class="flex min-w-0 items-center gap-2 truncate">
 				<Icon name="folder-open" class="size-4 shrink-0 text-muted-foreground" />
 				<span class="truncate">{ui.currentProject.name}</span>
 			</span>
 		{:else}
-			<span class="text-muted-foreground">Select project...</span>
+			<span class="block truncate text-muted-foreground">Select project...</span>
 		{/if}
 	</Select.Trigger>
 	<Select.Portal>
