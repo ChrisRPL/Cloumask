@@ -99,6 +99,38 @@ test.describe('B. Navigation & Keyboard Shortcuts', () => {
         await page.waitForTimeout(1500);
     });
 
+    async function expectHeaderProjectSelectorWithinViewport(page: Page) {
+        const header = page.locator('header').first();
+        const projectSelector = page.getByRole('button', { name: /select project/i });
+
+        await expect(header).toBeVisible();
+        await expect(projectSelector).toBeVisible();
+
+        const headerBox = await header.boundingBox();
+        const selectorBox = await projectSelector.boundingBox();
+        const viewport = page.viewportSize();
+
+        expect(headerBox).not.toBeNull();
+        expect(selectorBox).not.toBeNull();
+        expect(viewport).not.toBeNull();
+
+        const headerRight = (headerBox?.x ?? 0) + (headerBox?.width ?? 0);
+        const selectorRight = (selectorBox?.x ?? 0) + (selectorBox?.width ?? 0);
+
+        expect(selectorBox?.x ?? 0).toBeGreaterThanOrEqual(headerBox?.x ?? 0);
+        expect(selectorRight).toBeLessThanOrEqual(headerRight);
+        expect(selectorRight).toBeLessThanOrEqual(viewport?.width ?? 0);
+
+        await expect
+            .poll(
+                async () =>
+                    page.evaluate(
+                        () => document.documentElement.scrollWidth - window.innerWidth
+                    )
+            )
+            .toBeLessThanOrEqual(1);
+    }
+
     test('T-060: Sidebar navigation keys 1-5', async ({ page }) => {
         await snap(page, 'T-060-initial');
 
@@ -183,6 +215,11 @@ test.describe('B. Navigation & Keyboard Shortcuts', () => {
         const header = page.locator('header, [class*="header"], [class*="Header"]').first();
         const headerVisible = await header.isVisible().catch(() => false);
         console.log(`[T-005] Header visible: ${headerVisible}`);
+        await expectHeaderProjectSelectorWithinViewport(page);
+        await page.keyboard.press('Control+b');
+        await page.waitForTimeout(300);
+        await expectHeaderProjectSelectorWithinViewport(page);
+        await page.keyboard.press('Control+b');
     });
 
     test('T-003: Sidebar click navigation', async ({ page }) => {
@@ -217,7 +254,8 @@ test.describe('C. Chat View', () => {
         await expect(page.getByRole('heading', { name: 'Chat' })).toBeVisible();
         await expect(page.getByText(/connected|disconnected/i)).toBeVisible();
         await expect(page.getByLabel('Chat messages')).toBeVisible();
-        await expect(page.getByText('No messages yet')).toBeVisible();
+        await expect(page.getByText('Start a local vision workflow')).toBeVisible();
+        await expect(page.getByText('Good first prompts')).toBeVisible();
         await expect(page.getByLabel('Message input')).toBeEditable();
         await expect(page.getByRole('button', { name: 'Send message' })).toBeDisabled();
         await expect(page.getByRole('button', { name: 'Clear' })).toBeVisible();
