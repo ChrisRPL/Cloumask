@@ -147,6 +147,9 @@ test.describe('B. Navigation & Keyboard Shortcuts', () => {
         // Press 3 for Execute
         await page.keyboard.press('3');
         await page.waitForTimeout(500);
+        await expect(page.getByText('<idle>', { exact: true })).toBeVisible();
+        await expect(page.getByText('No pipeline queued', { exact: true })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Cancel' })).toHaveCount(0);
         await snap(page, 'T-060-key-3-execute');
 
         // Press 4 for Review
