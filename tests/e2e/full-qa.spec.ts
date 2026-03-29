@@ -176,6 +176,10 @@ test.describe('B. Navigation & Keyboard Shortcuts', () => {
         await page.waitForTimeout(500);
         await expect(page.getByText('Browser preview only', { exact: true })).toBeVisible();
         await expect(page.getByText('Load/export require desktop mode', { exact: true })).toBeVisible();
+        await expect(page.getByText('Desktop mode required for file workflows', { exact: true })).toBeVisible();
+        await expect(
+            page.getByText('This web preview shows the shell only. Load and export stay in the desktop app.')
+        ).toBeVisible();
         await expect(page.getByRole('button', { name: 'Load' })).toBeDisabled();
         await expect(page.getByRole('button', { name: 'Export' })).toBeDisabled();
         await snap(page, 'T-060-key-5-pointcloud');
