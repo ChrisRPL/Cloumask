@@ -259,8 +259,8 @@ export function eventToCombo(event: KeyboardEvent): KeyCombo {
 
   return {
     key: event.key.toLowerCase(),
-    // On Mac, normalize Cmd to ctrl for our internal representation
-    ctrl: platform === "mac" ? event.metaKey : event.ctrlKey,
+    // On Mac, allow either Cmd or Control to satisfy ctrl-based shortcuts
+    ctrl: platform === "mac" ? event.metaKey || event.ctrlKey : event.ctrlKey,
     alt: event.altKey,
     shift: event.shiftKey,
     meta: platform === "mac" ? false : event.metaKey,
