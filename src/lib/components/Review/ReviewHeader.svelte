@@ -34,8 +34,10 @@
 	let showRejectDialog = $state(false);
 
 	const progress = $derived(total > 0 ? ((total - pending) / total) * 100 : 0);
+	const canApproveAll = $derived(pending > 0);
 
 	function handleApproveAll() {
+		if (!canApproveAll) return;
 		showApproveDialog = false;
 		onApproveAll?.();
 	}
@@ -96,30 +98,36 @@
 	<!-- Right: Actions -->
 	<div class="flex items-center gap-2">
 		<!-- Approve All -->
-		<Dialog.Root bind:open={showApproveDialog}>
-			<Dialog.Trigger>
-				<Button variant="outline" size="sm" class="h-8 px-3 text-xs font-mono">
-					Approve All
-				</Button>
-			</Dialog.Trigger>
-			<Dialog.Content class="max-w-sm">
-				<Dialog.Header>
-					<Dialog.Title class="font-mono">Approve All Pending</Dialog.Title>
-					<Dialog.Description class="font-mono text-sm">
-						This will approve all {pending} pending items. This action can be undone.
-					</Dialog.Description>
-				</Dialog.Header>
-				<Dialog.Footer>
-					<Button variant="outline" size="sm" onclick={() => (showApproveDialog = false)}>
-						Cancel
-					</Button>
-					<Button size="sm" onclick={handleApproveAll}>
-						<CheckCircle2 class="w-4 h-4 mr-1" />
+		{#if canApproveAll}
+			<Dialog.Root bind:open={showApproveDialog}>
+				<Dialog.Trigger>
+					<Button variant="outline" size="sm" class="h-8 px-3 text-xs font-mono">
 						Approve All
 					</Button>
-				</Dialog.Footer>
-			</Dialog.Content>
-		</Dialog.Root>
+				</Dialog.Trigger>
+				<Dialog.Content class="max-w-sm">
+					<Dialog.Header>
+						<Dialog.Title class="font-mono">Approve All Pending</Dialog.Title>
+						<Dialog.Description class="font-mono text-sm">
+							This will approve all {pending} pending items. This action can be undone.
+						</Dialog.Description>
+					</Dialog.Header>
+					<Dialog.Footer>
+						<Button variant="outline" size="sm" onclick={() => (showApproveDialog = false)}>
+							Cancel
+						</Button>
+						<Button size="sm" onclick={handleApproveAll}>
+							<CheckCircle2 class="w-4 h-4 mr-1" />
+							Approve All
+						</Button>
+					</Dialog.Footer>
+				</Dialog.Content>
+			</Dialog.Root>
+		{:else}
+			<Button variant="outline" size="sm" class="h-8 px-3 text-xs font-mono" disabled>
+				Approve All
+			</Button>
+		{/if}
 
 		<!-- Done button -->
 		<Button variant="default" size="sm" onclick={onDone} class="h-8 px-4 text-xs font-mono">
