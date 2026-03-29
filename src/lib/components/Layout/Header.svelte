@@ -16,18 +16,18 @@
 
 <header
 	class={cn(
-		'h-12 shrink-0 flex items-center justify-between px-4',
+		'h-12 shrink-0 flex min-w-0 items-center justify-between gap-3 px-3 sm:px-4',
 		'bg-card border-b border-border',
 		className
 	)}
 	data-tauri-drag-region
 >
-	<div class="flex items-center gap-4">
+	<div class="flex min-w-0 items-center gap-3">
 		<Logo size="sm" />
 	</div>
 
-	<div class="flex items-center gap-3">
+	<div class="flex shrink-0 items-center gap-2 sm:gap-3">
 		<ConnectionStatus compact />
-		<ProjectSelector class="max-w-[200px]" />
+		<ProjectSelector class="w-52 sm:w-56 lg:w-60" />
 	</div>
 </header>
