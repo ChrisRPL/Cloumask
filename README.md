@@ -17,11 +17,11 @@ Start a local vision run, keep first-step guidance visible, and move from prompt
 
 ![Chat workspace](./static/readme/product-tour/chat-workspace.png)
 
-**Review queue**
+**Execution workspace**
 
-Bulk and per-item actions stay disabled until there is something real to review, so the empty state reads honestly.
+Finished runs keep previews, counts, and agent output together so you can sanity-check results before moving into review.
 
-![Review queue](./static/readme/product-tour/review-queue.png)
+![Execution workspace](./static/readme/product-tour/execution-workspace.png)
 
 **Point-cloud browser preview**
 
