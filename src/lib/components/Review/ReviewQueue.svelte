@@ -924,16 +924,29 @@
 	</SplitPane>
 
 	<!-- Action Bar -->
-	<ActionBar
-		{currentIndex}
-		total={reviewState.filteredItems.length}
-		{canPrev}
-		{canNext}
-		{isEditMode}
-		onPrev={() => reviewState.previousItem()}
-		onNext={() => reviewState.nextItem()}
-		onApprove={approveCurrentItem}
-		onReject={rejectCurrentItem}
-		onToggleEdit={toggleEditMode}
-	/>
+	{#if reviewState.filteredItems.length > 0}
+		<ActionBar
+			{currentIndex}
+			total={reviewState.filteredItems.length}
+			{canPrev}
+			{canNext}
+			{isEditMode}
+			onPrev={() => reviewState.previousItem()}
+			onNext={() => reviewState.nextItem()}
+			onApprove={approveCurrentItem}
+			onReject={rejectCurrentItem}
+			onToggleEdit={toggleEditMode}
+		/>
+	{:else}
+		<div
+			class={cn(
+				'flex items-center justify-between gap-4 px-4 py-3',
+				'border-t border-border bg-background',
+				'text-sm font-mono text-muted-foreground tabular-nums'
+			)}
+		>
+			<span>No review actions available</span>
+			<span>0 / 0</span>
+		</div>
+	{/if}
 </div>
