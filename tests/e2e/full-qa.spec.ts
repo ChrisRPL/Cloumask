@@ -143,6 +143,11 @@ test.describe('B. Navigation & Keyboard Shortcuts', () => {
         await page.keyboard.press('2');
         await page.waitForTimeout(500);
         await expect(page.getByText('No steps in pipeline', { exact: true })).toBeVisible();
+        await expect(
+            page.getByText('Describe the job in Chat to generate a plan, then come back here to review the steps.', {
+                exact: true,
+            })
+        ).toBeVisible();
         await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(0);
         await expect(page.getByRole('button', { name: 'Cancel' })).toHaveCount(0);
         await snap(page, 'T-060-key-2-plan');
