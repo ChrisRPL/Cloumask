@@ -192,6 +192,9 @@ test.describe('B. Navigation & Keyboard Shortcuts', () => {
         ).toBeVisible();
         await expect(page.getByRole('button', { name: 'Load' })).toBeDisabled();
         await expect(page.getByRole('button', { name: 'Export' })).toBeDisabled();
+        await expect(page.getByText('Color:', { exact: true })).toHaveCount(0);
+        await expect(page.getByText('Size:', { exact: true })).toHaveCount(0);
+        await expect(page.getByText('Info Panel', { exact: true })).toHaveCount(0);
         await snap(page, 'T-060-key-5-pointcloud');
     });
 
