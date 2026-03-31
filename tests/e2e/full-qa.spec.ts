@@ -206,6 +206,8 @@ test.describe('B. Navigation & Keyboard Shortcuts', () => {
     test('T-061: Settings view via comma key', async ({ page }) => {
         await page.keyboard.press(',');
         await page.waitForTimeout(500);
+        await expect(page.getByText('Running outside Tauri - IPC commands unavailable.')).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Refresh' })).toHaveCount(0);
         await snap(page, 'T-061-settings-view');
 
         // Should see "Settings" heading
