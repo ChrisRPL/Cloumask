@@ -219,9 +219,11 @@
 			<Card.Header>
 				<Card.Title class="flex items-center justify-between">
 					System Status
-					<Button variant="ghost" size="sm" onclick={refreshStatus} disabled={loading}>
-						{loading ? 'Checking...' : 'Refresh'}
-					</Button>
+					{#if isInTauri}
+						<Button variant="ghost" size="sm" onclick={refreshStatus} disabled={loading}>
+							{loading ? 'Checking...' : 'Refresh'}
+						</Button>
+					{/if}
 				</Card.Title>
 				<Card.Description>Foundation module verification</Card.Description>
 			</Card.Header>
