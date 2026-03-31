@@ -30,6 +30,7 @@ async function assertShellFitsViewport(page: Page) {
 	expect(projectBox!.x).toBeGreaterThanOrEqual(headerBox!.x - 1);
 	expect(projectBox!.x + projectBox!.width).toBeLessThanOrEqual(headerBox!.x + headerBox!.width + 1);
 	expect(projectBox!.x + projectBox!.width).toBeLessThanOrEqual(viewport!.width + 1);
+	expect(viewport!.width - (projectBox!.x + projectBox!.width)).toBeGreaterThanOrEqual(8);
 	expect(inputBox!.y + inputBox!.height).toBeLessThanOrEqual(viewport!.height + 1);
 
 	await expect
@@ -45,12 +46,21 @@ test.describe('App shell layout', () => {
 	});
 
 	test('keeps header controls and chat input inside the viewport', async ({ page }) => {
-		await assertShellFitsViewport(page);
+		for (const viewport of [
+			{ width: 1232, height: 793 },
+			{ width: 1100, height: 760 },
+			{ width: 960, height: 720 },
+			{ width: 820, height: 700 },
+			{ width: 760, height: 680 },
+		]) {
+			await page.setViewportSize(viewport);
+			await assertShellFitsViewport(page);
 
-		await page.keyboard.press('Control+b');
-		await assertShellFitsViewport(page);
+			await page.keyboard.press('Control+b');
+			await assertShellFitsViewport(page);
 
-		await page.keyboard.press('Control+b');
-		await assertShellFitsViewport(page);
+			await page.keyboard.press('Control+b');
+			await assertShellFitsViewport(page);
+		}
 	});
 });
