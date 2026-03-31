@@ -12,8 +12,8 @@
 	let { children, class: className }: MainContentProps = $props();
 </script>
 
-<main class={cn('flex-1 overflow-auto bg-background', className)}>
-	<div class="h-full animate-fade-in">
+<main class={cn('min-w-0 flex-1 overflow-auto bg-background', className)}>
+	<div class="h-full min-w-0 animate-fade-in">
 		{@render children()}
 	</div>
 </main>
