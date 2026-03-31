@@ -66,6 +66,7 @@
 	let colors = $state<Float32Array | null>(null);
 	let classifications = $state<Uint8Array | null>(null);
 	let bounds = $state<Bounds3D | null>(null);
+	const hasLoadedPointCloud = $derived(Boolean(pcState.file));
 
 	// Handle scene ready
 	function handleSceneReady(ctx: SceneContext) {
@@ -522,7 +523,9 @@
 	<ViewerHeader onLoad={handleLoad} onExport={handleExport} onSettings={handleSettings} />
 
 	<!-- Toolbar -->
-	<ViewerToolbar onScreenshot={handleScreenshot} onResetCamera={handleResetCamera} />
+	{#if hasLoadedPointCloud}
+		<ViewerToolbar onScreenshot={handleScreenshot} onResetCamera={handleResetCamera} />
+	{/if}
 
 	<!-- 3D Viewport -->
 	<div class="flex-1 relative overflow-hidden">
@@ -541,7 +544,9 @@
 		/>
 
 		<!-- Controls Panel -->
-		<Controls collapsed={controlsCollapsed} onToggle={() => (controlsCollapsed = !controlsCollapsed)} />
+		{#if hasLoadedPointCloud}
+			<Controls collapsed={controlsCollapsed} onToggle={() => (controlsCollapsed = !controlsCollapsed)} />
+		{/if}
 
 		{#if !pcState.file && !pcState.isLoading && !pcState.error}
 			<div class="absolute inset-0 flex items-center justify-center p-6">
@@ -704,7 +709,9 @@
 	</div>
 
 	<!-- Info Panel -->
-	<InfoPanel collapsed={infoPanelCollapsed} onToggle={() => (infoPanelCollapsed = !infoPanelCollapsed)} />
+	{#if hasLoadedPointCloud}
+		<InfoPanel collapsed={infoPanelCollapsed} onToggle={() => (infoPanelCollapsed = !infoPanelCollapsed)} />
+	{/if}
 
 	<SettingsModal bind:open={settingsOpen} />
 </div>
