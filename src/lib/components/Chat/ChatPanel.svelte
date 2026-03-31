@@ -77,6 +77,9 @@
 	const llmNotReady = $derived(llmStatus !== null && !llmStatus.ready);
 	const isTypingDisabled = $derived(isInitializing || isRecoveringSidecar);
 	const isSendDisabled = $derived(isTypingDisabled || llmNotReady || isSending || !sse.isConnected);
+	const hasExportableConversation = $derived(
+		agent.messages.some((message) => message.role === 'user' || message.role === 'assistant')
+	);
 	const showClarification = $derived(agent.pendingClarification !== null);
 	const showPlanPreview = $derived(
 		pipeline.steps.length > 0 &&
@@ -943,7 +946,7 @@
 		phase={agent.phase}
 		isConnected={sse.isConnected}
 		onClear={handleClear}
-		onExport={handleExport}
+		onExport={hasExportableConversation ? handleExport : undefined}
 	/>
 
 	{#if isInitializing && resumePreview}
