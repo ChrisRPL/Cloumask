@@ -130,7 +130,7 @@
 		{/if}
 
 		<!-- Done button -->
-		<Button variant="default" size="sm" onclick={onDone} class="h-8 px-4 text-xs font-mono">
+		<Button variant="outline" size="sm" onclick={onDone} class="h-8 px-4 text-xs font-mono">
 			<ArrowLeft class="w-3.5 h-3.5 mr-1.5" />
 			Done
 		</Button>
