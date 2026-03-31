@@ -49,6 +49,13 @@
 	const canPause = $derived(execution.isRunning);
 	const canResume = $derived(execution.isPaused || execution.status === 'checkpoint');
 	const isCheckpoint = $derived(execution.status === 'checkpoint');
+	const showExecutionWorkspace = $derived.by(() => {
+		if (!pipeline.steps.length) return false;
+		if (execution.previews.length > 0) return true;
+		if (execution.hasErrors) return true;
+		if (execution.isRunning || execution.isPaused) return true;
+		return ['checkpoint', 'completed', 'failed', 'cancelled'].includes(execution.status);
+	});
 	const visibleKeyboardShortcuts = $derived.by(() => {
 		const visibleKeys = new Set<string>(['R']);
 
@@ -244,10 +251,21 @@
 	<ProgressSection class="px-4 py-3 border-b border-border" />
 
 	<!-- Main content: Preview grid + Stats panel -->
-	<div class="flex-1 overflow-hidden flex">
-		<PreviewGrid class="flex-1" />
-		<StatsPanel class="w-80 border-l border-border" />
-	</div>
+	{#if showExecutionWorkspace}
+		<div class="flex flex-1 overflow-hidden">
+			<PreviewGrid class="flex-1" />
+			<StatsPanel class="w-80 border-l border-border" />
+		</div>
+	{:else}
+		<div class="flex flex-1 items-center justify-center px-6 py-12">
+			<div class="max-w-md text-center font-mono">
+				<p class="text-sm text-foreground">No live execution yet</p>
+				<p class="mt-2 text-xs text-muted-foreground">
+					Start a pipeline to unlock previews, stats, and agent output.
+				</p>
+			</div>
+		</div>
+	{/if}
 
 	<!-- Error log (collapsible, at bottom) -->
 	{#if execution.hasErrors}
