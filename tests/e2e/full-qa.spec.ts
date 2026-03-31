@@ -152,7 +152,13 @@ test.describe('B. Navigation & Keyboard Shortcuts', () => {
         await page.waitForTimeout(500);
         await expect(page.getByText('<idle>', { exact: true })).toBeVisible();
         await expect(page.getByText('No pipeline queued', { exact: true })).toBeVisible();
+        await expect(page.getByText('No live execution yet', { exact: true })).toBeVisible();
+        await expect(
+            page.getByText('Start a pipeline to unlock previews, stats, and agent output.', { exact: true })
+        ).toBeVisible();
         await expect(page.getByRole('button', { name: 'Cancel' })).toHaveCount(0);
+        await expect(page.getByText('LIVE PREVIEW')).toHaveCount(0);
+        await expect(page.getByText('Processed', { exact: true })).toHaveCount(0);
         const executeFooter = page.locator('.border-t.border-border.text-xs.font-mono');
         await expect(executeFooter).not.toContainText('Space Pause/Resume');
         await expect(executeFooter).not.toContainText('Esc Cancel');
