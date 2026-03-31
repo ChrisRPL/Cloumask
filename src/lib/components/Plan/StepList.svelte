@@ -75,9 +75,16 @@
 
 <div class={cn('space-y-1', className)}>
 	{#if steps.length === 0}
-		<div class="flex flex-col items-center justify-center py-12 text-muted-foreground">
-			<p class="text-sm">No steps in pipeline</p>
-			<p class="text-xs mt-1">Steps will appear here when the agent creates a plan</p>
+		<div class="flex items-center justify-center px-4 py-12">
+			<div class="w-full max-w-md rounded-xl border border-border bg-card/80 px-6 py-7 text-center shadow-sm">
+				<p class="text-[11px] uppercase tracking-[0.24em] font-mono text-muted-foreground">
+					Pipeline
+				</p>
+				<p class="mt-3 text-base font-mono text-foreground">No steps in pipeline</p>
+				<p class="mt-2 text-xs leading-6 text-muted-foreground">
+					Describe the job in Chat to generate a plan, then come back here to review the steps.
+				</p>
+			</div>
 		</div>
 	{:else}
 		{#each steps as step, index (step.id)}
