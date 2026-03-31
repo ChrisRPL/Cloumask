@@ -300,6 +300,7 @@ test.describe('C. Chat View', () => {
         await expect(page.getByText('Good first prompts')).toBeVisible();
         await expect(page.getByLabel('Message input')).toBeEditable();
         await expect(page.getByRole('button', { name: 'Send message' })).toBeDisabled();
+        await expect(page.getByRole('button', { name: 'Export' })).toHaveCount(0);
         await expect(page.getByRole('button', { name: 'Clear' })).toBeVisible();
         await snap(page, 'T-010-chat-view');
     });
