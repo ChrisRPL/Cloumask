@@ -13,21 +13,21 @@ It combines:
 
 **Chat workspace**
 
-Start a local vision run, keep first-step guidance visible, and move from prompt to plan without leaving the shell.
+Start from a concrete request, keep the saved plan visible, and approve the next step without leaving the shell.
 
 ![Chat workspace](./static/readme/product-tour/chat-workspace.png)
 
 **Execution workspace**
 
-Finished runs keep previews, counts, and agent output together so you can sanity-check results before moving into review.
+Runs keep previews, counts, and agent output together so you can sanity-check detections before moving into review.
 
 ![Execution workspace](./static/readme/product-tour/execution-workspace.png)
 
-**Point-cloud browser preview**
+**Review queue**
 
-Web mode now explains the desktop-only file workflow instead of leaving a blank viewport with unexplained controls.
+Approve or reject items with the source image, annotations, and queue context in the same view.
 
-![Point-cloud browser preview](./static/readme/product-tour/pointcloud-browser-preview.png)
+![Review queue](./static/readme/product-tour/review-queue.png)
 
 > Sample data attribution: `static/readme/demo/*.jpg` contains bundled demo stills used for README and capture work inside this repository.
 
