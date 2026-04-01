@@ -258,11 +258,67 @@
 		</div>
 	{:else}
 		<div class="flex flex-1 items-center justify-center px-6 py-12">
-			<div class="max-w-md text-center font-mono">
-				<p class="text-sm text-foreground">No live execution yet</p>
-				<p class="mt-2 text-xs text-muted-foreground">
-					Start a pipeline to unlock previews, stats, and agent output.
-				</p>
+			<div class="w-full max-w-4xl rounded-2xl border border-border/70 bg-card/35 p-6 shadow-sm">
+				<div class="grid gap-6 lg:grid-cols-[1.3fr_0.95fr]">
+					<div class="space-y-5 font-mono">
+						<div class="space-y-3">
+							<div class="inline-flex items-center rounded-full border border-border/70 bg-background px-3 py-1 text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
+								Execution workspace
+							</div>
+							<div class="space-y-2">
+								<p class="text-2xl text-foreground">No live execution yet</p>
+								<p class="max-w-2xl text-sm leading-7 text-muted-foreground">
+									Start a pipeline in Chat or Plan. When the run begins, this view fills with
+									recent previews, progress, counts, and agent commentary in one place.
+								</p>
+							</div>
+						</div>
+
+						<div class="grid gap-3 sm:grid-cols-3">
+							<div class="rounded-xl border border-border/60 bg-background/70 p-4">
+								<p class="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+									Previews
+								</p>
+								<p class="mt-3 text-sm leading-6 text-foreground/80">
+									Recent frames and detections land here as the pipeline moves.
+								</p>
+							</div>
+							<div class="rounded-xl border border-border/60 bg-background/70 p-4">
+								<p class="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+									Stats
+								</p>
+								<p class="mt-3 text-sm leading-6 text-foreground/80">
+									Processed totals, detections, flags, and errors stay visible.
+								</p>
+							</div>
+							<div class="rounded-xl border border-border/60 bg-background/70 p-4">
+								<p class="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+									Agent output
+								</p>
+								<p class="mt-3 text-sm leading-6 text-foreground/80">
+									Checkpoints and finish notes show up beside the run context.
+								</p>
+							</div>
+						</div>
+					</div>
+
+					<div class="rounded-xl border border-border/60 bg-background/70 p-5 font-mono">
+						<p class="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+							Good next steps
+						</p>
+						<div class="mt-4 space-y-3 text-sm leading-7 text-foreground/80">
+							<p>1. Describe the job in Chat and approve the plan.</p>
+							<p>2. Return here to watch previews and progress.</p>
+							<p>3. Jump to Review when the run is ready for triage.</p>
+						</div>
+						<div class="mt-5 rounded-xl border border-emerald-700/15 bg-emerald-500/8 px-4 py-3 text-xs leading-6 text-emerald-900/75">
+							Shortcut path: <span class="font-semibold text-foreground/85">1</span> chat,
+							<span class="font-semibold text-foreground/85"> 2</span> plan,
+							<span class="font-semibold text-foreground/85"> 3</span> execute,
+							<span class="font-semibold text-foreground/85"> R</span> review.
+						</div>
+					</div>
+				</div>
 			</div>
 		</div>
 	{/if}
