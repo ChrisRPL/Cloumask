@@ -9,6 +9,12 @@ const SCREENSHOT_DIR =
 
 let screenshotDirReady = false;
 type ReviewListItem = { id: string };
+const BROWSER_TEST_PROJECT = {
+    id: 'qa-keyboard-project',
+    name: 'QA Keyboard Project',
+    path: '/tmp/cloumask-qa-keyboard',
+    lastOpened: '2026-03-31T10:00:00.000Z',
+};
 
 // Helper: skip setup wizard by setting localStorage
 async function skipSetup(page: Page) {
@@ -132,6 +138,11 @@ test.describe('B. Navigation & Keyboard Shortcuts', () => {
     }
 
     test('T-060: Sidebar navigation keys 1-5', async ({ page }) => {
+        await page.evaluate((project) => {
+            localStorage.setItem('cloumask:project:current', JSON.stringify(project));
+        }, BROWSER_TEST_PROJECT);
+        await page.reload();
+        await page.waitForTimeout(1500);
         await snap(page, 'T-060-initial');
 
         // Press 1 for Chat
@@ -159,8 +170,14 @@ test.describe('B. Navigation & Keyboard Shortcuts', () => {
         await expect(page.getByText('No pipeline queued', { exact: true })).toBeVisible();
         await expect(page.getByText('No live execution yet', { exact: true })).toBeVisible();
         await expect(
-            page.getByText('Start a pipeline to unlock previews, stats, and agent output.', { exact: true })
+            page.getByText(
+                'Start a pipeline in Chat or Plan. When the run begins, this view fills with recent previews, progress, counts, and agent commentary in one place.',
+                { exact: true }
+            )
         ).toBeVisible();
+        await expect(page.getByText('Execution workspace', { exact: true })).toBeVisible();
+        await expect(page.getByText('Good next steps', { exact: true })).toBeVisible();
+        await expect(page.getByText('Shortcut path: 1 chat, 2 plan, 3 execute, R review.', { exact: true })).toBeVisible();
         await expect(page.getByRole('button', { name: 'Cancel' })).toHaveCount(0);
         await expect(page.getByText('LIVE PREVIEW')).toHaveCount(0);
         await expect(page.getByText('Processed', { exact: true })).toHaveCount(0);
@@ -415,6 +432,9 @@ test.describe('E. Execution View', () => {
 
     test('T-030: Execution view empty state', async ({ page }) => {
         await snap(page, 'T-030-execution-empty');
+        await expect(page.getByText('Execution workspace', { exact: true })).toBeVisible();
+        await expect(page.getByText('Good next steps', { exact: true })).toBeVisible();
+        await expect(page.getByText('Shortcut path: 1 chat, 2 plan, 3 execute, R review.', { exact: true })).toBeVisible();
 
         const content = await page.textContent('body');
         console.log(`[T-030] Page contains execution-related content: ${content?.toLowerCase().includes('execut') || content?.toLowerCase().includes('pipeline') || content?.toLowerCase().includes('run')
