@@ -40,6 +40,11 @@
 	const isRunning = $derived(execution.isRunning);
 	const isIdle = $derived(execution.status === 'idle');
 	const hasProcessed = $derived(execution.stats.processed > 0 || previews.length > 0);
+	const placeholderCount = $derived.by(() => {
+		if (previews.length === 0) return 6;
+		if (isRunning) return Math.max(0, 3 - previews.length);
+		return 0;
+	});
 
 	function handlePreviewClick(preview: (typeof previews)[number]) {
 		if (preview.assetType !== 'pointcloud') return;
@@ -99,8 +104,8 @@
 				{#each previews as preview (preview.id)}
 					<PreviewThumbnail {preview} onClick={() => handlePreviewClick(preview)} />
 				{/each}
-				<!-- Fill remaining slots with empty placeholders -->
-				{#each Array(Math.max(0, 6 - previews.length)) as _}
+				<!-- Keep a little structure while results are still streaming in -->
+				{#each Array(placeholderCount) as _}
 					<div
 						class="aspect-video bg-muted/20 rounded-md border border-border/50 flex items-center justify-center"
 					>
