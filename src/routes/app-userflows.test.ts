@@ -459,6 +459,7 @@ describe('App user flows', () => {
 		expect(screen.getByText('2 recent')).toBeTruthy();
 		expect(screen.getByText('Processed').parentElement?.textContent).toContain('12');
 		expect(screen.getByText('Detected').parentElement?.textContent).toContain('4');
+		expect(view.container.querySelectorAll('.aspect-video')).toHaveLength(2);
 
 		const createdThreadCalls = fetchMock.mock.calls.filter(([url, init]) => {
 			const requestUrl = typeof url === 'string' ? url : url.toString();
