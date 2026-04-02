@@ -64,19 +64,32 @@
 	const currentState = $derived(sseState?.connectionInfo.state ?? 'disconnected');
 	const config = $derived(statusConfig[currentState]);
 	const connectionInfo = $derived(sseState?.connectionInfo);
+	const compactLabel = $derived.by(() => {
+		switch (currentState) {
+			case 'connected':
+				return 'Live';
+			case 'connecting':
+				return 'Booting';
+			case 'reconnecting':
+				return 'Retry';
+			case 'error':
+				return 'Error';
+			default:
+				return 'Offline';
+		}
+	});
 </script>
 
 <Tooltip.Root>
 	<Tooltip.Trigger
+		data-slot="connection-status"
 		class={cn(
-			'flex items-center gap-2',
-			compact ? 'px-2 py-1' : 'px-3 py-1.5',
-			'rounded-md bg-card border border-border',
-			'text-xs font-medium text-foreground',
-			'transition-colors duration-200',
+			'flex items-center rounded-md border border-border bg-card text-foreground transition-colors duration-200 select-none',
+			compact ? 'gap-1.5 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]' : 'gap-2 px-3 py-1.5 text-xs font-medium',
 			'cursor-default select-none',
 			className
 		)}
+		aria-label={`Connection status: ${config.label}`}
 	>
 		<!-- Status indicator dot -->
 		<span class="relative flex h-2 w-2">
@@ -96,6 +109,8 @@
 
 		{#if !compact}
 			<span class="text-muted-foreground">{config.label}</span>
+		{:else}
+			<span class="text-foreground/75">{compactLabel}</span>
 		{/if}
 	</Tooltip.Trigger>
 
