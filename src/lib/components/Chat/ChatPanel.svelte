@@ -75,8 +75,11 @@
 
 	// Derived state
 	const llmNotReady = $derived(llmStatus !== null && !llmStatus.ready);
+	const requiresProjectSelection = $derived(ui.currentProject === null);
 	const isTypingDisabled = $derived(isInitializing || isRecoveringSidecar);
-	const isSendDisabled = $derived(isTypingDisabled || llmNotReady || isSending || !sse.isConnected);
+	const isSendDisabled = $derived(
+		requiresProjectSelection || isTypingDisabled || llmNotReady || isSending || !sse.isConnected
+	);
 	const hasExportableConversation = $derived(
 		agent.messages.some((message) => message.role === 'user' || message.role === 'assistant')
 	);
@@ -792,6 +795,10 @@
 	// Send user message
 	async function handleSend(content: string) {
 		if (!content.trim() || !agent.threadId || isSending) return;
+		if (requiresProjectSelection) {
+			agent.setError('Select or create a project before starting a new run.');
+			return;
+		}
 		if (!sse.isConnected) {
 			agent.setError('Waiting for local AI backend to reconnect. Please try again in a moment.');
 			return;
@@ -1090,12 +1097,22 @@
 	{/if}
 
 	<!-- Input -->
+	{#if requiresProjectSelection}
+		<div class="border-t border-border bg-background/40 px-3 pt-3">
+			<div class="rounded-lg border border-border/70 bg-card/70 px-3 py-2 text-xs leading-5 text-muted-foreground">
+				Choose a project in the header to unlock chat and keep new runs grouped in one place.
+			</div>
+		</div>
+	{/if}
 	<ChatInput
+		class={requiresProjectSelection ? 'border-t-0 pt-2' : undefined}
 		value={inputValue}
 		disabled={isTypingDisabled}
 		disableSend={isSendDisabled}
 		placeholder={
-			isInitializing || isRecoveringSidecar
+			requiresProjectSelection
+				? 'Select or create a project first...'
+				: isInitializing || isRecoveringSidecar
 				? 'Connecting...'
 				: sse.isConnected
 					? 'Type a message...'
