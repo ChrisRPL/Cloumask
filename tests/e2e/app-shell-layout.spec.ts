@@ -8,25 +8,32 @@ async function skipSetup(page: Page) {
 
 async function assertShellFitsViewport(page: Page) {
 	const header = page.locator('header').first();
+	const connectionStatus = page.locator('[data-slot="connection-status"]').first();
 	const projectSelector = page.getByRole('button', { name: /select project/i });
 	const messageInput = page.getByLabel('Message input');
 
 	await expect(header).toBeVisible();
+	await expect(connectionStatus).toBeVisible();
+	await expect(connectionStatus).toContainText(/live|booting|retry|offline|error/i);
 	await expect(projectSelector).toBeVisible();
 	await expect(messageInput).toBeVisible();
 
-	const [headerBox, projectBox, inputBox, viewport] = await Promise.all([
+	const [headerBox, connectionBox, projectBox, inputBox, viewport] = await Promise.all([
 		header.boundingBox(),
+		connectionStatus.boundingBox(),
 		projectSelector.boundingBox(),
 		messageInput.boundingBox(),
 		Promise.resolve(page.viewportSize()),
 	]);
 
 	expect(headerBox).not.toBeNull();
+	expect(connectionBox).not.toBeNull();
 	expect(projectBox).not.toBeNull();
 	expect(inputBox).not.toBeNull();
 	expect(viewport).not.toBeNull();
 
+	expect(connectionBox!.x).toBeGreaterThanOrEqual(headerBox!.x - 1);
+	expect(connectionBox!.x + connectionBox!.width).toBeLessThanOrEqual(headerBox!.x + headerBox!.width + 1);
 	expect(projectBox!.x).toBeGreaterThanOrEqual(headerBox!.x - 1);
 	expect(projectBox!.x + projectBox!.width).toBeLessThanOrEqual(headerBox!.x + headerBox!.width + 1);
 	expect(projectBox!.x + projectBox!.width).toBeLessThanOrEqual(viewport!.width + 1);
