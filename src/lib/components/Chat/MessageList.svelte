@@ -91,19 +91,22 @@
 	>
 		<!-- Empty state -->
 		{#if messages.length === 0}
-			<div class="flex h-full items-center justify-center px-4 py-10">
-				<div class="w-full max-w-3xl rounded-2xl border border-border/70 bg-card/60 p-6 shadow-sm">
-					<div class="grid gap-6 lg:grid-cols-[1.4fr_0.9fr]">
+			<div class="flex h-full items-center justify-center px-4 py-8 sm:px-6 xl:items-start xl:px-8 xl:py-12">
+				<div
+					class="w-full max-w-6xl rounded-[1.75rem] border border-border/70 bg-card/70 p-6 shadow-[0_24px_80px_-48px_rgba(12,59,31,0.42)] backdrop-blur-sm sm:p-8 xl:p-10"
+					data-chat-empty-state
+				>
+					<div class="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(21rem,0.85fr)] xl:gap-8">
 						<div class="space-y-4">
 							<div class="space-y-3">
 								<div class="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-border/70 bg-background text-lg text-foreground/70">
 									&lt;/&gt;
 								</div>
 								<div class="space-y-2">
-									<h3 class="text-xl font-semibold tracking-tight text-foreground">
+									<h3 class="text-xl font-semibold tracking-tight text-foreground xl:text-[2rem]">
 										Start a local vision workflow
 									</h3>
-									<p class="max-w-xl text-sm leading-6 text-muted-foreground">
+									<p class="max-w-2xl text-sm leading-6 text-muted-foreground xl:text-[15px]">
 										Describe the footage, image batch, or review task. Cloumask will build the
 										plan, run the steps, and keep the approval checkpoints in one place.
 									</p>
