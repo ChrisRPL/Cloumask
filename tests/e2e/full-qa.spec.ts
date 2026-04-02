@@ -903,6 +903,20 @@ test.describe('J. UI/UX Quality', () => {
         await skipSetup(page);
         await page.setViewportSize({ width: 1920, height: 1080 });
         await page.goto('/');
+        const emptyState = page.locator('[data-chat-empty-state]');
+        await expect(emptyState).toBeVisible();
+
+        const [emptyStateBox, viewport] = await Promise.all([
+            emptyState.boundingBox(),
+            Promise.resolve(page.viewportSize()),
+        ]);
+
+        expect(emptyStateBox).not.toBeNull();
+        expect(viewport).not.toBeNull();
+        expect((emptyStateBox?.width ?? 0) / (viewport?.width ?? 1)).toBeGreaterThanOrEqual(0.55);
+        expect((emptyStateBox?.x ?? 0) / (viewport?.width ?? 1)).toBeLessThanOrEqual(0.3);
+        expect((emptyStateBox?.y ?? 0) / (viewport?.height ?? 1)).toBeLessThanOrEqual(0.22);
+
         await page.waitForTimeout(1500);
         await snap(page, 'T-097-responsive-1920');
     });
