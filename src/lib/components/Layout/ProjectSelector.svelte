@@ -85,18 +85,31 @@
 </script>
 
 <Select.Root type="single" bind:value={selectedValue} onValueChange={handleValueChange}>
-	<Select.Trigger class={cn('w-full min-w-0 bg-background/50', className)} size="sm">
+	<Select.Trigger
+		class={cn(
+			'w-full min-w-0 border-border/90 bg-card/95 text-foreground shadow-[0_10px_24px_-20px_rgba(12,59,31,0.7)] transition-colors hover:bg-card',
+			className
+		)}
+		size="sm"
+	>
 		{#if ui.currentProject}
 			<span class="flex min-w-0 items-center gap-2 truncate">
-				<Icon name="folder-open" class="size-4 shrink-0 text-muted-foreground" />
-				<span class="truncate">{ui.currentProject.name}</span>
+				<span class="flex size-5 shrink-0 items-center justify-center rounded-md bg-accent/75 text-foreground/75">
+					<Icon name="folder-open" class="size-3.5" />
+				</span>
+				<span class="truncate font-medium">{ui.currentProject.name}</span>
 			</span>
 		{:else}
-			<span class="block truncate text-muted-foreground">Select project...</span>
+			<span class="flex min-w-0 items-center gap-2 text-foreground/85">
+				<span class="flex size-5 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground">
+					<Icon name="plus" class="size-3.5" />
+				</span>
+				<span class="truncate">Select project...</span>
+			</span>
 		{/if}
 	</Select.Trigger>
 	<Select.Portal>
-		<Select.Content>
+		<Select.Content class="min-w-[18rem]">
 			{#if ui.recentProjects.length > 0}
 				<Select.Group>
 					<Select.GroupHeading>Recent Projects</Select.GroupHeading>
