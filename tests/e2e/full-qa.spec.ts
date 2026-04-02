@@ -929,6 +929,23 @@ test.describe('J. UI/UX Quality', () => {
         await page.getByRole('button', { name: 'Create Project' }).click();
 
         await expect(page.getByRole('heading', { name: 'New Project' })).toBeHidden();
-        await expect(page.getByRole('button', { name: /street anonymization/i })).toBeVisible();
+        const savedProjectSelector = page.getByRole('button', { name: /street anonymization/i });
+        await expect(savedProjectSelector).toBeVisible();
+
+        await savedProjectSelector.click();
+        await expect(page.getByText('Recent Projects')).toBeVisible();
+        await expect(page.getByRole('option', { name: 'Street Anonymization' })).toBeVisible();
+        await expect(page.getByRole('option', { name: 'New Project...' })).toBeVisible();
+
+        const [triggerBox, menuBox] = await Promise.all([
+            savedProjectSelector.boundingBox(),
+            page.locator('[data-slot="select-content"]').boundingBox(),
+        ]);
+
+        expect(triggerBox).not.toBeNull();
+        expect(menuBox).not.toBeNull();
+        expect((menuBox?.height ?? 0)).toBeGreaterThan((triggerBox?.height ?? 0) + 24);
+
+        await snap(page, 'T-100-project-selector-open-with-history');
     });
 });
