@@ -328,7 +328,11 @@ test.describe('C. Chat View', () => {
         await expect(page.getByLabel('Chat messages')).toBeVisible();
         await expect(page.getByText('Start a local vision workflow')).toBeVisible();
         await expect(page.getByText('Good first prompts')).toBeVisible();
+        await expect(
+            page.getByText('Choose a project in the header to unlock chat and keep new runs grouped in one place.')
+        ).toBeVisible();
         await expect(page.getByLabel('Message input')).toBeEditable();
+        await expect(page.getByLabel('Message input')).toHaveAttribute('placeholder', 'Select or create a project first...');
         await expect(page.getByRole('button', { name: 'Send message' })).toBeDisabled();
         await expect(page.getByRole('button', { name: 'Export' })).toHaveCount(0);
         await expect(page.getByRole('button', { name: 'Clear' })).toBeVisible();
@@ -360,8 +364,10 @@ test.describe('C. Chat View', () => {
         if (inputVisible) {
             await input.fill('hello');
             await snap(page, 'T-014-typed-hello');
+            await expect(page.getByRole('button', { name: 'Send message' })).toBeDisabled();
             await input.press('Enter');
             await page.waitForTimeout(3000);
+            await expect(input).toHaveValue('hello');
             await snap(page, 'T-014-after-send');
         } else {
             console.log('[T-014] BUG: No chat input found');
