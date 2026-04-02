@@ -191,6 +191,19 @@ test.describe('B. Navigation & Keyboard Shortcuts', () => {
         await page.keyboard.press('4');
         await page.waitForTimeout(500);
         await expect(page.getByText('0 items', { exact: true })).toBeVisible();
+        await expect(page.getByText('Review inbox', { exact: true })).toBeVisible();
+        await expect(page.getByText('Review canvas', { exact: true })).toBeVisible();
+        await expect(
+            page.getByText('Flagged detections and human-check checkpoints appear here after a run reaches review.', {
+                exact: true,
+            })
+        ).toBeVisible();
+        await expect(
+            page.getByText(
+                'Select a queued item to inspect the source image, adjust annotations, and approve or reject the result.',
+                { exact: true }
+            )
+        ).toBeVisible();
         await expect(page.locator('button:has-text("Approve All")').first()).toBeDisabled();
         await expect(page.locator('button:has-text("Prev")')).toHaveCount(0);
         await expect(page.locator('button:has-text("Next")')).toHaveCount(0);
