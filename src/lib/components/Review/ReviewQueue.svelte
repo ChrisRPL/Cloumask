@@ -893,10 +893,32 @@
 							class="absolute bottom-2 right-2"
 						/>
 					{:else}
-						<div class="flex items-center justify-center h-full">
-							<div class="text-center text-muted-foreground">
-								<p class="text-sm font-mono">No item selected</p>
-								<p class="text-xs mt-1">Select an item from the list to view</p>
+						<div class="flex h-full items-center justify-center p-6">
+							<div class="w-full max-w-xl rounded-2xl border border-border/60 bg-card/35 p-6 font-mono">
+								<div class="space-y-5 text-center">
+									<div class="space-y-2">
+										<div class="inline-flex items-center rounded-full border border-border/70 bg-background px-3 py-1 text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+											Review canvas
+										</div>
+										<p class="text-lg text-foreground">No item selected</p>
+										<p class="text-sm leading-7 text-muted-foreground">
+											Select a queued item to inspect the source image, adjust annotations, and
+											approve or reject the result.
+										</p>
+									</div>
+
+									<div class="grid gap-3 sm:grid-cols-3">
+										<div class="rounded-xl border border-border/60 bg-background/70 px-3 py-4 text-xs leading-6 text-foreground/80">
+											View the original frame and overlays together.
+										</div>
+										<div class="rounded-xl border border-border/60 bg-background/70 px-3 py-4 text-xs leading-6 text-foreground/80">
+											Edit labels and bounding boxes before export.
+										</div>
+										<div class="rounded-xl border border-border/60 bg-background/70 px-3 py-4 text-xs leading-6 text-foreground/80">
+											Use approve or reject actions to move the queue forward.
+										</div>
+									</div>
+								</div>
 							</div>
 						</div>
 					{/if}
