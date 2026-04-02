@@ -69,9 +69,44 @@
 	<!-- Items -->
 	<div class="flex-1 p-2 space-y-1">
 		{#if items.length === 0}
-			<div class="flex items-center justify-center h-32 text-sm text-muted-foreground font-mono">
-				{isLoading ? 'Loading...' : 'No items to review'}
-			</div>
+			{#if isLoading}
+				<div class="flex items-center justify-center h-32 text-sm text-muted-foreground font-mono">
+					Loading...
+				</div>
+			{:else}
+				<div class="flex h-full items-center justify-center p-3">
+					<div class="w-full rounded-2xl border border-border/60 bg-card/35 p-5 font-mono">
+						<div class="space-y-4">
+							<div class="space-y-2">
+								<div class="inline-flex items-center rounded-full border border-border/70 bg-background px-3 py-1 text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+									Review inbox
+								</div>
+								<p class="text-lg text-foreground">No items to review</p>
+								<p class="text-sm leading-7 text-muted-foreground">
+									Flagged detections and human-check checkpoints appear here after a run reaches
+									review.
+								</p>
+							</div>
+
+							<div class="grid gap-2 text-xs text-foreground/80">
+								<div class="rounded-xl border border-border/60 bg-background/70 px-3 py-2">
+									Low-confidence items
+								</div>
+								<div class="rounded-xl border border-border/60 bg-background/70 px-3 py-2">
+									Manual edits before export
+								</div>
+								<div class="rounded-xl border border-border/60 bg-background/70 px-3 py-2">
+									Batch approve or reject
+								</div>
+							</div>
+
+							<div class="rounded-xl border border-emerald-700/15 bg-emerald-500/8 px-4 py-3 text-xs leading-6 text-emerald-900/75">
+								Next: finish a run in Execute, then return here to triage the queue.
+							</div>
+						</div>
+					</div>
+				</div>
+			{/if}
 		{:else}
 			{#each items as item (item.id)}
 				<ReviewListItem
