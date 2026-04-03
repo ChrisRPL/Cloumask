@@ -30,6 +30,10 @@
 		<div class="shrink-0">
 			<ConnectionStatus compact />
 		</div>
-		<ProjectSelector class="min-w-0 flex-1 max-w-48 sm:max-w-56 lg:max-w-60" />
+		<ProjectSelector
+			class="min-w-0 flex-1 max-w-40 sm:max-w-48 lg:max-w-52"
+			placeholder="Project"
+			emptyTriggerAriaLabel="Select project"
+		/>
 	</div>
 </header>
