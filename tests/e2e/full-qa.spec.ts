@@ -328,6 +328,11 @@ test.describe('C. Chat View', () => {
         await expect(page.getByLabel('Chat messages')).toBeVisible();
         await expect(page.getByText('Start a local vision workflow')).toBeVisible();
         await expect(page.getByText('Good first prompts')).toBeVisible();
+        await expect(page.getByText('Choose project', { exact: true })).toBeVisible();
+        await expect(
+            page.getByText('Every run needs a project. Pick one here first so chat, plans, and review work stay grouped.')
+        ).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Choose project to start chat' })).toBeVisible();
         await expect(
             page.getByText('Choose a project in the header to unlock chat and keep new runs grouped in one place.')
         ).toBeVisible();
