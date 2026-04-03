@@ -35,6 +35,7 @@
 
 	const progress = $derived(total > 0 ? ((total - pending) / total) * 100 : 0);
 	const canApproveAll = $derived(pending > 0);
+	const isEmptyQueue = $derived(total === 0);
 
 	function handleApproveAll() {
 		if (!canApproveAll) return;
@@ -63,37 +64,45 @@
 		</div>
 
 		<!-- Progress bar -->
-		<div class="hidden sm:flex items-center gap-3">
-			<div class="w-32 h-1.5 bg-muted rounded-full overflow-hidden">
-				<div
-					class="h-full bg-primary transition-all duration-300"
-					style="width: {progress}%"
-				></div>
-			</div>
-			<span class="text-xs font-mono text-muted-foreground tabular-nums">
-				{currentIndex + 1} / {total}
+		{#if isEmptyQueue}
+			<span class="hidden sm:inline text-xs font-mono text-muted-foreground tabular-nums">
+				0 items
 			</span>
-		</div>
+		{:else}
+			<div class="hidden sm:flex items-center gap-3">
+				<div class="w-32 h-1.5 bg-muted rounded-full overflow-hidden">
+					<div
+						class="h-full bg-primary transition-all duration-300"
+						style="width: {progress}%"
+					></div>
+				</div>
+				<span class="text-xs font-mono text-muted-foreground tabular-nums">
+					{currentIndex + 1} / {total}
+				</span>
+			</div>
+		{/if}
 	</div>
 
 	<!-- Center: Stats -->
-	<div class="hidden md:flex items-center gap-4 text-xs font-mono">
-		<span class="flex items-center gap-1.5">
-			<span class="w-2 h-2 rounded-full bg-amber-500"></span>
-			<span class="text-muted-foreground">Pending:</span>
-			<span class="tabular-nums">{pending}</span>
-		</span>
-		<span class="flex items-center gap-1.5">
-			<span class="w-2 h-2 rounded-full bg-green-500"></span>
-			<span class="text-muted-foreground">Approved:</span>
-			<span class="tabular-nums">{approved}</span>
-		</span>
-		<span class="flex items-center gap-1.5">
-			<span class="w-2 h-2 rounded-full bg-red-500"></span>
-			<span class="text-muted-foreground">Rejected:</span>
-			<span class="tabular-nums">{rejected}</span>
-		</span>
-	</div>
+	{#if !isEmptyQueue}
+		<div class="hidden md:flex items-center gap-4 text-xs font-mono">
+			<span class="flex items-center gap-1.5">
+				<span class="w-2 h-2 rounded-full bg-amber-500"></span>
+				<span class="text-muted-foreground">Pending:</span>
+				<span class="tabular-nums">{pending}</span>
+			</span>
+			<span class="flex items-center gap-1.5">
+				<span class="w-2 h-2 rounded-full bg-green-500"></span>
+				<span class="text-muted-foreground">Approved:</span>
+				<span class="tabular-nums">{approved}</span>
+			</span>
+			<span class="flex items-center gap-1.5">
+				<span class="w-2 h-2 rounded-full bg-red-500"></span>
+				<span class="text-muted-foreground">Rejected:</span>
+				<span class="tabular-nums">{rejected}</span>
+			</span>
+		</div>
+	{/if}
 
 	<!-- Right: Actions -->
 	<div class="flex items-center gap-2">
@@ -123,7 +132,7 @@
 					</Dialog.Footer>
 				</Dialog.Content>
 			</Dialog.Root>
-		{:else}
+		{:else if !isEmptyQueue}
 			<Button variant="outline" size="sm" class="h-8 px-3 text-xs font-mono" disabled>
 				Approve All
 			</Button>
