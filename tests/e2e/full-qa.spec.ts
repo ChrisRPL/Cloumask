@@ -334,9 +334,11 @@ test.describe('C. Chat View', () => {
             page.getByText('Every run needs a project. Pick one here first so chat, plans, and review work stay grouped.')
         ).toBeVisible();
         await expect(page.getByRole('button', { name: 'Choose project to start chat' })).toBeVisible();
-        await expect(page.getByLabel('Message input')).toBeEditable();
-        await expect(page.getByLabel('Message input')).toHaveAttribute('placeholder', 'Choose a project above to unlock chat...');
-        await expect(page.getByRole('button', { name: 'Send message' })).toBeDisabled();
+        await expect(page.getByLabel('Message input')).toHaveCount(0);
+        await expect(page.getByRole('button', { name: 'Send message' })).toHaveCount(0);
+        await expect(
+            page.getByText('Project required before chat. Use the chooser above to start your first run.')
+        ).toBeVisible();
         await expect(page.getByRole('button', { name: 'Export' })).toHaveCount(0);
         await expect(page.getByRole('button', { name: 'Clear' })).toBeVisible();
         await snap(page, 'T-010-chat-view');
@@ -357,6 +359,11 @@ test.describe('C. Chat View', () => {
     });
 
     test('T-014: Send message interaction', async ({ page }) => {
+        await page.evaluate((project) => {
+            localStorage.setItem('cloumask:project:current', JSON.stringify(project));
+        }, BROWSER_TEST_PROJECT);
+        await page.reload();
+        await page.waitForTimeout(1500);
         await page.waitForTimeout(2000);
         await snap(page, 'T-014-before-send');
 
@@ -367,10 +374,10 @@ test.describe('C. Chat View', () => {
         if (inputVisible) {
             await input.fill('hello');
             await snap(page, 'T-014-typed-hello');
-            await expect(page.getByRole('button', { name: 'Send message' })).toBeDisabled();
+            await expect(page.getByRole('button', { name: 'Send message' })).toBeEnabled();
             await input.press('Enter');
             await page.waitForTimeout(3000);
-            await expect(input).toHaveValue('hello');
+            await expect(input).toHaveValue('');
             await snap(page, 'T-014-after-send');
         } else {
             console.log('[T-014] BUG: No chat input found');
