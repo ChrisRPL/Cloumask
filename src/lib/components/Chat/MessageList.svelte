@@ -12,6 +12,7 @@
 <script lang="ts">
 	import { ArrowDown } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
+	import ProjectSelector from '$lib/components/Layout/ProjectSelector.svelte';
 	import MessageBubble from './MessageBubble.svelte';
 
 	let { messages, isStreaming = false, class: className }: MessageListProps = $props();
@@ -151,7 +152,19 @@
 								Before you send
 							</p>
 							<div class="mt-4 space-y-3 text-sm leading-6 text-muted-foreground">
-								<p>Pick or create a project in the header so runs stay grouped.</p>
+								<div class="rounded-lg border border-border/60 bg-card/85 p-3">
+									<p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+										Choose project
+									</p>
+									<p class="mt-2 text-sm leading-6 text-muted-foreground">
+										Every run needs a project. Pick one here first so chat, plans, and review work stay grouped.
+									</p>
+									<ProjectSelector
+										class="mt-3 w-full"
+										placeholder="Choose project to start..."
+										triggerAriaLabel="Choose project to start chat"
+									/>
+								</div>
 								<p>Use the message bar below to describe the job in plain language.</p>
 								<p>Move through the workflow with the sidebar or keys 1-5.</p>
 							</div>
