@@ -1010,6 +1010,17 @@ test.describe('J. UI/UX Quality', () => {
         await expect(page.getByRole('heading', { name: 'New Project' })).toBeHidden();
         const savedProjectSelector = page.getByRole('button', { name: /street anonymization/i });
         await expect(savedProjectSelector).toBeVisible();
+        await expect(page.getByText('Ready to start the next run', { exact: true })).toBeVisible();
+        await expect(page.getByText('Active project', { exact: true })).toBeVisible();
+        await expect(
+            page.getByText(
+                'Street Anonymization is already selected. Describe the footage, image batch, or review task and Cloumask will build the plan, run the steps, and keep the approval checkpoints in one place.',
+                { exact: true }
+            )
+        ).toBeVisible();
+        await expect(
+            page.getByText('Every run needs a project. Pick one here first so chat, plans, and review work stay grouped.')
+        ).toHaveCount(0);
 
         await savedProjectSelector.click();
         await expect(page.getByText('Recent Projects')).toBeVisible();
