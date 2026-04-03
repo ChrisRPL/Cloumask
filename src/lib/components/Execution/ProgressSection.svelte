@@ -16,6 +16,7 @@
 
 	const execution = getExecutionState();
 	const pipeline = getPipelineState();
+	const isIdleEmpty = $derived(execution.status === 'idle' && pipeline.steps.length === 0);
 </script>
 
 <div class={cn('space-y-3', className)}>
@@ -23,17 +24,19 @@
 	<StepProgress steps={pipeline.steps} currentStepId={execution.currentStepId} />
 
 	<!-- Progress bar + time display -->
-	<div class="flex items-center gap-4">
-		<ProgressBar
-			current={execution.progress.current}
-			total={execution.progress.total}
-			percentage={execution.progress.percentage}
-			status={execution.status}
-			class="flex-1"
-		/>
-		<TimeDisplay
-			startedAt={execution.stats.startedAt}
-			estimatedCompletion={execution.stats.estimatedCompletion}
-		/>
-	</div>
+	{#if !isIdleEmpty}
+		<div class="flex items-center gap-4">
+			<ProgressBar
+				current={execution.progress.current}
+				total={execution.progress.total}
+				percentage={execution.progress.percentage}
+				status={execution.status}
+				class="flex-1"
+			/>
+			<TimeDisplay
+				startedAt={execution.stats.startedAt}
+				estimatedCompletion={execution.stats.estimatedCompletion}
+			/>
+		</div>
+	{/if}
 </div>
