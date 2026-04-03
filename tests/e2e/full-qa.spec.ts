@@ -210,7 +210,7 @@ test.describe('B. Navigation & Keyboard Shortcuts', () => {
         // Press 4 for Review
         await page.keyboard.press('4');
         await page.waitForTimeout(500);
-        await expect(page.getByText('0 items', { exact: true })).toBeVisible();
+        await expect(page.getByRole('listbox').getByText('0 items', { exact: true })).toBeVisible();
         await expect(page.getByText('Review inbox', { exact: true })).toBeVisible();
         await expect(page.getByText('Review canvas', { exact: true })).toBeVisible();
         await expect(
@@ -224,12 +224,15 @@ test.describe('B. Navigation & Keyboard Shortcuts', () => {
                 { exact: true }
             )
         ).toBeVisible();
-        await expect(page.locator('button:has-text("Approve All")').first()).toBeDisabled();
+        await expect(page.getByRole('button', { name: 'Approve All' })).toHaveCount(0);
         await expect(page.locator('button:has-text("Prev")')).toHaveCount(0);
         await expect(page.locator('button:has-text("Next")')).toHaveCount(0);
         await expect(page.locator('button:has-text("Edit")')).toHaveCount(0);
         await expect(page.locator('button:has-text("Reject")')).toHaveCount(0);
         await expect(page.getByRole('button', { name: /^Approve$/ })).toHaveCount(0);
+        await expect(page.getByText('Pending:', { exact: true })).toHaveCount(0);
+        await expect(page.getByText('Approved:', { exact: true })).toHaveCount(0);
+        await expect(page.getByText('Rejected:', { exact: true })).toHaveCount(0);
         await expect(page.getByText('Status', { exact: true })).toHaveCount(0);
         await expect(page.getByText('Confidence', { exact: true })).toHaveCount(0);
         await expect(page.getByPlaceholder('Search files...')).toHaveCount(0);
