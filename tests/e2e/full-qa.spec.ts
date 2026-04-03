@@ -197,6 +197,7 @@ test.describe('B. Navigation & Keyboard Shortcuts', () => {
         await expect(page.getByText('Execution workspace', { exact: true })).toBeVisible();
         await expect(page.getByText('Good next steps', { exact: true })).toBeVisible();
         await expect(page.getByText('Shortcut path: 1 chat, 2 plan, 3 execute, R review.', { exact: true })).toBeVisible();
+        await expect(page.getByRole('progressbar')).toHaveCount(0);
         await expect(page.getByRole('button', { name: 'Cancel' })).toHaveCount(0);
         await expect(page.getByText('LIVE PREVIEW')).toHaveCount(0);
         await expect(page.getByText('Processed', { exact: true })).toHaveCount(0);
@@ -490,6 +491,7 @@ test.describe('E. Execution View', () => {
         await expect(page.getByText('Execution workspace', { exact: true })).toBeVisible();
         await expect(page.getByText('Good next steps', { exact: true })).toBeVisible();
         await expect(page.getByText('Shortcut path: 1 chat, 2 plan, 3 execute, R review.', { exact: true })).toBeVisible();
+        await expect(page.getByRole('progressbar')).toHaveCount(0);
 
         const content = await page.textContent('body');
         console.log(`[T-030] Page contains execution-related content: ${content?.toLowerCase().includes('execut') || content?.toLowerCase().includes('pipeline') || content?.toLowerCase().includes('run')
