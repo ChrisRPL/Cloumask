@@ -113,13 +113,12 @@
 								</div>
 								<div class="space-y-2">
 									<h3 class="text-xl font-semibold tracking-tight text-foreground xl:text-[2rem]">
-										{hasSelectedProject ? 'Ready to start the next run' : 'Start a local vision workflow'}
+										{hasSelectedProject ? 'Project ready' : 'Start a local vision workflow'}
 									</h3>
 									<p class="max-w-2xl text-sm leading-6 text-foreground/82 xl:text-[15px]">
 										{#if hasSelectedProject}
-											{selectedProjectName} is already selected. Describe the footage, image batch,
-											or review task and Cloumask will build the plan, run the steps, and keep the
-											approval checkpoints in one place.
+											{selectedProjectName} is active. Describe the next job and Cloumask will build
+											the plan, run the steps, and keep the approval checkpoints in one place.
 										{:else}
 											Describe the footage, image batch, or review task. Cloumask will build the
 											plan, run the steps, and keep the approval checkpoints in one place.
@@ -134,11 +133,15 @@
 								</p>
 								{#if hasSelectedProject}
 									<div class="mt-3 rounded-xl border border-border/80 bg-card px-4 py-3">
-										<p class="text-sm font-semibold text-foreground">{selectedProjectName}</p>
-										<p class="mt-1 text-sm leading-6 text-foreground/75">
-											New chat runs, plans, and review checkpoints will stay grouped here. Switch
-											projects from the header when you need a different workspace.
-										</p>
+										<div class="flex flex-wrap items-center gap-3 text-sm leading-6 text-foreground/75">
+											<p class="rounded-full border border-border bg-background px-3 py-1 text-sm font-semibold text-foreground">
+												{selectedProjectName}
+											</p>
+											<p>
+												New runs and review checkpoints stay grouped here. Switch from the header
+												when needed.
+											</p>
+										</div>
 									</div>
 								{:else}
 									<p class="mt-2 text-sm leading-6 text-foreground/82">
@@ -169,19 +172,33 @@
 
 							<div class="rounded-xl border border-border bg-background p-4">
 								<p class="text-[11px] font-semibold uppercase tracking-[0.22em] text-foreground/55">
-									Good first prompts
+									{hasSelectedProject ? 'Try one of these' : 'Good first prompts'}
 								</p>
-								<div class="mt-3 space-y-2 text-sm text-foreground/92">
-									<p class="rounded-lg border border-border/80 bg-card px-3 py-2">
-										Plan an anonymization run for the latest loading bay footage.
-									</p>
-									<p class="rounded-lg border border-border/80 bg-card px-3 py-2">
-										Review low-confidence people detections before exporting labels.
-									</p>
-									<p class="rounded-lg border border-border/80 bg-card px-3 py-2">
-										Prepare a point-cloud detection workflow for the current warehouse scan.
-									</p>
-								</div>
+								{#if hasSelectedProject}
+									<div class="mt-3 flex flex-wrap gap-2 text-sm text-foreground/92">
+										<p class="rounded-full border border-border/80 bg-card px-3 py-2">
+											Plan an anonymization run for the latest loading bay footage.
+										</p>
+										<p class="rounded-full border border-border/80 bg-card px-3 py-2">
+											Review low-confidence people detections before exporting labels.
+										</p>
+										<p class="rounded-full border border-border/80 bg-card px-3 py-2">
+											Prepare a point-cloud detection workflow for the current warehouse scan.
+										</p>
+									</div>
+								{:else}
+									<div class="mt-3 space-y-2 text-sm text-foreground/92">
+										<p class="rounded-lg border border-border/80 bg-card px-3 py-2">
+											Plan an anonymization run for the latest loading bay footage.
+										</p>
+										<p class="rounded-lg border border-border/80 bg-card px-3 py-2">
+											Review low-confidence people detections before exporting labels.
+										</p>
+										<p class="rounded-lg border border-border/80 bg-card px-3 py-2">
+											Prepare a point-cloud detection workflow for the current warehouse scan.
+										</p>
+									</div>
+								{/if}
 							</div>
 						</div>
 
