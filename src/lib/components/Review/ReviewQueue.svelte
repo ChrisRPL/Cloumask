@@ -827,18 +827,20 @@
 	/>
 
 	<!-- Filter Bar -->
-	<FilterBar
-		statusFilter={reviewState.filters.status}
-		searchQuery={reviewState.filters.searchQuery}
-		minConfidence={reviewState.filters.minConfidence}
-		onStatusChange={(status) => reviewState.setFilter('status', status)}
-		onSearchChange={(query) => reviewState.setFilter('searchQuery', query)}
-		onConfidenceChange={(min, max) => {
-			reviewState.setFilter('minConfidence', min);
-			reviewState.setFilter('maxConfidence', max);
-		}}
-		onReset={() => reviewState.resetFilters()}
-	/>
+	{#if reviewState.items.length > 0}
+		<FilterBar
+			statusFilter={reviewState.filters.status}
+			searchQuery={reviewState.filters.searchQuery}
+			minConfidence={reviewState.filters.minConfidence}
+			onStatusChange={(status) => reviewState.setFilter('status', status)}
+			onSearchChange={(query) => reviewState.setFilter('searchQuery', query)}
+			onConfidenceChange={(min, max) => {
+				reviewState.setFilter('minConfidence', min);
+				reviewState.setFilter('maxConfidence', max);
+			}}
+			onReset={() => reviewState.resetFilters()}
+		/>
+	{/if}
 
 	<!-- Main Content -->
 	<SplitPane class="flex-1 min-h-0" leftWidth={340} minLeftWidth={260} maxLeftWidth={520}>
