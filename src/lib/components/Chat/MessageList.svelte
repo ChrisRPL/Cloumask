@@ -94,7 +94,7 @@
 		{#if messages.length === 0}
 			<div class="flex h-full items-center justify-center px-4 py-8 sm:px-6 xl:items-start xl:px-8 xl:py-12">
 				<div
-					class="w-full max-w-6xl rounded-[1.75rem] border border-border/70 bg-card/70 p-6 shadow-[0_24px_80px_-48px_rgba(12,59,31,0.42)] backdrop-blur-sm sm:p-8 xl:p-10"
+					class="w-full max-w-6xl rounded-[1.75rem] border border-border bg-card p-6 shadow-[0_24px_80px_-48px_rgba(12,59,31,0.42)] sm:p-8 xl:p-10"
 					data-chat-empty-state
 				>
 					<div class="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(21rem,0.85fr)] xl:gap-8">
@@ -107,18 +107,18 @@
 									<h3 class="text-xl font-semibold tracking-tight text-foreground xl:text-[2rem]">
 										Start a local vision workflow
 									</h3>
-									<p class="max-w-2xl text-sm leading-6 text-muted-foreground xl:text-[15px]">
+									<p class="max-w-2xl text-sm leading-6 text-foreground/82 xl:text-[15px]">
 										Describe the footage, image batch, or review task. Cloumask will build the
 										plan, run the steps, and keep the approval checkpoints in one place.
 									</p>
 								</div>
 							</div>
 
-							<div class="max-w-2xl rounded-xl border border-border/60 bg-background/80 p-4">
-								<p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+							<div class="max-w-2xl rounded-xl border border-border bg-background p-4">
+								<p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/55">
 									Choose project
 								</p>
-								<p class="mt-2 text-sm leading-6 text-muted-foreground">
+								<p class="mt-2 text-sm leading-6 text-foreground/82">
 									Every run needs a project. Pick one here first so chat, plans, and review work stay grouped.
 								</p>
 								<ProjectSelector
@@ -129,47 +129,47 @@
 							</div>
 
 							<div class="flex flex-wrap gap-2 text-xs">
-								<span class="rounded-full border border-border/70 bg-background px-3 py-1 text-foreground/80">
+								<span class="rounded-full border border-border bg-background px-3 py-1 text-foreground/90">
 									Chat
 								</span>
-								<span class="rounded-full border border-border/70 bg-background px-3 py-1 text-foreground/80">
+								<span class="rounded-full border border-border bg-background px-3 py-1 text-foreground/90">
 									Plan
 								</span>
-								<span class="rounded-full border border-border/70 bg-background px-3 py-1 text-foreground/80">
+								<span class="rounded-full border border-border bg-background px-3 py-1 text-foreground/90">
 									Execute
 								</span>
-								<span class="rounded-full border border-border/70 bg-background px-3 py-1 text-foreground/80">
+								<span class="rounded-full border border-border bg-background px-3 py-1 text-foreground/90">
 									Review
 								</span>
 							</div>
 
-							<div class="rounded-xl border border-border/60 bg-background/80 p-4">
-								<p class="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+							<div class="rounded-xl border border-border bg-background p-4">
+								<p class="text-[11px] font-semibold uppercase tracking-[0.22em] text-foreground/55">
 									Good first prompts
 								</p>
-								<div class="mt-3 space-y-2 text-sm text-foreground/85">
-									<p class="rounded-lg border border-border/50 bg-card px-3 py-2">
+								<div class="mt-3 space-y-2 text-sm text-foreground/92">
+									<p class="rounded-lg border border-border/80 bg-card px-3 py-2">
 										Plan an anonymization run for the latest loading bay footage.
 									</p>
-									<p class="rounded-lg border border-border/50 bg-card px-3 py-2">
+									<p class="rounded-lg border border-border/80 bg-card px-3 py-2">
 										Review low-confidence people detections before exporting labels.
 									</p>
-									<p class="rounded-lg border border-border/50 bg-card px-3 py-2">
+									<p class="rounded-lg border border-border/80 bg-card px-3 py-2">
 										Prepare a point-cloud detection workflow for the current warehouse scan.
 									</p>
 								</div>
 							</div>
 						</div>
 
-						<div class="rounded-xl border border-border/60 bg-background/70 p-4">
-							<p class="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+						<div class="rounded-xl border border-border bg-background p-4">
+							<p class="text-[11px] font-semibold uppercase tracking-[0.22em] text-foreground/55">
 								Before you send
 							</p>
-							<div class="mt-4 space-y-3 text-sm leading-6 text-muted-foreground">
+							<div class="mt-4 space-y-3 text-sm leading-6 text-foreground/78">
 								<p>Use the message bar below to describe the job in plain language.</p>
 								<p>Move through the workflow with the sidebar or keys 1-5.</p>
 							</div>
-							<div class="mt-5 rounded-lg border border-emerald-700/15 bg-emerald-500/8 px-3 py-2 text-xs text-emerald-900/75">
+							<div class="mt-5 rounded-lg border border-emerald-700/25 bg-emerald-500/12 px-3 py-2 text-xs text-emerald-950/85">
 								Local-first setup. Status, plans, and review checkpoints stay visible as the run
 								progresses.
 							</div>
