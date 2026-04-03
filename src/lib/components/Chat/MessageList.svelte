@@ -13,9 +13,13 @@
 	import { ArrowDown } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
 	import ProjectSelector from '$lib/components/Layout/ProjectSelector.svelte';
+	import { getUIState } from '$lib/stores/ui.svelte';
 	import MessageBubble from './MessageBubble.svelte';
 
 	let { messages, isStreaming = false, class: className }: MessageListProps = $props();
+	const ui = getUIState();
+	const hasSelectedProject = $derived(ui.currentProject !== null);
+	const selectedProjectName = $derived(ui.currentProject?.name?.trim() || 'Current project');
 
 	// Refs and scroll state
 	let viewport: HTMLDivElement | null = $state(null);
@@ -59,10 +63,14 @@
 	// Auto-scroll when messages change
 	$effect(() => {
 		// Trigger on message count change
-		const _ = messages.length;
+		const messageCount = messages.length;
 		let frameId: number | null = null;
 
-		if (shouldAutoScroll && viewport) {
+		if (viewport && messageCount === 0) {
+			viewport.scrollTo({ top: 0, behavior: 'instant' });
+			shouldAutoScroll = true;
+			isAtBottom = true;
+		} else if (shouldAutoScroll && viewport) {
 			// Use requestAnimationFrame to ensure DOM is updated
 			frameId = requestAnimationFrame(() => {
 				scrollToBottom(true);
@@ -105,27 +113,43 @@
 								</div>
 								<div class="space-y-2">
 									<h3 class="text-xl font-semibold tracking-tight text-foreground xl:text-[2rem]">
-										Start a local vision workflow
+										{hasSelectedProject ? 'Ready to start the next run' : 'Start a local vision workflow'}
 									</h3>
 									<p class="max-w-2xl text-sm leading-6 text-foreground/82 xl:text-[15px]">
-										Describe the footage, image batch, or review task. Cloumask will build the
-										plan, run the steps, and keep the approval checkpoints in one place.
+										{#if hasSelectedProject}
+											{selectedProjectName} is already selected. Describe the footage, image batch,
+											or review task and Cloumask will build the plan, run the steps, and keep the
+											approval checkpoints in one place.
+										{:else}
+											Describe the footage, image batch, or review task. Cloumask will build the
+											plan, run the steps, and keep the approval checkpoints in one place.
+										{/if}
 									</p>
 								</div>
 							</div>
 
 							<div class="max-w-2xl rounded-xl border border-border bg-background p-4">
 								<p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/55">
-									Choose project
+									{hasSelectedProject ? 'Active project' : 'Choose project'}
 								</p>
-								<p class="mt-2 text-sm leading-6 text-foreground/82">
-									Every run needs a project. Pick one here first so chat, plans, and review work stay grouped.
-								</p>
-								<ProjectSelector
-									class="mt-3 w-full sm:max-w-sm"
-									placeholder="Choose project to start..."
-									triggerAriaLabel="Choose project to start chat"
-								/>
+								{#if hasSelectedProject}
+									<div class="mt-3 rounded-xl border border-border/80 bg-card px-4 py-3">
+										<p class="text-sm font-semibold text-foreground">{selectedProjectName}</p>
+										<p class="mt-1 text-sm leading-6 text-foreground/75">
+											New chat runs, plans, and review checkpoints will stay grouped here. Switch
+											projects from the header when you need a different workspace.
+										</p>
+									</div>
+								{:else}
+									<p class="mt-2 text-sm leading-6 text-foreground/82">
+										Every run needs a project. Pick one here first so chat, plans, and review work stay grouped.
+									</p>
+									<ProjectSelector
+										class="mt-3 w-full sm:max-w-sm"
+										placeholder="Choose project to start..."
+										triggerAriaLabel="Choose project to start chat"
+									/>
+								{/if}
 							</div>
 
 							<div class="flex flex-wrap gap-2 text-xs">
@@ -163,15 +187,24 @@
 
 						<div class="rounded-xl border border-border bg-background p-4 xl:max-w-sm xl:justify-self-end xl:self-start">
 							<p class="text-[11px] font-semibold uppercase tracking-[0.22em] text-foreground/55">
-								Before you send
+								{hasSelectedProject ? 'Ready when you are' : 'Before you send'}
 							</p>
 							<div class="mt-4 space-y-3 text-sm leading-6 text-foreground/78">
-								<p>Use the message bar below to describe the job in plain language.</p>
-								<p>Move through the workflow with the sidebar or keys 1-5.</p>
+								{#if hasSelectedProject}
+									<p>Use the message bar below to describe the job in plain language.</p>
+									<p>Jump to Plan after the first draft appears, then return here to keep the run moving.</p>
+								{:else}
+									<p>Use the message bar below to describe the job in plain language.</p>
+									<p>Move through the workflow with the sidebar or keys 1-5.</p>
+								{/if}
 							</div>
 							<div class="mt-5 rounded-lg border border-emerald-700/25 bg-emerald-500/12 px-3 py-2 text-xs text-emerald-950/85">
-								Local-first setup. Status, plans, and review checkpoints stay visible as the run
-								progresses.
+								{#if hasSelectedProject}
+									The current project stays attached to the thread until you switch workspaces.
+								{:else}
+									Local-first setup. Status, plans, and review checkpoints stay visible as the run
+									progresses.
+								{/if}
 							</div>
 						</div>
 					</div>
