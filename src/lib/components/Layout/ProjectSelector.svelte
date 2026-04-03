@@ -3,6 +3,8 @@
 
 	export interface ProjectSelectorProps {
 		class?: string;
+		placeholder?: string;
+		triggerAriaLabel?: string;
 	}
 </script>
 
@@ -14,7 +16,11 @@
 	import { getUIState } from '$lib/stores/ui.svelte';
 	import type { Project } from '$lib/types/ui';
 
-	let { class: className }: ProjectSelectorProps = $props();
+	let {
+		class: className,
+		placeholder = 'Select project...',
+		triggerAriaLabel
+	}: ProjectSelectorProps = $props();
 
 	const ui = getUIState();
 
@@ -86,6 +92,7 @@
 
 <Select.Root type="single" bind:value={selectedValue} onValueChange={handleValueChange}>
 	<Select.Trigger
+		aria-label={triggerAriaLabel}
 		class={cn(
 			'w-full min-w-0 border-border/90 bg-card/95 text-foreground shadow-[0_10px_24px_-20px_rgba(12,59,31,0.7)] transition-colors hover:bg-card',
 			className
@@ -104,7 +111,7 @@
 				<span class="flex size-5 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground">
 					<Icon name="plus" class="size-3.5" />
 				</span>
-				<span class="truncate">Select project...</span>
+				<span class="truncate">{placeholder}</span>
 			</span>
 		{/if}
 	</Select.Trigger>
