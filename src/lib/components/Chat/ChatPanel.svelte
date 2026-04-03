@@ -1097,20 +1097,26 @@
 	{/if}
 
 	<!-- Input -->
-	<ChatInput
-		value={inputValue}
-		disabled={isTypingDisabled}
-		disableSend={isSendDisabled}
-		placeholder={
-			requiresProjectSelection
-				? 'Choose a project above to unlock chat...'
-				: isInitializing || isRecoveringSidecar
-				? 'Connecting...'
-				: sse.isConnected
-					? 'Type a message...'
-					: 'Reconnecting to local AI service...'
-		}
-		onSend={handleSend}
-		onValueChange={(v) => (inputValue = v)}
-	/>
+	{#if requiresProjectSelection}
+		<div class="border-t border-border bg-background/45 px-4 py-3">
+			<p class="text-xs tracking-[0.08em] text-muted-foreground">
+				Project required before chat. Use the chooser above to start your first run.
+			</p>
+		</div>
+	{:else}
+		<ChatInput
+			value={inputValue}
+			disabled={isTypingDisabled}
+			disableSend={isSendDisabled}
+			placeholder={
+				isInitializing || isRecoveringSidecar
+					? 'Connecting...'
+					: sse.isConnected
+						? 'Type a message...'
+						: 'Reconnecting to local AI service...'
+			}
+			onSend={handleSend}
+			onValueChange={(v) => (inputValue = v)}
+		/>
+	{/if}
 </div>
