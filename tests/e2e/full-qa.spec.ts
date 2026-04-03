@@ -325,6 +325,7 @@ test.describe('C. Chat View', () => {
     test('T-010: Chat view renders correctly', async ({ page }) => {
         await expect(page.getByRole('heading', { name: 'Chat' })).toBeVisible();
         await expect(page.getByText(/connected|disconnected/i)).toBeVisible();
+        await expect(page.locator('header').getByText('Project', { exact: true })).toBeVisible();
         await expect(page.getByLabel('Chat messages')).toBeVisible();
         await expect(page.getByText('Start a local vision workflow')).toBeVisible();
         await expect(page.getByText('Good first prompts')).toBeVisible();
