@@ -345,10 +345,11 @@ test.describe('C. Chat View', () => {
     });
 
     test('T-010: Chat view renders correctly', async ({ page }) => {
+        const chatLog = page.getByLabel('Chat messages');
         await expect(page.getByRole('heading', { name: 'Chat' })).toBeVisible();
         await expect(page.getByText(/connected|disconnected/i)).toBeVisible();
         await expect(page.locator('header').getByText('Project', { exact: true })).toBeVisible();
-        await expect(page.getByLabel('Chat messages')).toBeVisible();
+        await expect(chatLog).toBeVisible();
         await expect(page.getByText('Start a local vision workflow')).toBeVisible();
         await expect(page.getByText('Good first prompts')).toBeVisible();
         await expect(page.getByText('Choose project', { exact: true })).toBeVisible();
@@ -363,6 +364,9 @@ test.describe('C. Chat View', () => {
         ).toBeVisible();
         await expect(page.getByRole('button', { name: 'Export' })).toHaveCount(0);
         await expect(page.getByRole('button', { name: 'Clear' })).toBeVisible();
+        await expect
+            .poll(async () => chatLog.evaluate((element) => element.scrollTop))
+            .toBeLessThanOrEqual(1);
         await snap(page, 'T-010-chat-view');
     });
 
