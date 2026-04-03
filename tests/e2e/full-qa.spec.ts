@@ -30,6 +30,25 @@ async function clearStorage(page: Page) {
     });
 }
 
+// Helper: keep first-run landing tests isolated from persisted backend threads
+async function isolateFreshChatLanding(page: Page) {
+    await page.route('**/api/chat/threads*', async (route) => {
+        const request = route.request();
+        const url = new URL(request.url());
+
+        if (request.method() === 'GET' && url.pathname === '/api/chat/threads') {
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({ threads: [] }),
+            });
+            return;
+        }
+
+        await route.continue();
+    });
+}
+
 // Helper: take a named screenshot
 async function snap(page: Page, name: string) {
     if (!screenshotDirReady) {
@@ -314,8 +333,11 @@ test.describe('B. Navigation & Keyboard Shortcuts', () => {
 // ============================================================================
 
 test.describe('C. Chat View', () => {
-    test.beforeEach(async ({ page }) => {
+    test.beforeEach(async ({ page }, testInfo) => {
         await skipSetup(page);
+        if (testInfo.title.startsWith('T-010')) {
+            await isolateFreshChatLanding(page);
+        }
         await page.goto('/');
         await page.waitForTimeout(1500);
         await page.keyboard.press('1'); // Navigate to Chat
@@ -909,14 +931,26 @@ test.describe('J. UI/UX Quality', () => {
 
     test('T-096: Responsive layout 768px', async ({ page }) => {
         await skipSetup(page);
+        await isolateFreshChatLanding(page);
         await page.setViewportSize({ width: 768, height: 1024 });
         await page.goto('/');
+        await expect(page.locator('[data-chat-empty-state]')).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Choose project to start chat' })).toBeVisible();
+        await expect
+            .poll(
+                async () =>
+                    page.evaluate(
+                        () => document.documentElement.scrollWidth - window.innerWidth
+                    )
+            )
+            .toBeLessThanOrEqual(1);
         await page.waitForTimeout(1500);
         await snap(page, 'T-096-responsive-768');
     });
 
     test('T-097: Responsive layout 1920px', async ({ page }) => {
         await skipSetup(page);
+        await isolateFreshChatLanding(page);
         await page.setViewportSize({ width: 1920, height: 1080 });
         await page.goto('/');
         const emptyState = page.locator('[data-chat-empty-state]');
