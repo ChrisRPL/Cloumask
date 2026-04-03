@@ -5,6 +5,7 @@
 		class?: string;
 		placeholder?: string;
 		triggerAriaLabel?: string;
+		emptyTriggerAriaLabel?: string;
 	}
 </script>
 
@@ -19,7 +20,8 @@
 	let {
 		class: className,
 		placeholder = 'Select project...',
-		triggerAriaLabel
+		triggerAriaLabel,
+		emptyTriggerAriaLabel
 	}: ProjectSelectorProps = $props();
 
 	const ui = getUIState();
@@ -92,7 +94,7 @@
 
 <Select.Root type="single" bind:value={selectedValue} onValueChange={handleValueChange}>
 	<Select.Trigger
-		aria-label={triggerAriaLabel}
+		aria-label={ui.currentProject ? triggerAriaLabel : (triggerAriaLabel ?? emptyTriggerAriaLabel)}
 		class={cn(
 			'w-full min-w-0 border-border/90 bg-card/95 text-foreground shadow-[0_10px_24px_-20px_rgba(12,59,31,0.7)] transition-colors hover:bg-card',
 			className
