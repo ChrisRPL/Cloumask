@@ -230,6 +230,10 @@ test.describe('B. Navigation & Keyboard Shortcuts', () => {
         await expect(page.locator('button:has-text("Edit")')).toHaveCount(0);
         await expect(page.locator('button:has-text("Reject")')).toHaveCount(0);
         await expect(page.getByRole('button', { name: /^Approve$/ })).toHaveCount(0);
+        await expect(page.getByText('Status', { exact: true })).toHaveCount(0);
+        await expect(page.getByText('Confidence', { exact: true })).toHaveCount(0);
+        await expect(page.getByPlaceholder('Search files...')).toHaveCount(0);
+        await expect(page.getByText('$ --status=all', { exact: true })).toHaveCount(0);
         await expect(page.getByRole('button', { name: 'Done' })).not.toHaveClass(/bg-primary/);
         await expect(page.locator('.border-t.border-border.bg-background').last()).toContainText('0 / 0');
         await expect(page.getByText('Ctrl+Z', { exact: true })).toHaveCount(0);
