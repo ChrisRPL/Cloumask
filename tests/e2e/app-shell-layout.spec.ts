@@ -6,10 +6,24 @@ async function skipSetup(page: Page) {
 	});
 }
 
+async function seedProject(page: Page) {
+	await page.addInitScript(() => {
+		localStorage.setItem(
+			'cloumask:project:current',
+			JSON.stringify({
+				id: 'layout-shell-project',
+				name: 'Layout Shell Project',
+				path: '/tmp/cloumask-layout-shell',
+				lastOpened: '2026-04-03T08:00:00.000Z',
+			}),
+		);
+	});
+}
+
 async function assertShellFitsViewport(page: Page) {
 	const header = page.locator('header').first();
 	const connectionStatus = page.locator('[data-slot="connection-status"]').first();
-	const projectSelector = page.getByRole('button', { name: /select project/i });
+	const projectSelector = header.locator('[data-slot="select-trigger"]').first();
 	const messageInput = page.getByLabel('Message input');
 
 	await expect(header).toBeVisible();
@@ -48,6 +62,7 @@ async function assertShellFitsViewport(page: Page) {
 test.describe('App shell layout', () => {
 	test.beforeEach(async ({ page }) => {
 		await skipSetup(page);
+		await seedProject(page);
 		await page.goto('/');
 		await expect(page.getByRole('heading', { name: 'Chat' })).toBeVisible();
 	});
