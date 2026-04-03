@@ -333,11 +333,8 @@ test.describe('C. Chat View', () => {
             page.getByText('Every run needs a project. Pick one here first so chat, plans, and review work stay grouped.')
         ).toBeVisible();
         await expect(page.getByRole('button', { name: 'Choose project to start chat' })).toBeVisible();
-        await expect(
-            page.getByText('Choose a project in the header to unlock chat and keep new runs grouped in one place.')
-        ).toBeVisible();
         await expect(page.getByLabel('Message input')).toBeEditable();
-        await expect(page.getByLabel('Message input')).toHaveAttribute('placeholder', 'Select or create a project first...');
+        await expect(page.getByLabel('Message input')).toHaveAttribute('placeholder', 'Choose a project above to unlock chat...');
         await expect(page.getByRole('button', { name: 'Send message' })).toBeDisabled();
         await expect(page.getByRole('button', { name: 'Export' })).toHaveCount(0);
         await expect(page.getByRole('button', { name: 'Clear' })).toBeVisible();
