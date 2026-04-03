@@ -1097,21 +1097,13 @@
 	{/if}
 
 	<!-- Input -->
-	{#if requiresProjectSelection}
-		<div class="border-t border-border bg-background/40 px-3 pt-3">
-			<div class="rounded-lg border border-border/70 bg-card/70 px-3 py-2 text-xs leading-5 text-muted-foreground">
-				Choose a project in the header to unlock chat and keep new runs grouped in one place.
-			</div>
-		</div>
-	{/if}
 	<ChatInput
-		class={requiresProjectSelection ? 'border-t-0 pt-2' : undefined}
 		value={inputValue}
 		disabled={isTypingDisabled}
 		disableSend={isSendDisabled}
 		placeholder={
 			requiresProjectSelection
-				? 'Select or create a project first...'
+				? 'Choose a project above to unlock chat...'
 				: isInitializing || isRecoveringSidecar
 				? 'Connecting...'
 				: sse.isConnected
