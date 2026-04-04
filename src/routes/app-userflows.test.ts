@@ -235,6 +235,14 @@ describe('App user flows', () => {
 
 	it('keeps the message textbox editable when initial backend connection fails', async () => {
 		localStorage.setItem('cloumask:setup', 'complete');
+		const currentProject = {
+			id: 'project-recovery-1',
+			name: 'Recovery Flow',
+			path: '/data/recovery-flow',
+			lastOpened: new Date('2026-03-13T12:00:00.000Z').toISOString(),
+		};
+		localStorage.setItem('cloumask:project:current', JSON.stringify(currentProject));
+		localStorage.setItem('cloumask:project:recent', JSON.stringify([currentProject]));
 		vi.stubGlobal('fetch', createFetchMock({ failThreadCreate: true }));
 		render(AppTestHost);
 
@@ -244,7 +252,7 @@ describe('App user flows', () => {
 
 		const input = screen.getByLabelText('Message input') as HTMLTextAreaElement;
 		expect(input.disabled).toBe(false);
-		expect(input.placeholder).toContain('Reconnecting');
+		expect(input.placeholder).toContain('Waiting for local AI service');
 	});
 
 	it('restores unresolved checkpoint details when resuming the latest thread', async () => {
