@@ -173,11 +173,14 @@ test.describe('B. Navigation & Keyboard Shortcuts', () => {
         await page.keyboard.press('2');
         await page.waitForTimeout(500);
         await expect(page.getByText('No steps in pipeline', { exact: true })).toBeVisible();
+        await expect(page.getByText('Pipeline workspace', { exact: true })).toBeVisible();
         await expect(
             page.getByText('Describe the job in Chat to generate a plan, then come back here to review the steps.', {
                 exact: true,
             })
         ).toBeVisible();
+        await expect(page.getByText('What happens here', { exact: true })).toBeVisible();
+        await expect(page.getByText('Shortcut path: 1 chat, 2 plan, 3 execute.', { exact: true })).toBeVisible();
         await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(0);
         await expect(page.getByRole('button', { name: 'Cancel' })).toHaveCount(0);
         await snap(page, 'T-060-key-2-plan');
@@ -237,7 +240,7 @@ test.describe('B. Navigation & Keyboard Shortcuts', () => {
         await expect(page.getByText('Confidence', { exact: true })).toHaveCount(0);
         await expect(page.getByPlaceholder('Search files...')).toHaveCount(0);
         await expect(page.getByText('$ --status=all', { exact: true })).toHaveCount(0);
-        await expect(page.getByRole('button', { name: 'Done' })).not.toHaveClass(/bg-primary/);
+        await expect(page.getByRole('button', { name: 'Done' })).toHaveCount(0);
         await expect(page.locator('.border-t.border-border.bg-background').last()).toContainText('0 / 0');
         await expect(page.getByText('Ctrl+Z', { exact: true })).toHaveCount(0);
         await expect(page.getByText('J/K', { exact: true })).toHaveCount(0);
