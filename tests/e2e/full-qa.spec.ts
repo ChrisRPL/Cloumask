@@ -384,7 +384,7 @@ test.describe('C. Chat View', () => {
         await expect(page.getByRole('button', { name: 'Send message' })).toHaveCount(0);
         await expect(
             page.getByText('Project required before chat. Use the chooser above to start your first run.')
-        ).toBeVisible();
+        ).toHaveCount(0);
         await expect(page.getByRole('button', { name: 'Retry' })).toBeVisible();
         await expect(page.getByRole('button', { name: 'Refresh' })).toHaveCount(0);
         await expect(page.getByRole('button', { name: 'Export' })).toHaveCount(0);
