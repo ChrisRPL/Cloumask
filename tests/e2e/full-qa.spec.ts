@@ -363,7 +363,7 @@ test.describe('C. Chat View', () => {
         const chatLog = page.getByLabel('Chat messages');
         await expect(page.getByRole('heading', { name: 'Chat' })).toBeVisible();
         await expect(page.getByText(/connected|disconnected/i)).toBeVisible();
-        await expect(page.locator('header').getByText('Project', { exact: true })).toBeVisible();
+        await expect(page.locator('header').getByText('Select project', { exact: true })).toBeVisible();
         await expect(chatLog).toBeVisible();
         await expect(page.getByText('Start a local vision workflow')).toBeVisible();
         await expect(page.getByText('Good first prompts')).toBeVisible();
@@ -372,11 +372,21 @@ test.describe('C. Chat View', () => {
             page.getByText('Every run needs a project. Pick one here first so chat, plans, and review work stay grouped.')
         ).toBeVisible();
         await expect(page.getByRole('button', { name: 'Choose project to start chat' })).toBeVisible();
+        await expect(page.getByText('AI service is starting...', { exact: true })).toBeVisible();
+        await expect(
+            page.getByText(
+                'Cloumask is retrying the local backend automatically. This can take a moment on first launch.',
+                { exact: true }
+            )
+        ).toBeVisible();
+        await expect(page.getByText('Cannot reach local AI backend yet. Retrying startup...', { exact: true })).toHaveCount(0);
         await expect(page.getByLabel('Message input')).toHaveCount(0);
         await expect(page.getByRole('button', { name: 'Send message' })).toHaveCount(0);
         await expect(
             page.getByText('Project required before chat. Use the chooser above to start your first run.')
         ).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Retry' })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Refresh' })).toHaveCount(0);
         await expect(page.getByRole('button', { name: 'Export' })).toHaveCount(0);
         await expect(page.getByRole('button', { name: 'Clear' })).toBeVisible();
         await expect
