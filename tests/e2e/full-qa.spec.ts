@@ -375,10 +375,9 @@ test.describe('C. Chat View', () => {
             page.getByText('Every run needs a project. Pick one here first so chat, plans, and review work stay grouped.')
         ).toBeVisible();
         await expect(page.getByRole('button', { name: 'Choose project to start chat' })).toBeVisible();
-        await expect(page.getByText('AI service is starting...', { exact: true })).toBeVisible();
         await expect(
             page.getByText(
-                'Cloumask is retrying the local backend automatically. This can take a moment on first launch.',
+                'AI service is starting. Cloumask is retrying the local backend automatically.',
                 { exact: true }
             )
         ).toBeVisible();
