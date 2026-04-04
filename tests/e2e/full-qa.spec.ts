@@ -1027,7 +1027,7 @@ test.describe('J. UI/UX Quality', () => {
         await expect(page.getByText('New Project...')).toBeVisible();
         await snap(page, 'T-100-project-selector-open');
 
-        await page.getByText('New Project...').click();
+        await page.getByRole('option', { name: 'New Project...' }).click();
         await expect(page.getByRole('heading', { name: 'New Project' })).toBeVisible();
 
         const nameInput = page.getByLabel('Project Name');
@@ -1040,6 +1040,7 @@ test.describe('J. UI/UX Quality', () => {
         await expect(page.getByRole('heading', { name: 'New Project' })).toBeHidden();
         const savedProjectSelector = page.getByRole('button', { name: /street anonymization/i });
         await expect(savedProjectSelector).toBeVisible();
+        await expect(savedProjectSelector).toContainText('Project');
         await expect(page.getByText('Project ready', { exact: true })).toBeVisible();
         await expect(page.getByText('Active project', { exact: true })).toBeVisible();
         await expect(
