@@ -88,6 +88,19 @@
 		pipeline.steps.length > 0 &&
 		['planning', 'awaiting_approval'].includes(agent.phase)
 	);
+	const llmStartupBannerOwnsRecovery = $derived(
+		llmNotReady && llmStatus !== null && !llmStatus.service_running
+	);
+	const showInitErrorBanner = $derived(Boolean(initError) && !llmStartupBannerOwnsRecovery);
+	const llmRecoveryLabel = $derived(
+		llmStatus !== null && !llmStatus.service_running ? 'Retry' : 'Refresh'
+	);
+	const inputPlaceholder = $derived.by(() => {
+		if (isInitializing || isRecoveringSidecar) return 'Connecting...';
+		if (llmNotReady || initError) return 'Waiting for local AI service...';
+		if (sse.isConnected) return 'Type a message...';
+		return 'Waiting to reconnect...';
+	});
 
 	function normalizeConnectionError(error: unknown): string {
 		const message = error instanceof Error ? error.message : String(error);
@@ -1024,7 +1037,7 @@
 	{/if}
 
 	<!-- Connection error -->
-	{#if initError}
+	{#if showInitErrorBanner && initError}
 		<div class="px-4 py-2 mx-4 mb-2 rounded bg-amber-500/10 border border-amber-500/20 text-amber-600 text-sm flex items-center justify-between">
 			<span>{initError}</span>
 			<button
@@ -1044,7 +1057,9 @@
 					{#if !llmStatus.service_running}
 						<p class="font-medium">AI service is starting...</p>
 						<p class="text-xs mt-1 text-amber-600">
-							The language model is initializing. This may take a moment on first launch.
+							{initError
+								? 'Cloumask is retrying the local backend automatically. This can take a moment on first launch.'
+								: 'The language model is initializing. This may take a moment on first launch.'}
 						</p>
 					{:else if !llmStatus.model_available}
 						<p class="font-medium">Downloading AI model...</p>
@@ -1089,7 +1104,7 @@
 						onclick={handleRecoverConnection}
 						disabled={isCheckingLLM || isPullingModel}
 					>
-						{isCheckingLLM ? 'Checking...' : 'Refresh'}
+						{isCheckingLLM ? 'Checking...' : llmRecoveryLabel}
 					</button>
 				</div>
 			</div>
@@ -1108,13 +1123,7 @@
 			value={inputValue}
 			disabled={isTypingDisabled}
 			disableSend={isSendDisabled}
-			placeholder={
-				isInitializing || isRecoveringSidecar
-					? 'Connecting...'
-					: sse.isConnected
-						? 'Type a message...'
-						: 'Reconnecting to local AI service...'
-			}
+			placeholder={inputPlaceholder}
 			onSend={handleSend}
 			onValueChange={(v) => (inputValue = v)}
 		/>
