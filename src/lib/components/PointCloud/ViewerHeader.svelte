@@ -19,6 +19,7 @@
 
 	const pcState = getPointCloudState();
 	const isDesktopMode = isTauri() || import.meta.env.MODE === 'test';
+	const showFileActions = $derived(isDesktopMode);
 
 	// Format bytes to human readable
 	function formatBytes(bytes: number): string {
@@ -70,40 +71,34 @@
 			</div>
 		{:else}
 			<div class="flex items-center gap-2 text-xs font-mono">
-				<span class="text-muted-foreground">
-					{isDesktopMode ? 'No file loaded' : 'Browser preview only'}
-				</span>
-				{#if !isDesktopMode}
-					<Badge variant="secondary" class="text-[10px] font-mono">
-						Load/export require desktop mode
-					</Badge>
-				{/if}
+				<span class="text-muted-foreground">{isDesktopMode ? 'No file loaded' : 'Browser preview only'}</span>
 			</div>
 		{/if}
 	</div>
 
 	<!-- Right: Actions -->
 	<div class="flex items-center gap-2">
-		<Button
-			variant="outline"
-			size="sm"
-			onclick={onLoad}
-			disabled={!isDesktopMode}
-			class="h-8 text-xs font-mono gap-1.5"
-		>
-			<Upload class="h-3.5 w-3.5" />
-			Load
-		</Button>
-		<Button
-			variant="outline"
-			size="sm"
-			onclick={onExport}
-			disabled={!isDesktopMode || (!pcState.file && !pcState.isLoading)}
-			class="h-8 text-xs font-mono gap-1.5"
-		>
-			<Download class="h-3.5 w-3.5" />
-			Export
-		</Button>
+		{#if showFileActions}
+			<Button
+				variant="outline"
+				size="sm"
+				onclick={onLoad}
+				class="h-8 text-xs font-mono gap-1.5"
+			>
+				<Upload class="h-3.5 w-3.5" />
+				Load
+			</Button>
+			<Button
+				variant="outline"
+				size="sm"
+				onclick={onExport}
+				disabled={!pcState.file && !pcState.isLoading}
+				class="h-8 text-xs font-mono gap-1.5"
+			>
+				<Download class="h-3.5 w-3.5" />
+				Export
+			</Button>
+		{/if}
 		<Button
 			variant="ghost"
 			size="sm"
