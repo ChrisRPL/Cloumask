@@ -1055,6 +1055,14 @@ test.describe('J. UI/UX Quality', () => {
             )
         ).toBeVisible();
         await expect(page.getByText('Enter to send, Shift+Enter for newline', { exact: true })).toHaveCount(0);
+        const [startupRailBox, composerRailBox] = await Promise.all([
+            page.locator('[data-chat-status-rail]').boundingBox(),
+            page.locator('[data-chat-composer-rail]').boundingBox(),
+        ]);
+        expect(startupRailBox).not.toBeNull();
+        expect(composerRailBox).not.toBeNull();
+        expect(Math.abs((startupRailBox?.x ?? 0) - (composerRailBox?.x ?? 0))).toBeLessThanOrEqual(2);
+        expect(Math.abs((startupRailBox?.width ?? 0) - (composerRailBox?.width ?? 0))).toBeLessThanOrEqual(2);
         await expect(
             page.getByText('Every run needs a project. Pick one here first so chat, plans, and review work stay grouped.')
         ).toHaveCount(0);
