@@ -60,11 +60,13 @@
 	onkeydown={handleKeydown}
 >
 	<!-- Item count header -->
-	<div class="sticky top-0 z-10 px-3 py-2 bg-background/95 backdrop-blur border-b border-border">
-		<span class="text-xs font-mono text-muted-foreground">
-			{items.length} item{items.length !== 1 ? 's' : ''}
-		</span>
-	</div>
+	{#if items.length > 0}
+		<div class="sticky top-0 z-10 px-3 py-2 bg-background/95 backdrop-blur border-b border-border">
+			<span class="text-xs font-mono text-muted-foreground">
+				{items.length} item{items.length !== 1 ? 's' : ''}
+			</span>
+		</div>
+	{/if}
 
 	<!-- Items -->
 	<div class="flex-1 p-2 space-y-1">
