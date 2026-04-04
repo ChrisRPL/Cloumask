@@ -105,27 +105,26 @@
 					class="w-full max-w-6xl rounded-[1.75rem] border border-border bg-card p-6 shadow-[0_24px_80px_-48px_rgba(12,59,31,0.42)] sm:p-8 xl:p-10"
 					data-chat-empty-state
 				>
-					<div class="grid gap-6 xl:items-start xl:grid-cols-[minmax(0,1.35fr)_minmax(21rem,0.85fr)] xl:gap-8">
-						<div class="space-y-4">
-							<div class="space-y-3">
-								<div class="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-border/70 bg-background text-lg text-foreground/70">
-									&lt;/&gt;
-								</div>
-								<div class="space-y-2">
-									<h3 class="text-xl font-semibold tracking-tight text-foreground xl:text-[2rem]">
-										{hasSelectedProject ? 'Project ready' : 'Start a local vision workflow'}
-									</h3>
-									<p class="max-w-2xl text-sm leading-6 text-foreground/82 xl:text-[15px]">
-										{#if hasSelectedProject}
-											{selectedProjectName} is active. Describe the next job and Cloumask will build
-											the plan, run the steps, and keep the approval checkpoints in one place.
-										{:else}
-											Describe the footage, image batch, or review task. Cloumask will build the
-											plan, run the steps, and keep the approval checkpoints in one place.
-										{/if}
-									</p>
-								</div>
+					<div class="space-y-4">
+						<div class="space-y-3">
+							<div class="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-border/70 bg-background text-lg text-foreground/70">
+								&lt;/&gt;
 							</div>
+							<div class="space-y-2">
+								<h3 class="text-xl font-semibold tracking-tight text-foreground xl:text-[2rem]">
+									{hasSelectedProject ? 'Project ready' : 'Start a local vision workflow'}
+								</h3>
+								<p class="max-w-2xl text-sm leading-6 text-foreground/82 xl:text-[15px]">
+									{#if hasSelectedProject}
+										{selectedProjectName} is active. Describe the next job and Cloumask will build
+										the plan, run the steps, and keep the approval checkpoints in one place.
+									{:else}
+										Describe the footage, image batch, or review task. Cloumask will build the
+										plan, run the steps, and keep the approval checkpoints in one place.
+									{/if}
+								</p>
+							</div>
+						</div>
 
 							<div class="max-w-2xl rounded-xl border border-border bg-background p-4">
 								<p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground/55">
@@ -200,31 +199,31 @@
 									</div>
 								{/if}
 							</div>
-						</div>
-
-						<div class="rounded-xl border border-border bg-background p-4 xl:max-w-sm xl:justify-self-end xl:self-start">
-							<p class="text-[11px] font-semibold uppercase tracking-[0.22em] text-foreground/55">
-								{hasSelectedProject ? 'Ready when you are' : 'Before you send'}
-							</p>
-							<div class="mt-4 space-y-3 text-sm leading-6 text-foreground/78">
-								{#if hasSelectedProject}
-									<p>Use the message bar below to describe the job in plain language.</p>
-									<p>Jump to Plan after the first draft appears, then return here to keep the run moving.</p>
-								{:else}
-									<p>Use the message bar below to describe the job in plain language.</p>
-									<p>Move through the workflow with the sidebar or keys 1-5.</p>
-								{/if}
+							<div
+								class="flex flex-col gap-3 rounded-xl border border-emerald-700/20 bg-emerald-500/10 px-4 py-3 text-sm leading-6 text-foreground/82 xl:flex-row xl:items-center xl:justify-between"
+								data-chat-empty-note
+							>
+								<div class="min-w-0">
+									<p class="text-[11px] font-semibold uppercase tracking-[0.22em] text-foreground/55">
+										{hasSelectedProject ? 'Next step' : 'Start here'}
+									</p>
+									<p class="mt-1">
+										{#if hasSelectedProject}
+											Describe the next job below, then move to Plan when the first draft appears.
+										{:else}
+											Pick a project, then describe the job below so chat, plans, and review stay grouped.
+										{/if}
+									</p>
+								</div>
+								<p class="text-xs text-emerald-950/85 xl:max-w-sm xl:text-right">
+									{#if hasSelectedProject}
+										The current project stays attached to the thread until you switch workspaces.
+									{:else}
+										Local-first setup keeps status, plans, and approval checkpoints visible as the run progresses.
+									{/if}
+								</p>
 							</div>
-							<div class="mt-5 rounded-lg border border-emerald-700/25 bg-emerald-500/12 px-3 py-2 text-xs text-emerald-950/85">
-								{#if hasSelectedProject}
-									The current project stays attached to the thread until you switch workspaces.
-								{:else}
-									Local-first setup. Status, plans, and review checkpoints stay visible as the run
-									progresses.
-								{/if}
-							</div>
 						</div>
-					</div>
 				</div>
 			</div>
 		{:else}
