@@ -579,62 +579,57 @@
 						</div>
 					{:else}
 						<div class="w-full rounded-[28px] border border-border/70 bg-card/45 p-6 shadow-xl backdrop-blur-sm sm:p-8">
-							<div class="grid gap-6 lg:grid-cols-[1.25fr_0.95fr]">
-								<div class="space-y-5 font-mono">
-									<div class="space-y-3">
-										<div class="inline-flex items-center rounded-full border border-border/70 bg-background/80 px-3 py-1 text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
-											Browser preview
-										</div>
-										<div class="space-y-3">
-											<h2 class="text-2xl leading-tight text-foreground">
-												Point cloud workflows stay in the desktop app
-											</h2>
-											<p class="max-w-2xl text-sm leading-7 text-muted-foreground">
-												This browser view is preview-only. Load files, inspect the 3D scene, and
-												export results in Cloumask desktop.
-											</p>
-										</div>
+							<div class="space-y-5 font-mono">
+								<div class="space-y-3">
+									<div class="inline-flex items-center rounded-full border border-border/70 bg-background/80 px-3 py-1 text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
+										Browser preview
 									</div>
-
-									<div class="grid gap-3 sm:grid-cols-3">
-										<div class="rounded-2xl border border-border/60 bg-background/75 p-4">
-											<p class="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
-												Load
-											</p>
-											<p class="mt-3 text-sm leading-6 text-foreground/80">
-												Open local PCD, PLY, LAS, and LAZ files in the desktop app.
-											</p>
-										</div>
-										<div class="rounded-2xl border border-border/60 bg-background/75 p-4">
-											<p class="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
-												Inspect
-											</p>
-											<p class="mt-3 text-sm leading-6 text-foreground/80">
-												Use the real 3D viewport, camera tools, and annotation overlays there.
-											</p>
-										</div>
-										<div class="rounded-2xl border border-border/60 bg-background/75 p-4">
-											<p class="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
-												Export
-											</p>
-											<p class="mt-3 text-sm leading-6 text-foreground/80">
-												Save processed results after the desktop review workflow finishes.
-											</p>
-										</div>
+									<div class="space-y-3">
+										<h2 class="text-2xl leading-tight text-foreground">
+											Point cloud workflows stay in the desktop app
+										</h2>
+										<p class="max-w-2xl text-sm leading-7 text-muted-foreground">
+											This browser view is preview-only. Load files, inspect the 3D scene, and
+											export results in Cloumask desktop.
+										</p>
 									</div>
 								</div>
 
-								<div class="rounded-2xl border border-border/60 bg-background/75 p-5 font-mono">
-									<p class="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
-										Preview scope
+								<div class="grid gap-3 sm:grid-cols-3">
+									<div class="rounded-2xl border border-border/60 bg-background/75 p-4">
+										<p class="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+											Load
+										</p>
+										<p class="mt-3 text-sm leading-6 text-foreground/80">
+											Open local PCD, PLY, LAS, and LAZ files in the desktop app.
+										</p>
+									</div>
+									<div class="rounded-2xl border border-border/60 bg-background/75 p-4">
+										<p class="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+											Inspect
+										</p>
+										<p class="mt-3 text-sm leading-6 text-foreground/80">
+											Use the real 3D viewport, camera tools, and annotation overlays there.
+										</p>
+									</div>
+									<div class="rounded-2xl border border-border/60 bg-background/75 p-4">
+										<p class="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+											Export
+										</p>
+										<p class="mt-3 text-sm leading-6 text-foreground/80">
+											Save processed results after the desktop review workflow finishes.
+										</p>
+									</div>
+								</div>
+
+								<div
+									class="flex flex-col gap-3 rounded-2xl border border-emerald-700/15 bg-emerald-500/8 px-4 py-3 text-sm leading-6 text-foreground/82 lg:flex-row lg:items-center lg:justify-between"
+									data-pointcloud-preview-note
+								>
+									<p>Use this page to check layout, navigation, and surrounding workflow chrome.</p>
+									<p class="text-xs text-emerald-900/75 lg:max-w-sm lg:text-right">
+										The browser does not load point cloud files or render the interactive scene.
 									</p>
-									<div class="mt-4 space-y-3 text-sm leading-7 text-foreground/80">
-										<p>Use this page to check layout, navigation, and surrounding workflow chrome.</p>
-										<p>The browser does not load point cloud files or render the interactive scene.</p>
-									</div>
-									<div class="mt-5 rounded-2xl border border-emerald-700/15 bg-emerald-500/8 px-4 py-3 text-xs leading-6 text-emerald-900/75">
-										For real point cloud work, open the Cloumask desktop app.
-									</div>
 								</div>
 							</div>
 						</div>
