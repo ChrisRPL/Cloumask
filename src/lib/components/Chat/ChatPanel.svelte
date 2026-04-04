@@ -95,6 +95,9 @@
 	const llmRecoveryLabel = $derived(
 		llmStatus !== null && !llmStatus.service_running ? 'Retry' : 'Refresh'
 	);
+	const alignStatusNoticeToLanding = $derived(
+		agent.messages.length === 0 && !showClarification && !showPlanPreview
+	);
 	const inputPlaceholder = $derived.by(() => {
 		if (isInitializing || isRecoveringSidecar) return 'Connecting...';
 		if (llmNotReady || initError) return 'Waiting for local AI service...';
@@ -1031,14 +1034,20 @@
 
 	<!-- Error display -->
 	{#if agent.lastError}
-		<div class="px-4 py-2 mx-4 mb-2 rounded bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+		<div class={cn(
+			'px-4 py-2 mb-2 rounded bg-destructive/10 border border-destructive/20 text-destructive text-sm',
+			alignStatusNoticeToLanding ? 'mx-auto w-[calc(100%-2rem)] max-w-5xl' : 'mx-4'
+		)}>
 			{agent.lastError}
 		</div>
 	{/if}
 
 	<!-- Connection error -->
 	{#if showInitErrorBanner && initError}
-		<div class="px-4 py-2 mx-4 mb-2 rounded bg-amber-500/10 border border-amber-500/20 text-amber-600 text-sm flex items-center justify-between">
+		<div class={cn(
+			'px-4 py-2 mb-2 rounded bg-amber-500/10 border border-amber-500/20 text-amber-600 text-sm flex items-center justify-between',
+			alignStatusNoticeToLanding ? 'mx-auto w-[calc(100%-2rem)] max-w-5xl' : 'mx-4'
+		)}>
 			<span>{initError}</span>
 			<button
 				class="text-xs underline"
@@ -1051,7 +1060,10 @@
 
 	<!-- AI service not ready warning -->
 	{#if llmNotReady && llmStatus}
-		<div class="px-4 py-3 mx-4 mb-2 rounded bg-amber-500/10 border border-amber-500/20 text-amber-700 text-sm">
+		<div class={cn(
+			'px-4 py-3 mb-2 rounded bg-amber-500/10 border border-amber-500/20 text-amber-700 text-sm',
+			alignStatusNoticeToLanding ? 'mx-auto w-[calc(100%-2rem)] max-w-5xl' : 'mx-4'
+		)}>
 			<div class="flex items-start gap-3">
 				<div class="flex-1">
 					{#if !llmStatus.service_running}
