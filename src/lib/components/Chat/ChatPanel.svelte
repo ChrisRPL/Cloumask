@@ -1112,13 +1112,7 @@
 	{/if}
 
 	<!-- Input -->
-	{#if requiresProjectSelection}
-		<div class="border-t border-border bg-background/45 px-4 py-3">
-			<p class="text-xs tracking-[0.08em] text-muted-foreground">
-				Project required before chat. Use the chooser above to start your first run.
-			</p>
-		</div>
-	{:else}
+	{#if !requiresProjectSelection}
 		<ChatInput
 			value={inputValue}
 			disabled={isTypingDisabled}
