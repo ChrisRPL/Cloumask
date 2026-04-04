@@ -1054,6 +1054,7 @@ test.describe('J. UI/UX Quality', () => {
                 { exact: true }
             )
         ).toBeVisible();
+        await expect(page.getByText('Enter to send, Shift+Enter for newline', { exact: true })).toHaveCount(0);
         await expect(
             page.getByText('Every run needs a project. Pick one here first so chat, plans, and review work stay grouped.')
         ).toHaveCount(0);
