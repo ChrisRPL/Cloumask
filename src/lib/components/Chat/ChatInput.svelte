@@ -116,9 +116,11 @@
 </div>
 
 <!-- Keyboard hint -->
-<div class="px-3 pb-2 text-xs text-muted-foreground/60 flex justify-between">
-	<span>Enter to send, Shift+Enter for newline</span>
-	{#if value.length > 0}
-		<span class="tabular-nums">{value.length}</span>
-	{/if}
-</div>
+{#if !disabled && !disableSend}
+	<div class="px-3 pb-2 text-xs text-muted-foreground/60 flex justify-between">
+		<span>Enter to send, Shift+Enter for newline</span>
+		{#if value.length > 0}
+			<span class="tabular-nums">{value.length}</span>
+		{/if}
+	</div>
+{/if}
