@@ -362,7 +362,7 @@ test.describe('C. Chat View', () => {
     test('T-010: Chat view renders correctly', async ({ page }) => {
         const chatLog = page.getByLabel('Chat messages');
         await expect(page.getByRole('heading', { name: 'Chat' })).toBeVisible();
-        await expect(page.getByText(/connected|disconnected/i)).toBeVisible();
+        await expect(page.getByLabel(/Connection status:/i)).toBeVisible();
         await expect(page.locator('header').getByText('Select project', { exact: true })).toBeVisible();
         await expect(chatLog).toBeVisible();
         await expect(page.getByText('Start a local vision workflow')).toBeVisible();
@@ -1054,10 +1054,11 @@ test.describe('J. UI/UX Quality', () => {
             page.getByText('Every run needs a project. Pick one here first so chat, plans, and review work stay grouped.')
         ).toHaveCount(0);
 
+        await page.waitForTimeout(400);
         await savedProjectSelector.click();
         await expect(page.getByText('Recent Projects')).toBeVisible();
         await expect(page.getByRole('option', { name: 'Street Anonymization' })).toBeVisible();
-        await expect(page.getByRole('option', { name: 'New Project...' })).toBeVisible();
+        await expect(page.getByText('New Project...', { exact: true })).toBeVisible();
 
         const [triggerBox, menuBox] = await Promise.all([
             savedProjectSelector.boundingBox(),
