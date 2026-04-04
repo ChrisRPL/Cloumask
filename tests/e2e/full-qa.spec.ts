@@ -247,13 +247,12 @@ test.describe('B. Navigation & Keyboard Shortcuts', () => {
         await page.keyboard.press('5');
         await page.waitForTimeout(500);
         await expect(page.getByText('Browser preview only', { exact: true })).toBeVisible();
-        await expect(page.getByText('Load/export require desktop mode', { exact: true })).toBeVisible();
         await expect(page.getByText('Desktop mode required for file workflows', { exact: true })).toBeVisible();
         await expect(
             page.getByText('This web preview shows the shell only. Load and export stay in the desktop app.')
         ).toBeVisible();
-        await expect(page.getByRole('button', { name: 'Load' })).toBeDisabled();
-        await expect(page.getByRole('button', { name: 'Export' })).toBeDisabled();
+        await expect(page.getByRole('button', { name: 'Load' })).toHaveCount(0);
+        await expect(page.getByRole('button', { name: 'Export' })).toHaveCount(0);
         await expect(page.getByText('Color:', { exact: true })).toHaveCount(0);
         await expect(page.getByText('Size:', { exact: true })).toHaveCount(0);
         await expect(page.getByText('Info Panel', { exact: true })).toHaveCount(0);
