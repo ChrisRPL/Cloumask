@@ -210,7 +210,7 @@ test.describe('B. Navigation & Keyboard Shortcuts', () => {
         // Press 4 for Review
         await page.keyboard.press('4');
         await page.waitForTimeout(500);
-        await expect(page.getByRole('listbox').getByText('0 items', { exact: true })).toBeVisible();
+        await expect(page.getByText('0 items', { exact: true })).toHaveCount(1);
         await expect(page.getByText('Review inbox', { exact: true })).toBeVisible();
         await expect(page.getByText('Review canvas', { exact: true })).toBeVisible();
         await expect(
