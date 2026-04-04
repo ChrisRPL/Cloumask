@@ -64,20 +64,6 @@
 	const currentState = $derived(sseState?.connectionInfo.state ?? 'disconnected');
 	const config = $derived(statusConfig[currentState]);
 	const connectionInfo = $derived(sseState?.connectionInfo);
-	const compactLabel = $derived.by(() => {
-		switch (currentState) {
-			case 'connected':
-				return 'Live';
-			case 'connecting':
-				return 'Booting';
-			case 'reconnecting':
-				return 'Retry';
-			case 'error':
-				return 'Error';
-			default:
-				return 'Offline';
-		}
-	});
 </script>
 
 <Tooltip.Root>
@@ -85,7 +71,7 @@
 		data-slot="connection-status"
 		class={cn(
 			'flex items-center rounded-md border border-border bg-card text-foreground transition-colors duration-200 select-none',
-			compact ? 'gap-1.5 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]' : 'gap-2 px-3 py-1.5 text-xs font-medium',
+			compact ? 'px-2.5 py-1' : 'gap-2 px-3 py-1.5 text-xs font-medium',
 			'cursor-default select-none',
 			className
 		)}
@@ -109,8 +95,6 @@
 
 		{#if !compact}
 			<span class="text-muted-foreground">{config.label}</span>
-		{:else}
-			<span class="text-foreground/75">{compactLabel}</span>
 		{/if}
 	</Tooltip.Trigger>
 
