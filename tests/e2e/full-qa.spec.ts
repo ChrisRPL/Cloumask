@@ -373,6 +373,7 @@ test.describe('C. Chat View', () => {
         await expect(page.getByText('Start a local vision workflow')).toBeVisible();
         await expect(page.getByText('Good first prompts')).toBeVisible();
         await expect(page.getByText('Choose project', { exact: true })).toBeVisible();
+        await expect(page.getByText('Before you send', { exact: true })).toHaveCount(0);
         await expect(
             page.getByText('Every run needs a project. Pick one here first so chat, plans, and review work stay grouped.')
         ).toBeVisible();
@@ -989,28 +990,30 @@ test.describe('J. UI/UX Quality', () => {
         await page.goto('/');
         const emptyState = page.locator('[data-chat-empty-state]');
         const landingProjectSelector = page.getByRole('button', { name: 'Choose project to start chat' });
-        const tipsCard = page.getByText('Before you send', { exact: true }).locator('..');
+        const landingNote = page.locator('[data-chat-empty-note]');
         await expect(emptyState).toBeVisible();
         await expect(landingProjectSelector).toBeVisible();
-        await expect(tipsCard).toBeVisible();
+        await expect(landingNote).toBeVisible();
 
-        const [emptyStateBox, landingSelectorBox, tipsCardBox, viewport] = await Promise.all([
+        const [emptyStateBox, landingSelectorBox, landingNoteBox, viewport] = await Promise.all([
             emptyState.boundingBox(),
             landingProjectSelector.boundingBox(),
-            tipsCard.boundingBox(),
+            landingNote.boundingBox(),
             Promise.resolve(page.viewportSize()),
         ]);
 
         expect(emptyStateBox).not.toBeNull();
         expect(landingSelectorBox).not.toBeNull();
-        expect(tipsCardBox).not.toBeNull();
+        expect(landingNoteBox).not.toBeNull();
         expect(viewport).not.toBeNull();
         expect((emptyStateBox?.width ?? 0) / (viewport?.width ?? 1)).toBeGreaterThanOrEqual(0.55);
         expect((emptyStateBox?.x ?? 0) / (viewport?.width ?? 1)).toBeLessThanOrEqual(0.3);
         expect((emptyStateBox?.y ?? 0) / (viewport?.height ?? 1)).toBeLessThanOrEqual(0.22);
         expect((landingSelectorBox?.x ?? 0) / (viewport?.width ?? 1)).toBeLessThanOrEqual(0.35);
         expect((landingSelectorBox?.y ?? 0) / (viewport?.height ?? 1)).toBeLessThanOrEqual(0.5);
-        expect((tipsCardBox?.height ?? 0) / (emptyStateBox?.height ?? 1)).toBeLessThanOrEqual(0.6);
+        expect((landingNoteBox?.height ?? 0) / (emptyStateBox?.height ?? 1)).toBeLessThanOrEqual(0.24);
+        expect((landingNoteBox?.width ?? 0) / (emptyStateBox?.width ?? 1)).toBeGreaterThanOrEqual(0.48);
+        expect((landingNoteBox?.y ?? 0)).toBeGreaterThan((emptyStateBox?.y ?? 0) + ((emptyStateBox?.height ?? 0) * 0.48));
 
         await page.waitForTimeout(1500);
         await snap(page, 'T-097-responsive-1920');
