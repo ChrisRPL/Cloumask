@@ -257,7 +257,11 @@ test.describe('B. Navigation & Keyboard Shortcuts', () => {
                 'This browser view is preview-only. Load files, inspect the 3D scene, and export results in Cloumask desktop.'
             )
         ).toBeVisible();
-        await expect(page.getByText('Preview scope', { exact: true })).toBeVisible();
+        await expect(page.locator('[data-pointcloud-preview-note]')).toBeVisible();
+        await expect(page.getByText('Preview scope', { exact: true })).toHaveCount(0);
+        await expect(
+            page.getByText('Use this page to check layout, navigation, and surrounding workflow chrome.')
+        ).toBeVisible();
         await expect(
             page.getByText('The browser does not load point cloud files or render the interactive scene.')
         ).toBeVisible();
