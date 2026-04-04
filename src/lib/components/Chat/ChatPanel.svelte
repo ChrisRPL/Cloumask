@@ -1055,11 +1055,10 @@
 			<div class="flex items-start gap-3">
 				<div class="flex-1">
 					{#if !llmStatus.service_running}
-						<p class="font-medium">AI service is starting...</p>
-						<p class="text-xs mt-1 text-amber-600">
+						<p class="font-medium leading-6">
 							{initError
-								? 'Cloumask is retrying the local backend automatically. This can take a moment on first launch.'
-								: 'The language model is initializing. This may take a moment on first launch.'}
+								? 'AI service is starting. Cloumask is retrying the local backend automatically.'
+								: 'AI service is starting. This may take a moment on first launch.'}
 						</p>
 					{:else if !llmStatus.model_available}
 						<p class="font-medium">Downloading AI model...</p>
