@@ -33,6 +33,7 @@
 	import { ReviewQueue } from '$lib/components/Review';
 	import { SetupWizard } from '$lib/components/Setup';
 	import { PointCloudViewer } from '$lib/components/PointCloud';
+	import { MonitorSmartphone, MoonStar, ServerCog, Sparkles, SunMedium } from '@lucide/svelte';
 
 	// Get state from context
 	const ui = getUIState();
@@ -41,10 +42,10 @@
 	const settingsState = getSettingsState();
 
 	// Theme options for the toggle
-	const themeOptions: { value: Theme; label: string; icon: string }[] = [
-		{ value: 'light', label: 'Light', icon: '☀️' },
-		{ value: 'dark', label: 'Dark', icon: '🌙' },
-		{ value: 'system', label: 'System', icon: '💻' },
+	const themeOptions: { value: Theme; label: string; icon: typeof SunMedium }[] = [
+		{ value: 'light', label: 'Light', icon: SunMedium },
+		{ value: 'dark', label: 'Dark', icon: MoonStar },
+		{ value: 'system', label: 'System', icon: MonitorSmartphone },
 	];
 
 	// Track setup completion reactively (forces Svelte to re-evaluate)
@@ -185,37 +186,67 @@
 	<SetupWizard onComplete={() => setup.markComplete()} />
 {:else if ui.currentView === 'settings'}
 	<!-- Settings View: System Status Dashboard -->
-	<div class="flex flex-col items-center justify-start min-h-full p-8 gap-8 overflow-auto">
-		<div class="text-center">
-			<h1 class="text-2xl font-bold text-foreground mb-2">Settings</h1>
-			<p class="text-muted-foreground">System status and configuration</p>
-		</div>
+	<div class="min-h-full overflow-auto px-6 py-8 xl:px-10">
+		<div class="mx-auto flex w-full max-w-6xl flex-col gap-6">
+			<section class="rounded-[1.75rem] border border-border/70 bg-card/35 p-6 shadow-sm xl:p-8">
+				<div class="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+					<div class="space-y-4 font-mono">
+						<div class="inline-flex items-center rounded-full border border-border/70 bg-background px-3 py-1 text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
+							Settings
+						</div>
+						<div class="space-y-3">
+							<h1 class="text-3xl text-foreground xl:text-[2.4rem]">System status and configuration</h1>
+							<p class="max-w-2xl text-sm leading-7 text-muted-foreground">
+								Keep the runtime healthy, confirm the local AI stack, and adjust the app theme from
+								one place.
+							</p>
+						</div>
+					</div>
 
-		<!-- Appearance Card -->
-		<Card.Root class="w-full max-w-md">
-			<Card.Header>
-				<Card.Title>Appearance</Card.Title>
-				<Card.Description>Choose your preferred color theme</Card.Description>
-			</Card.Header>
-			<Card.Content>
-				<div class="flex gap-2">
-					{#each themeOptions as option}
-						<Button
-							variant={settingsState.settings.theme === option.value ? 'default' : 'outline'}
-							size="sm"
-							class="flex-1 gap-1.5"
-							onclick={() => settingsState.updateSetting('theme', option.value)}
-						>
-							<span>{option.icon}</span>
-							{option.label}
-						</Button>
-					{/each}
+					<div class="rounded-2xl border border-border/60 bg-background/75 p-5 font-mono">
+						<p class="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+							Runtime
+						</p>
+						<div class="mt-4 space-y-3 text-sm leading-7 text-foreground/80">
+							<p class="flex items-center gap-2">
+								<ServerCog class="h-4 w-4 text-foreground/70" />
+								{isInTauri ? 'Desktop runtime detected' : 'Browser preview detected'}
+							</p>
+							<p class="flex items-center gap-2">
+								<Sparkles class="h-4 w-4 text-foreground/70" />
+								Use this screen to confirm service health before long runs.
+							</p>
+						</div>
+					</div>
 				</div>
-			</Card.Content>
-		</Card.Root>
+			</section>
 
-		<!-- System Status Card -->
-		<Card.Root class="w-full max-w-md">
+			<div class="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
+				<!-- Appearance Card -->
+				<Card.Root class="w-full border-border/70 bg-card/80 shadow-sm">
+					<Card.Header>
+						<Card.Title>Appearance</Card.Title>
+						<Card.Description>Choose your preferred color theme</Card.Description>
+					</Card.Header>
+					<Card.Content>
+						<div class="grid gap-2 sm:grid-cols-3">
+							{#each themeOptions as option}
+								<Button
+									variant={settingsState.settings.theme === option.value ? 'default' : 'outline'}
+									size="sm"
+									class="h-11 justify-start gap-2 px-3 font-mono"
+									onclick={() => settingsState.updateSetting('theme', option.value)}
+								>
+									<option.icon class="h-4 w-4" />
+									{option.label}
+								</Button>
+							{/each}
+						</div>
+					</Card.Content>
+				</Card.Root>
+
+				<!-- System Status Card -->
+				<Card.Root class="w-full border-border/70 bg-card/80 shadow-sm">
 			<Card.Header>
 				<Card.Title class="flex items-center justify-between">
 					System Status
@@ -299,11 +330,12 @@
 					{/if}
 				{/if}
 			</Card.Content>
-		</Card.Root>
+				</Card.Root>
+			</div>
 
-		<!-- AI Models Card -->
-		{#if llmModels && llmModels.models.length > 0}
-			<Card.Root class="w-full max-w-md">
+			<!-- AI Models Card -->
+			{#if llmModels && llmModels.models.length > 0}
+				<Card.Root class="w-full border-border/70 bg-card/80 shadow-sm">
 				<Card.Header>
 					<Card.Title>AI Models</Card.Title>
 					<Card.Description>Default: {llmModels.default_model}</Card.Description>
@@ -318,12 +350,12 @@
 						{/each}
 					</div>
 				</Card.Content>
-			</Card.Root>
-		{/if}
+				</Card.Root>
+			{/if}
 
-		<!-- App Info Card -->
-		{#if appInfo}
-			<Card.Root class="w-full max-w-md">
+			<!-- App Info Card -->
+			{#if appInfo}
+				<Card.Root class="w-full border-border/70 bg-card/80 shadow-sm">
 				<Card.Header>
 					<Card.Title>Application Info</Card.Title>
 				</Card.Header>
@@ -341,18 +373,19 @@
 						<span class="text-foreground">{appInfo.debug ? 'Development' : 'Production'}</span>
 					</div>
 				</Card.Content>
-			</Card.Root>
-		{/if}
+				</Card.Root>
+			{/if}
 
-		<!-- Actions -->
-		{#if isInTauri}
-			<div class="flex gap-4">
-				<Button onclick={handleRestartSidecar} disabled={loading}>Restart Sidecar</Button>
-				<Button variant="secondary" onclick={() => open('http://localhost:8765/docs')}>
-					API Docs
-				</Button>
-			</div>
-		{/if}
+			<!-- Actions -->
+			{#if isInTauri}
+				<div class="flex flex-wrap gap-4">
+					<Button onclick={handleRestartSidecar} disabled={loading}>Restart Sidecar</Button>
+					<Button variant="secondary" onclick={() => open('http://localhost:8765/docs')}>
+						API Docs
+					</Button>
+				</div>
+			{/if}
+		</div>
 	</div>
 {:else if ui.currentView === 'chat'}
 	<!-- Chat View -->
