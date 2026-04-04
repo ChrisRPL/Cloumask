@@ -549,34 +549,94 @@
 		{/if}
 
 		{#if !pcState.file && !pcState.isLoading && !pcState.error}
-			<div class="absolute inset-0 flex items-center justify-center p-6">
-				<div
-					class="w-full max-w-lg rounded-xl border border-border bg-card/92 p-6 text-center shadow-lg backdrop-blur-sm"
-				>
-					<p class="text-[11px] uppercase tracking-[0.24em] font-mono text-muted-foreground">
-						Point Cloud
-					</p>
-					<h2 class="mt-3 text-lg font-mono text-foreground">
-						{isDesktopTauri
-							? 'Load a point cloud to start exploring'
-							: 'Desktop mode required for file workflows'}
-					</h2>
-					<p class="mt-3 text-sm leading-6 text-muted-foreground">
-						{isDesktopTauri
-							? 'Open a local PCD, PLY, LAS, or LAZ file to inspect geometry, switch color modes, and export processed results.'
-							: 'This web preview shows the shell only. Load and export stay in the desktop app.'}
-					</p>
-					<div class="mt-4 flex flex-wrap items-center justify-center gap-2 text-[10px] font-mono text-muted-foreground">
-						<span class="rounded-full border border-border px-2.5 py-1">PCD</span>
-						<span class="rounded-full border border-border px-2.5 py-1">PLY</span>
-						<span class="rounded-full border border-border px-2.5 py-1">LAS</span>
-						<span class="rounded-full border border-border px-2.5 py-1">LAZ</span>
-					</div>
+			<div class="absolute inset-0 p-6 sm:p-8">
+				<div class={cn('mx-auto flex h-full w-full items-center justify-center', isDesktopTauri ? 'max-w-3xl' : 'max-w-6xl')}>
 					{#if isDesktopTauri}
-						<div class="mt-5 flex justify-center">
-							<Button size="sm" class="font-mono" onclick={handleLoad}>
-								Load point cloud
-							</Button>
+						<div
+							class="w-full max-w-lg rounded-xl border border-border bg-card/92 p-6 text-center shadow-lg backdrop-blur-sm"
+						>
+							<p class="text-[11px] uppercase tracking-[0.24em] font-mono text-muted-foreground">
+								Point Cloud
+							</p>
+							<h2 class="mt-3 text-lg font-mono text-foreground">
+								Load a point cloud to start exploring
+							</h2>
+							<p class="mt-3 text-sm leading-6 text-muted-foreground">
+								Open a local PCD, PLY, LAS, or LAZ file to inspect geometry, switch color modes,
+								and export processed results.
+							</p>
+							<div class="mt-4 flex flex-wrap items-center justify-center gap-2 text-[10px] font-mono text-muted-foreground">
+								<span class="rounded-full border border-border px-2.5 py-1">PCD</span>
+								<span class="rounded-full border border-border px-2.5 py-1">PLY</span>
+								<span class="rounded-full border border-border px-2.5 py-1">LAS</span>
+								<span class="rounded-full border border-border px-2.5 py-1">LAZ</span>
+							</div>
+							<div class="mt-5 flex justify-center">
+								<Button size="sm" class="font-mono" onclick={handleLoad}>
+									Load point cloud
+								</Button>
+							</div>
+						</div>
+					{:else}
+						<div class="w-full rounded-[28px] border border-border/70 bg-card/45 p-6 shadow-xl backdrop-blur-sm sm:p-8">
+							<div class="grid gap-6 lg:grid-cols-[1.25fr_0.95fr]">
+								<div class="space-y-5 font-mono">
+									<div class="space-y-3">
+										<div class="inline-flex items-center rounded-full border border-border/70 bg-background/80 px-3 py-1 text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
+											Browser preview
+										</div>
+										<div class="space-y-3">
+											<h2 class="text-2xl leading-tight text-foreground">
+												Point cloud workflows stay in the desktop app
+											</h2>
+											<p class="max-w-2xl text-sm leading-7 text-muted-foreground">
+												This browser view is preview-only. Load files, inspect the 3D scene, and
+												export results in Cloumask desktop.
+											</p>
+										</div>
+									</div>
+
+									<div class="grid gap-3 sm:grid-cols-3">
+										<div class="rounded-2xl border border-border/60 bg-background/75 p-4">
+											<p class="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+												Load
+											</p>
+											<p class="mt-3 text-sm leading-6 text-foreground/80">
+												Open local PCD, PLY, LAS, and LAZ files in the desktop app.
+											</p>
+										</div>
+										<div class="rounded-2xl border border-border/60 bg-background/75 p-4">
+											<p class="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+												Inspect
+											</p>
+											<p class="mt-3 text-sm leading-6 text-foreground/80">
+												Use the real 3D viewport, camera tools, and annotation overlays there.
+											</p>
+										</div>
+										<div class="rounded-2xl border border-border/60 bg-background/75 p-4">
+											<p class="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+												Export
+											</p>
+											<p class="mt-3 text-sm leading-6 text-foreground/80">
+												Save processed results after the desktop review workflow finishes.
+											</p>
+										</div>
+									</div>
+								</div>
+
+								<div class="rounded-2xl border border-border/60 bg-background/75 p-5 font-mono">
+									<p class="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+										Preview scope
+									</p>
+									<div class="mt-4 space-y-3 text-sm leading-7 text-foreground/80">
+										<p>Use this page to check layout, navigation, and surrounding workflow chrome.</p>
+										<p>The browser does not load point cloud files or render the interactive scene.</p>
+									</div>
+									<div class="mt-5 rounded-2xl border border-emerald-700/15 bg-emerald-500/8 px-4 py-3 text-xs leading-6 text-emerald-900/75">
+										For real point cloud work, open the Cloumask desktop app.
+									</div>
+								</div>
+							</div>
 						</div>
 					{/if}
 				</div>
