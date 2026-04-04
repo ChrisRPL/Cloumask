@@ -43,13 +43,12 @@
 </script>
 
 <script lang="ts">
-	import { Trash2, Download, Circle } from '@lucide/svelte';
+	import { Trash2, Download } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 
 	let {
 		phase,
-		isConnected,
 		class: className,
 		onClear,
 		onExport
@@ -69,19 +68,6 @@
 	<!-- Left: Title and status -->
 	<div class="flex items-center gap-3">
 		<h2 class="text-sm font-medium">Chat</h2>
-
-		<!-- Connection indicator -->
-		<div class="flex items-center gap-1.5">
-			<Circle
-				class={cn(
-					'h-2 w-2',
-					isConnected ? 'fill-forest-light text-forest-light' : 'fill-muted text-muted'
-				)}
-			/>
-			<span class="text-xs text-muted-foreground">
-				{isConnected ? 'connected' : 'disconnected'}
-			</span>
-		</div>
 
 		<!-- Phase badge -->
 		{#if phase !== 'idle'}
