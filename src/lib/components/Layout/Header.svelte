@@ -30,7 +30,9 @@
 		<ProjectSelector
 			class="min-w-[11rem] flex-1 max-w-[16rem] sm:min-w-[13rem] sm:max-w-[19rem] lg:max-w-[22rem] xl:max-w-[24rem]"
 			placeholder="Select project"
+			size="default"
 			emptyTriggerAriaLabel="Select project"
+			showContextLabel
 		/>
 		<div class="shrink-0">
 			<ConnectionStatus compact />

@@ -4,8 +4,10 @@
 	export interface ProjectSelectorProps {
 		class?: string;
 		placeholder?: string;
+		size?: 'sm' | 'default';
 		triggerAriaLabel?: string;
 		emptyTriggerAriaLabel?: string;
+		showContextLabel?: boolean;
 	}
 </script>
 
@@ -20,8 +22,10 @@
 	let {
 		class: className,
 		placeholder = 'Select project...',
+		size = 'sm',
 		triggerAriaLabel,
-		emptyTriggerAriaLabel
+		emptyTriggerAriaLabel,
+		showContextLabel = false
 	}: ProjectSelectorProps = $props();
 
 	const ui = getUIState();
@@ -99,14 +103,23 @@
 			'w-full min-w-0 border-border/90 bg-card/95 text-foreground shadow-[0_10px_24px_-20px_rgba(12,59,31,0.7)] transition-colors hover:bg-card',
 			className
 		)}
-		size="sm"
+		{size}
 	>
 		{#if ui.currentProject}
 			<span class="flex min-w-0 items-center gap-2 truncate">
 				<span class="flex size-5 shrink-0 items-center justify-center rounded-md bg-accent/75 text-foreground/75">
 					<Icon name="folder-open" class="size-3.5" />
 				</span>
-				<span class="truncate font-medium">{ui.currentProject.name}</span>
+				{#if showContextLabel}
+					<span class="flex min-w-0 flex-col text-left leading-tight">
+						<span class="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/80">
+							Project
+						</span>
+						<span class="truncate font-medium text-foreground">{ui.currentProject.name}</span>
+					</span>
+				{:else}
+					<span class="truncate font-medium">{ui.currentProject.name}</span>
+				{/if}
 			</span>
 		{:else}
 			<span class="flex min-w-0 items-center gap-2 text-foreground/85">
