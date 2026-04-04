@@ -71,6 +71,7 @@
 </script>
 
 <div
+	data-chat-composer-rail
 	class={cn(
 		'flex items-end gap-2 p-3 border-t border-border bg-background/50',
 		className

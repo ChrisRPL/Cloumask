@@ -98,6 +98,14 @@
 	const alignStatusNoticeToLanding = $derived(
 		agent.messages.length === 0 && !showClarification && !showPlanPreview
 	);
+	const showIntegratedComposerRail = $derived(
+		!requiresProjectSelection && (llmNotReady || showInitErrorBanner)
+	);
+	const statusNoticeWidthClass = $derived(
+		alignStatusNoticeToLanding || showIntegratedComposerRail
+			? 'mx-auto w-[calc(100%-2rem)] max-w-5xl'
+			: 'mx-4'
+	);
 	const inputPlaceholder = $derived.by(() => {
 		if (isInitializing || isRecoveringSidecar) return 'Connecting...';
 		if (llmNotReady || initError) return 'Waiting for local AI service...';
@@ -1044,10 +1052,14 @@
 
 	<!-- Connection error -->
 	{#if showInitErrorBanner && initError}
-		<div class={cn(
+		<div
+			data-chat-status-rail
+			class={cn(
 			'px-4 py-2 mb-2 rounded bg-amber-500/10 border border-amber-500/20 text-amber-600 text-sm flex items-center justify-between',
-			alignStatusNoticeToLanding ? 'mx-auto w-[calc(100%-2rem)] max-w-5xl' : 'mx-4'
-		)}>
+			statusNoticeWidthClass,
+			showIntegratedComposerRail && 'rounded-b-none border-b-0'
+		)}
+		>
 			<span>{initError}</span>
 			<button
 				class="text-xs underline"
@@ -1060,10 +1072,14 @@
 
 	<!-- AI service not ready warning -->
 	{#if llmNotReady && llmStatus}
-		<div class={cn(
+		<div
+			data-chat-status-rail
+			class={cn(
 			'px-4 py-3 mb-2 rounded bg-amber-500/10 border border-amber-500/20 text-amber-700 text-sm',
-			alignStatusNoticeToLanding ? 'mx-auto w-[calc(100%-2rem)] max-w-5xl' : 'mx-4'
-		)}>
+			statusNoticeWidthClass,
+			showIntegratedComposerRail && 'rounded-b-none border-b-0'
+		)}
+		>
 			<div class="flex items-start gap-3">
 				<div class="flex-1">
 					{#if !llmStatus.service_running}
@@ -1129,6 +1145,9 @@
 			disabled={isTypingDisabled}
 			disableSend={isSendDisabled}
 			placeholder={inputPlaceholder}
+			class={showIntegratedComposerRail
+				? 'mx-auto mb-3 w-[calc(100%-2rem)] max-w-5xl rounded-b-xl border border-amber-500/20 border-t-0 bg-background/70'
+				: undefined}
 			onSend={handleSend}
 			onValueChange={(v) => (inputValue = v)}
 		/>
