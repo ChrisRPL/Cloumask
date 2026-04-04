@@ -1056,6 +1056,7 @@ test.describe('J. UI/UX Quality', () => {
 
         expect(triggerBox).not.toBeNull();
         expect(menuBox).not.toBeNull();
+        expect(triggerBox?.width ?? 0).toBeGreaterThan(260);
         expect((menuBox?.height ?? 0)).toBeGreaterThan((triggerBox?.height ?? 0) + 24);
 
         await snap(page, 'T-100-project-selector-open-with-history');
