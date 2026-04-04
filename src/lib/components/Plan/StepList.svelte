@@ -75,15 +75,65 @@
 
 <div class={cn('space-y-1', className)}>
 	{#if steps.length === 0}
-		<div class="flex items-center justify-center px-4 py-12">
-			<div class="w-full max-w-md rounded-xl border border-border bg-card/80 px-6 py-7 text-center shadow-sm">
-				<p class="text-[11px] uppercase tracking-[0.24em] font-mono text-muted-foreground">
-					Pipeline
-				</p>
-				<p class="mt-3 text-base font-mono text-foreground">No steps in pipeline</p>
-				<p class="mt-2 text-xs leading-6 text-muted-foreground">
-					Describe the job in Chat to generate a plan, then come back here to review the steps.
-				</p>
+		<div class="flex items-center justify-center px-6 py-12">
+			<div class="w-full max-w-5xl rounded-2xl border border-border/70 bg-card/35 p-6 shadow-sm">
+				<div class="grid gap-6 lg:grid-cols-[1.2fr_0.92fr]">
+					<div class="space-y-5 font-mono">
+						<div class="space-y-3">
+							<div class="inline-flex items-center rounded-full border border-border/70 bg-background px-3 py-1 text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
+								Pipeline workspace
+							</div>
+							<div class="space-y-2">
+								<p class="text-2xl text-foreground">No steps in pipeline</p>
+								<p class="max-w-2xl text-sm leading-7 text-muted-foreground">
+									Describe the job in Chat to generate a plan, then come back here to review the
+									steps.
+								</p>
+							</div>
+						</div>
+
+						<div class="grid gap-3 sm:grid-cols-3">
+							<div class="rounded-xl border border-border/60 bg-background/70 p-4">
+								<p class="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+									Draft
+								</p>
+								<p class="mt-3 text-sm leading-6 text-foreground/80">
+									Chat turns the current project brief into a step-by-step pipeline here.
+								</p>
+							</div>
+							<div class="rounded-xl border border-border/60 bg-background/70 p-4">
+								<p class="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+									Tune
+								</p>
+								<p class="mt-3 text-sm leading-6 text-foreground/80">
+									Adjust step order, enable or skip tools, and refine configs before the run.
+								</p>
+							</div>
+							<div class="rounded-xl border border-border/60 bg-background/70 p-4">
+								<p class="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+									Approve
+								</p>
+								<p class="mt-3 text-sm leading-6 text-foreground/80">
+									Send the checked plan to Execute only when the workflow looks right.
+								</p>
+							</div>
+						</div>
+					</div>
+
+					<div class="rounded-xl border border-border/60 bg-background/70 p-5 font-mono">
+						<p class="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+							What happens here
+						</p>
+						<div class="mt-4 space-y-3 text-sm leading-7 text-foreground/80">
+							<p>1. Start in Chat with the job goal and current project context.</p>
+							<p>2. Return here to inspect the generated steps before execution.</p>
+							<p>3. Use Execute after the pipeline is approved and ready to run.</p>
+						</div>
+						<div class="mt-5 rounded-xl border border-emerald-700/15 bg-emerald-500/8 px-4 py-3 text-xs leading-6 text-emerald-900/75">
+							Shortcut path: 1 chat, 2 plan, 3 execute.
+						</div>
+					</div>
+				</div>
 			</div>
 		</div>
 	{:else}
