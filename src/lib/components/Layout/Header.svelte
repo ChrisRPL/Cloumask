@@ -27,13 +27,13 @@
 	</div>
 
 	<div class="flex min-w-0 flex-1 items-center justify-end gap-2 sm:gap-3">
+		<ProjectSelector
+			class="min-w-[11rem] flex-1 max-w-[16rem] sm:min-w-[13rem] sm:max-w-[19rem] lg:max-w-[22rem] xl:max-w-[24rem]"
+			placeholder="Select project"
+			emptyTriggerAriaLabel="Select project"
+		/>
 		<div class="shrink-0">
 			<ConnectionStatus compact />
 		</div>
-		<ProjectSelector
-			class="min-w-0 flex-1 max-w-40 sm:max-w-48 lg:max-w-52"
-			placeholder="Project"
-			emptyTriggerAriaLabel="Select project"
-		/>
 	</div>
 </header>
