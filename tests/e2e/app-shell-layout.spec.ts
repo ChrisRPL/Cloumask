@@ -28,7 +28,7 @@ async function assertShellFitsViewport(page: Page) {
 
 	await expect(header).toBeVisible();
 	await expect(connectionStatus).toBeVisible();
-	await expect(connectionStatus).toContainText(/live|booting|retry|offline|error/i);
+	await expect(connectionStatus).toHaveAttribute('aria-label', /Connection status:/i);
 	await expect(projectSelector).toBeVisible();
 	await expect(messageInput).toBeVisible();
 

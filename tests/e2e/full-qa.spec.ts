@@ -368,6 +368,7 @@ test.describe('C. Chat View', () => {
         const chatLog = page.getByLabel('Chat messages');
         await expect(page.getByRole('heading', { name: 'Chat' })).toBeVisible();
         await expect(page.getByLabel(/Connection status:/i)).toBeVisible();
+        await expect(page.locator('header').getByText('Offline', { exact: true })).toHaveCount(0);
         await expect(page.locator('header').getByText('Select project', { exact: true })).toBeVisible();
         await expect(chatLog).toBeVisible();
         await expect(page.getByText('Start a local vision workflow')).toBeVisible();
@@ -1026,8 +1027,9 @@ test.describe('J. UI/UX Quality', () => {
         await expect(projectSelector).toBeVisible();
         await snap(page, 'T-100-project-selector-before');
 
-        await projectSelector.click();
-        await expect(page.getByText('New Project...')).toBeVisible();
+        await projectSelector.focus();
+        await projectSelector.press('Enter');
+        await expect(page.getByRole('option', { name: 'New Project...' })).toBeVisible();
         await snap(page, 'T-100-project-selector-open');
 
         await page.getByRole('option', { name: 'New Project...' }).click();
@@ -1038,7 +1040,7 @@ test.describe('J. UI/UX Quality', () => {
 
         await nameInput.fill('Street Anonymization');
         await expect(pathInput).toHaveValue('/data/street-anonymization');
-        await page.getByRole('button', { name: 'Create Project' }).click();
+        await pathInput.press('Enter');
 
         await expect(page.getByRole('heading', { name: 'New Project' })).toBeHidden();
         const savedProjectSelector = page.getByRole('button', { name: /street anonymization/i });
