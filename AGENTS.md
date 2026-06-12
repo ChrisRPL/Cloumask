@@ -3,7 +3,10 @@ READ ~/Projects/agent-scripts/AGENTS.MD BEFORE ANYTHING (skip if missing).
 Repo quick facts:
 - Desktop dev: npm run tauri:dev (spawns sidecar)
 - Web dev: npm run backend:dev + npm run dev
+- Preferred shortcuts: just dev-backend, just dev-frontend, just dev-tauri, just health, just ports, just ci
 - Verify: backend pytest, cargo test, npm run check, npm test -- --run
+- Packaging/desktop verify: npm run tauri:build
+- Backend helpers: cd backend && make run|test|lint|type-check|format
 
 ## Git Strategy
 - Start each work item on a new branch (`feat/<short-topic>`).
